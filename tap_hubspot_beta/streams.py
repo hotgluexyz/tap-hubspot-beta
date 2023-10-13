@@ -961,7 +961,7 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("emailType", th.StringType),
         th.Property("emailbodyPlaintext", th.StringType),
         th.Property("feedbackEmailCategory", th.StringType),
-        th.Property("feedbackSurveyId", th.CustomType({"type": ["number", "string"]})),
+        th.Property("feedbackSurveyId", th.NumberType),
         th.Property("flexAreas", th.CustomType({"type": ["object", "string"]})),
         th.Property("freezeDate", th.IntegerType),
         th.Property("fromName", th.StringType),
