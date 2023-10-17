@@ -1065,3 +1065,17 @@ class CommunicationsStream(ObjectSearchV3):
         th.Property("archived", th.BooleanType),
         th.Property("associations", th.CustomType({"type": ["object", "array"]})),
     ).to_dict()
+
+class QuotesStream(ObjectSearchV3):
+    """Products Stream"""
+
+    name = "quotes"
+    path = "crm/v3/objects/quotes/search"
+    replication_key_filter = "hs_lastmodifieddate"
+    properties_url = "properties/v2/quotes/properties"
+
+class AssociationQuotesDealsStream(AssociationDealsStream):
+    """Association Quotes -> Deals Stream"""
+
+    name = "associations_quotes_deals"
+    path = "crm/v4/associations/quotes/deals/batch/read"
