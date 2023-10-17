@@ -83,7 +83,7 @@ class hubspotV3SearchStream(hubspotStream):
                 row[name] = value
             del row["properties"]
         return row
-    
+
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
     ) -> None:
@@ -184,6 +184,61 @@ class hubspotV3Stream(hubspotStream):
         if next_page_token:
             params["after"] = next_page_token
         return params
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                row[name] = value
+            del row["properties"]
+        return row
+
+
+class hubspotV3SingleSearchStream(hubspotStream):
+    """hubspot stream class."""
+
+    rest_method = "POST"
+
+    records_jsonpath = "$.results[*]"
+    next_page_token_jsonpath = "$.paging.next.after"
+    filter = None
+    starting_time = None
+    page_size = 100
+
+    def get_starting_time(self, context):
+        start_date = self.get_starting_timestamp(context)
+        if start_date:
+            return int(start_date.timestamp() * 1000)
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
+        next_page_token = next(iter(all_matches), None)
+        if next_page_token == "10000":
+
+            start_date = self.stream_state.get("progress_markers", {}).get("replication_key_value")
+
+            if start_date:
+                start_date = parse(start_date)
+                self.starting_time = int(start_date.timestamp() * 1000)
+
+            next_page_token = "0"
+        return next_page_token
+
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        """Prepare the data payload for the REST API request."""
+        payload = {}
+        payload["limit"] = self.page_size
+        payload["filters"] = []
+        if self.filter:
+            payload["filters"].append(self.filter)
+        if next_page_token and next_page_token!="0":
+            payload["after"] = next_page_token
+        return payload
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""

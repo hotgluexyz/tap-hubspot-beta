@@ -39,6 +39,8 @@ from tap_hubspot_beta.streams import (
     ContactSubscriptionStatusStream,
     PostalMailStream,
     CommunicationsStream,
+    ListMembershipV3Stream,
+    ListSearchV3Stream
 )
 
 STREAM_TYPES = [
@@ -75,6 +77,8 @@ STREAM_TYPES = [
     ContactSubscriptionStatusStream,
     PostalMailStream,
     CommunicationsStream,
+    ListMembershipV3Stream,
+    ListSearchV3Stream
 ]
 
 
