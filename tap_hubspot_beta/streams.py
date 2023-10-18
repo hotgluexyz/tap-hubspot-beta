@@ -785,6 +785,14 @@ class DealsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v1/deals/properties"
 
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+    ]
+
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
@@ -908,10 +916,6 @@ class ListMembershipV3Stream(hubspotV3Stream):
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
-
-    def parse_response(self, response):
-        self.logger.info(f"Parsing response for url: {response.url}")
-        return super().parse_response(response)
 
 
 
