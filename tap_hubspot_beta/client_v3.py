@@ -58,7 +58,7 @@ class hubspotV3SearchStream(hubspotStream):
             payload["filters"].append(self.filter)
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
-        if self.replication_key:
+        if self.replication_key and starting_time:
             payload["filters"].append(
                 {
                     "propertyName": self.replication_key_filter,
