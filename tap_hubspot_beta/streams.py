@@ -13,7 +13,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream
+from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import time
 from singer_sdk.helpers._state import log_sort_error
@@ -360,7 +360,7 @@ class ContactEventsStream(hubspotV3Stream):
         row = super().post_process(row, context)
         row["contact_id"] = context.get("contact_id")
         return row
-    
+
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -748,7 +748,7 @@ class ContactsV3Stream(ObjectSearchV3):
         if self.config.get("filter_contacts_created_at"):
             return "createdate"
         return "lastmodifieddate"
-    
+
     def apply_catalog(self, catalog) -> None:
         self._tap_input_catalog = catalog
         catalog_entry = catalog.get_stream(self.name)
@@ -850,6 +850,65 @@ class LineItemsStream(ObjectSearchV3):
     path = "crm/v3/objects/line_items/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/line_items/properties"
+
+
+class ListSearchV3Stream(hubspotV3SingleSearchStream):
+
+    name = "lists_v3"
+    primary_keys = ["id"]
+    path = "crm/v3/lists/search"
+    replication_key = "updatedAt"
+    replication_key_filter = "hs_last_record_added_at"
+    records_jsonpath = "$.lists[*]"
+
+
+    @property
+    def replication_key(self):
+        return "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("listId", th.NumberType()),
+        th.Property("listVersion", th.NumberType()),
+        th.Property("createdAt", th.DateTimeType()),
+        th.Property("updatedAt", th.DateTimeType()),
+        th.Property("filtersUpdateAt", th.DateTimeType()),
+        th.Property("processingStatus", th.StringType()),
+        th.Property("createdById", th.NumberType()),
+        th.Property("updatedById", th.NumberType()),
+        th.Property("processingType", th.StringType()),
+        th.Property("objectTypeId", th.StringType()),
+        th.Property("name", th.StringType()),
+        th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
+    ).to_dict()
+
+    def apply_catalog(self, catalog) -> None:
+        self._tap_input_catalog = catalog
+        catalog_entry = catalog.get_stream(self.name)
+        if catalog_entry:
+            self.primary_keys = catalog_entry.key_properties
+            if catalog_entry.replication_method:
+                self.forced_replication_method = catalog_entry.replication_method
+
+    def get_child_context(self, record, context):
+        return {
+            "list_id": record["listId"],
+        }
+
+
+class ListMembershipV3Stream(hubspotV3Stream):
+    """
+    List members - child stream from ListsStream
+    """
+
+    name = "list_membership_v3"
+    path = "crm/v3/lists/{list_id}/memberships"
+    records_jsonpath = "$[*]"
+    parent_stream_type = ListSearchV3Stream
+
+    schema = th.PropertiesList(
+        th.Property("results", th.CustomType({"type": ["array", "string"]})),
+    ).to_dict()
+
 
 
 class AssociationDealsStream(hubspotV4Stream):
@@ -1016,7 +1075,7 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("useRssHeadlineAsSubject", th.BooleanType),
         th.Property("userPerms", th.CustomType({"type": ["array", "string"]})),
         th.Property("vidsExcluded", th.CustomType({"type": ["array", "string"]})),
-        th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})), 
+        th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
 
 class PostalMailStream(ObjectSearchV3):

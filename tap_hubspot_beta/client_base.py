@@ -4,6 +4,7 @@ import logging
 
 import requests
 import backoff
+from copy import deepcopy
 from typing import Any, Dict, Optional, cast, List
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
@@ -56,7 +57,7 @@ class hubspotStream(RESTStream):
             last_job = self.tap_state["bookmarks"].get("last_job")
             if last_job:
                 return parse(last_job.get("value"))
-        return 
+        return
 
     def request_records(self, context):
         """Request records from REST endpoint(s), returning response records."""
@@ -153,7 +154,7 @@ class hubspotStream(RESTStream):
 
     @cached_property
     def schema(self):
-        properties = self.base_properties
+        properties = deepcopy(self.base_properties)
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
@@ -164,7 +165,6 @@ class hubspotStream(RESTStream):
             if not field.get("deleted"):
                 property = th.Property(field.get("name"), self.extract_type(field))
                 properties.append(property)
-
         return th.PropertiesList(*properties).to_dict()
 
     def finalize_state_progress_markers(self, state: Optional[dict] = None) -> None:
@@ -226,7 +226,7 @@ class hubspotStream(RESTStream):
                 finalize_state_progress_markers(state)
             return
         finalize_state_progress_markers(state)
-    
+
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
@@ -244,7 +244,7 @@ class hubspotStream(RESTStream):
 
 
 class hubspotStreamSchema(hubspotStream):
-    
+
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
