@@ -1078,4 +1078,4 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""
 
     name = "associations_quotes_deals"
-    path = "crm/v4/associations/quotes/deals/batch/read"
+    path = "crm/v4/associations/deals/quotes/batch/read"
