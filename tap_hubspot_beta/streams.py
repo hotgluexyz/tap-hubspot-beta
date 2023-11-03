@@ -918,7 +918,12 @@ class AssociationDealsStream(hubspotV4Stream):
     parent_stream_type = DealsStream
 
     schema = th.PropertiesList(
-        th.Property("from_id", th.StringType), th.Property("to_id", th.StringType)
+        th.Property("from_id", th.StringType),
+        th.Property("to_id", th.StringType),
+        th.Property("typeId", th.NumberType),
+        th.Property("category", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
 class AssociationContactsStream(hubspotV4Stream):
@@ -928,7 +933,12 @@ class AssociationContactsStream(hubspotV4Stream):
     parent_stream_type = ContactsV3Stream
 
     schema = th.PropertiesList(
-        th.Property("from_id", th.StringType), th.Property("to_id", th.StringType)
+        th.Property("from_id", th.StringType),
+        th.Property("to_id", th.StringType),
+        th.Property("typeId", th.NumberType),
+        th.Property("category", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
 
@@ -965,7 +975,12 @@ class AssociationContactsStream(hubspotV4Stream):
     parent_stream_type = ContactsV3Stream
 
     schema = th.PropertiesList(
-        th.Property("from_id", th.StringType), th.Property("to_id", th.StringType)
+        th.Property("from_id", th.StringType),
+        th.Property("to_id", th.StringType),
+        th.Property("typeId", th.NumberType),
+        th.Property("category", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
 

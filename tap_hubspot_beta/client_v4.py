@@ -38,6 +38,13 @@ class hubspotV4Stream(hubspotStream):
             output["from_id"] = row["from"]["id"]
             for to in row["to"]:
                 output["to_id"] = str(to["toObjectId"])
+                if "associationTypes" in to:
+                    output['associationTypes'] = to['associationTypes']
+                    if len(to['associationTypes'])>0:
+                        output['category'] = to['associationTypes'][0]['category']
+                        output['typeId'] = to['associationTypes'][0]['typeId']
+                        output['label'] = to['associationTypes'][0]['label']
+
                 yield output
 
     def _sync_records(  # noqa C901  # too complex
