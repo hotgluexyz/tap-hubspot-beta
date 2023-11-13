@@ -651,7 +651,7 @@ class ContactListsStream(hubspotStreamSchema):
         try:
             records = self.request_records(dict())
         except FatalAPIError:
-            self.logger.info("Failed to run discover on dynamic stream properties.")
+            self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
             records = []
 
         properties = []
