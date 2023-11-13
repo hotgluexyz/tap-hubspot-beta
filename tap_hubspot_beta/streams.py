@@ -5,6 +5,7 @@ import copy
 
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers.jsonpath import extract_jsonpath
+from singer_sdk.exceptions import FatalAPIError
 
 import requests
 from backports.cached_property import cached_property
@@ -647,7 +648,11 @@ class ContactListsStream(hubspotStreamSchema):
         # Init request session
         self._requests_session = requests.Session()
         # Get the data from Hubspot
-        records = self.request_records(dict())
+        try:
+            records = self.request_records(dict())
+        except FatalAPIError:
+            self.logger.info("Failed to run discover on dynamic stream properties.")
+            records = []
 
         properties = []
         property_names = set()
