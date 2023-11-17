@@ -828,9 +828,7 @@ class ArchivedCompaniesStream(hubspotV3Stream):
         row = super().post_process(row, context)
 
         rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = datetime.strptime(
-            row['archivedAt'], "%Y-%m-%dT%H:%M:%S.%fZ"
-        ).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
             return row
@@ -909,9 +907,7 @@ class ArchivedDealsStream(hubspotV3Stream):
         row = super().post_process(row, context)
 
         rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = datetime.strptime(
-            row['archivedAt'], "%Y-%m-%dT%H:%M:%S.%fZ"
-        ).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
             return row
