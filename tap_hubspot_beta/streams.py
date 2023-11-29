@@ -827,6 +827,13 @@ class ArchivedCompaniesStream(hubspotV3Stream):
             record_message.stream = "companies"
             singer.write_message(record_message)
 
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
     def post_process(self, row, context):
         row = super().post_process(row, context)
 
@@ -876,6 +883,13 @@ class ArchivedDealsStream(hubspotV3Stream):
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType)
     ]
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
 
     @property
     def selected(self) -> bool:
@@ -997,6 +1011,13 @@ class ArchivedLineItemsStream(hubspotV3Stream):
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType)
     ]
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
 
     @property
     def selected(self) -> bool:
