@@ -866,6 +866,14 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
+class DealsAssociationParent(DealsStream):
+    name = "deals_association_parent"    
+    replication_key = None
+    primary_keys = ["id"]
+    schema = th.PropertiesList(
+        th.Property("id", th.IntegerType),
+    ).to_dict()
+
 
 class ArchivedDealsStream(hubspotV3Stream):
     """Archived Deals Stream"""
@@ -1129,7 +1137,7 @@ class AssociationDealsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = DealsStream
+    parent_stream_type = DealsAssociationParent
 
     schema = th.PropertiesList(
         th.Property("from_id", th.StringType),

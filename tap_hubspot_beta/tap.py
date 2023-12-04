@@ -46,6 +46,7 @@ from tap_hubspot_beta.streams import (
     ListSearchV3Stream,
     ArchivedCompaniesStream,
     ArchivedDealsStream,
+    DealsAssociationParent
 )
 
 STREAM_TYPES = [
@@ -89,6 +90,7 @@ STREAM_TYPES = [
     ListSearchV3Stream,
     ArchivedCompaniesStream,
     ArchivedDealsStream,
+    DealsAssociationParent
 ]
 
 

@@ -71,7 +71,10 @@ class hubspotV3SearchStream(hubspotStream):
                 "direction": "ASCENDING"
             }]
             if self.properties_url:
-                payload["properties"] = self.selected_properties
+                if self.name =="deals_association_parent":
+                    payload["properties"] = ["id"]
+                else:
+                    payload["properties"] = self.selected_properties
             else:
                 payload["properties"] = []
         return payload
