@@ -11,6 +11,8 @@ from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
+from singer_sdk.mapper import  SameRecordTransform, StreamMap
+from singer_sdk.helpers._flattening import get_flattening_options
 
 from pendulum import parse
 
@@ -262,6 +264,42 @@ class hubspotStream(RESTStream):
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
+    
+    @property
+    def stream_maps(self) -> List[StreamMap]:
+        """Get stream transformation maps.
+
+        The 0th item is the primary stream map. List should not be empty.
+
+        Returns:
+            A list of one or more map transformations for this stream.
+        """
+        if self._stream_maps:
+            return self._stream_maps
+
+        if self._tap.mapper:
+            #Append deals association stream if it is not in the catalog. 
+            if self.name == "deals_association_parent" and self.name not in self._tap.mapper.stream_maps:
+                self._tap.mapper.stream_maps.update({"deals_association_parent":self._tap.mapper.stream_maps["deals"]})
+                self._tap.mapper.stream_maps["deals_association_parent"][0].stream_alias = "deals_association_parent"
+            self._stream_maps = self._tap.mapper.stream_maps[self.name]
+            self.logger.info(
+                f"Tap has custom mapper. Using {len(self.stream_maps)} provided map(s)."
+            )
+        else:
+            self.logger.info(
+                f"No custom mapper provided for '{self.name}'. "
+                "Using SameRecordTransform."
+            )
+            self._stream_maps = [
+                SameRecordTransform(
+                    stream_alias=self.name,
+                    raw_schema=self.schema,
+                    key_properties=self.primary_keys,
+                    flattening_options=get_flattening_options(self.config),
+                )
+            ]
+        return self._stream_maps
 
 
 class hubspotStreamSchema(hubspotStream):
