@@ -26,6 +26,7 @@ class hubspotV3SearchStream(hubspotStream):
     filter = None
     starting_time = None
     page_size = 100
+    special_replication = False
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -38,8 +39,29 @@ class hubspotV3SearchStream(hubspotStream):
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
-        if next_page_token=="10000":
-            start_date = self.stream_state.get("progress_markers", {}).get("replication_key_value")
+        if next_page_token == "10000":
+            start_date = self.stream_state.get("progress_markers", {}).get(
+                "replication_key_value"
+            )
+            if self.name in ["deals_association_parent"]:
+                data = response.json()
+                # extract maximum modified date to overcome 10000 pagination limit
+                hs_lastmodifieddates = [
+                    entry["properties"]["hs_lastmodifieddate"]
+                    for entry in data["results"]
+                    if "properties" in entry
+                    and "hs_lastmodifieddate" in entry["properties"]
+                ]
+                hs_lastmodifieddates = [
+                    date for date in hs_lastmodifieddates if date is not None
+                ]
+                max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
+                if max_date:
+                    start_date = max_date
+                    self.special_replication = True
+                else:
+                    return None
+
             if start_date:
                 start_date = parse(start_date)
                 self.starting_time = int(start_date.timestamp() * 1000)
@@ -58,7 +80,7 @@ class hubspotV3SearchStream(hubspotStream):
             payload["filters"].append(self.filter)
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
-        if self.replication_key and starting_time:
+        if self.replication_key and starting_time or self.special_replication:
             payload["filters"].append(
                 {
                     "propertyName": self.replication_key_filter,
