@@ -1,14 +1,17 @@
 """Stream type classes for tap-hubspot."""
+import pytz
+import copy
+import singer
+import requests
+
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
-import copy
 
+from urllib.parse import urlencode
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 from singer_sdk.exceptions import FatalAPIError
-import singer
 
-import requests
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
@@ -17,10 +20,7 @@ from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
-import time
-import pytz
 from singer_sdk.helpers._state import log_sort_error
-from pendulum import parse
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -800,7 +800,7 @@ class DealsStream(ObjectSearchV3):
         return {"id": record["id"]}
 
 class DealsAssociationParent(DealsStream):
-    name = "deals_association_parent"    
+    name = "deals_association_parent"
     replication_key = None
     primary_keys = ["id"]
     schema = th.PropertiesList(
@@ -916,6 +916,12 @@ class ArchivedLineItemsStream(hubspotV3Stream):
             # force this to think it's the lineitems stream
             record_message.stream = "lineitems"
             singer.write_message(record_message)
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
@@ -1236,3 +1242,141 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
 
     name = "associations_quotes_deals"
     path = "crm/v4/associations/deals/quotes/batch/read"
+
+
+class ArchivedCompaniesStream(hubspotV3Stream):
+    """Archived Companies Stream"""
+
+    name = "companies_archived"
+    replication_key = "archivedAt"
+    path = "crm/v3/objects/companies?archived=true"
+    properties_url = "properties/v1/companies/properties"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType)
+    ]
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("companies_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if companies is selected
+            self._tap.catalog["companies_archived"] = self._tap.catalog["companies"]
+            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = "companies"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+
+        if archived_at > rep_key:
+            return row
+
+        return None
+
+
+class ArchivedDealsStream(hubspotV3Stream):
+    """Archived Deals Stream"""
+
+    name = "deals_archived"
+    replication_key = "archivedAt"
+    path = "crm/v3/objects/deals?archived=true"
+    properties_url = "properties/v1/deals/properties"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType)
+    ]
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("deals_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if deals is selected
+            self._tap.catalog["deals_archived"] = self._tap.catalog["deals"]
+            return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the deals stream
+            record_message.stream = "deals"
+            singer.write_message(record_message)
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+
+        if archived_at > rep_key:
+            return row
+
+        return None

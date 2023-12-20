@@ -205,7 +205,7 @@ class hubspotV3Stream(hubspotStream):
         params["limit"] = self.page_size
         params.update(self.additional_prarams)
         if self.properties_url:
-            params["properties"] = self.selected_properties
+            params["properties"] = ",".join(self.selected_properties)
         if next_page_token:
             params["after"] = next_page_token
         return params
