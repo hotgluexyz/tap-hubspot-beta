@@ -1327,8 +1327,25 @@ class ArchivedDealsStream(hubspotV3Stream):
         th.Property("archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType)
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("dealname", th.StringType),
+        th.Property("hubspot_owner_id", th.StringType),
+        th.Property("amount", th.StringType),
+        th.Property("hs_mrr", th.StringType),
+        th.Property("dealstage", th.StringType),
+        th.Property("pipeline", th.StringType),
+        th.Property("dealtype", th.StringType),
+        th.Property("hs_createdate", th.DateTimeType),
+        th.Property("createdate", th.DateTimeType),
+        th.Property("hs_lastmodifieddate", th.DateTimeType),
+        th.Property("closedate", th.DateTimeType)
     ]
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archivedAt,dealname,hubspot_owner_id,amount,hs_mrr,dealstage,pipeline,dealtype,hs_createdate,createdate,hs_lastmodifieddate,closedate,archived"
+        return params
 
     @property
     def metadata(self):
@@ -1363,12 +1380,6 @@ class ArchivedDealsStream(hubspotV3Stream):
             # force this to think it's the deals stream
             record_message.stream = "deals"
             singer.write_message(record_message)
-
-    def get_url_params(self, context, next_page_token):
-        params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
-        return params
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
