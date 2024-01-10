@@ -96,7 +96,7 @@ class hubspotV3SearchStream(hubspotStream):
                 if self.name =="deals_association_parent":
                     payload["properties"] = ["id"]
                 else:
-                    payload["properties"] = self.selected_properties
+                    payload["properties"] = ",".join(self.selected_properties)
             else:
                 payload["properties"] = []
         return payload
