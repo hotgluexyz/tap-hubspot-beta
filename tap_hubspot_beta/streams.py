@@ -119,7 +119,7 @@ class EngagementStream(hubspotV1Stream):
         th.Property("html", th.StringType),
         th.Property("trackerKey", th.StringType),
         th.Property("messageId", th.StringType),
-        th.Property("threadId", th.CustomType({"type": ["integer", "string"]})),
+        th.Property("threadId", th.IntegerType),
         th.Property("emailSendEventId", th.CustomType({"type": ["object", "string"]})),
         th.Property("loggedFrom", th.StringType),
         th.Property("validationSkipped", th.CustomType({"type": ["array", "string"]})),
