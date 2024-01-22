@@ -1410,3 +1410,24 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
 
     name = "associations_quotes_deals"
     path = "crm/v4/associations/deals/quotes/batch/read"
+
+
+class CurrenciesStream(hubspotV3SearchStream):
+    """Owners Stream"""
+
+    rest_method = "GET"
+    name = "currencies_exchange_rate"
+    path = "settings/v3/currencies/exchange-rates"
+    primary_keys = ["id"]
+    replication_key_filter = "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("toCurrencyCode", th.StringType),
+        th.Property("visibleInUI", th.BooleanType),
+        th.Property("effectiveAt", th.DateTimeType),
+        th.Property("id", th.StringType),
+        th.Property("conversionRate", th.NumberType),
+        th.Property("fromCurrencyCode", th.StringType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
