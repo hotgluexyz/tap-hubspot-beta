@@ -876,7 +876,7 @@ class DealsAssociationParent(DealsStream):
     replication_key = None
     primary_keys = ["id"]
     schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
+        th.Property("id", th.StringType),
     ).to_dict()
 
 
