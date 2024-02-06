@@ -7,6 +7,7 @@ from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 from singer_sdk.exceptions import FatalAPIError
 import singer
+import logging
 
 import requests
 from backports.cached_property import cached_property
@@ -646,6 +647,16 @@ class ContactListsStream(hubspotStreamSchema):
     replication_key = None
     path = "/contacts/v1/lists"
 
+    def _request_records(self, params: dict) -> Iterable[dict]:
+        """Request and return a page of records from the API."""
+        try:
+            records = list(super().request_records(params))
+        except FatalAPIError:
+            logging.info("Couldn't get schema for path: /contacts/v1/lists")
+            return []
+
+        return records
+
     @cached_property
     def schema(self) -> dict:
         """Dynamically detect the json schema for the stream.
@@ -655,7 +666,7 @@ class ContactListsStream(hubspotStreamSchema):
         self._requests_session = requests.Session()
         # Get the data from Hubspot
         try:
-            records = self.request_records(dict())
+            records = self._request_records(dict())
         except FatalAPIError:
             self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
             records = []
