@@ -93,7 +93,11 @@ class hubspotStream(RESTStream):
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            resp = decorated_request(prepared_request, context)
+            try:
+                resp = decorated_request(prepared_request, context)
+            except FatalAPIError:
+                return
+
             for row in self.parse_response(resp):
                 yield row
             previous_token = copy.deepcopy(next_page_token)
