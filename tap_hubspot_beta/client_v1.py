@@ -1,6 +1,7 @@
 """REST client handling, including hubspotStream base class."""
 
 import logging
+import pendulum
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -65,6 +66,20 @@ class hubspotV1Stream(hubspotStream):
                 if row.get(field) in [0, ""]:
                     row[field] = None
                 else:
-                    dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                    row[field] = dt_field.isoformat()
+                    try:
+                        dt_field = pendulum.parse(row[field])
+                        dt_field = datetime(
+                            dt_field.year,
+                            dt_field.month,
+                            dt_field.day,
+                            dt_field.hour,
+                            dt_field.minute,
+                            dt_field.second,
+                            dt_field.microsecond,
+                        )
+                        row[field] = dt_field.isoformat()
+                    except Exception:
+                        dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
+                        dt_field = dt_field.replace(tzinfo=None)
+                        row[field] = dt_field.isoformat()
         return row
