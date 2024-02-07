@@ -68,15 +68,6 @@ class hubspotV1Stream(hubspotStream):
                 else:
                     try:
                         dt_field = pendulum.parse(row[field])
-                        dt_field = datetime(
-                            dt_field.year,
-                            dt_field.month,
-                            dt_field.day,
-                            dt_field.hour,
-                            dt_field.minute,
-                            dt_field.second,
-                            dt_field.microsecond,
-                        )
                         row[field] = dt_field.isoformat()
                     except Exception:
                         dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
