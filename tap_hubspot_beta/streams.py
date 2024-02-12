@@ -1423,14 +1423,12 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
     path = "crm/v4/associations/deals/quotes/batch/read"
 
 
-class CurrenciesStream(hubspotV3SearchStream):
+class CurrenciesStream(hubspotV3Stream):
     """Owners Stream"""
 
-    rest_method = "GET"
     name = "currencies_exchange_rate"
     path = "settings/v3/currencies/exchange-rates"
     primary_keys = ["id"]
-    replication_key_filter = "updatedAt"
 
     schema = th.PropertiesList(
         th.Property("createdAt", th.DateTimeType),
