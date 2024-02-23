@@ -24,6 +24,15 @@ from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
 from urllib.parse import urlencode
 
+association_schema = th.PropertiesList(
+        th.Property("from_id", th.StringType),
+        th.Property("to_id", th.StringType),
+        th.Property("typeId", th.NumberType),
+        th.Property("category", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
+    ).to_dict()
+
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
 
@@ -988,6 +997,9 @@ class EmailsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/emails/properties"
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 
 class NotesStream(ObjectSearchV3):
     """Notes Stream"""
@@ -996,6 +1008,9 @@ class NotesStream(ObjectSearchV3):
     path = "crm/v3/objects/notes/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/notes/properties"
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
 
 
 class CallsStream(ObjectSearchV3):
@@ -1006,6 +1021,9 @@ class CallsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/calls/properties"
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 
 class TasksStream(ObjectSearchV3):
     """Tasks Stream"""
@@ -1015,6 +1033,9 @@ class TasksStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/tasks/properties"
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 
 class MeetingsStream(ObjectSearchV3):
     """Meetings Stream"""
@@ -1023,6 +1044,9 @@ class MeetingsStream(ObjectSearchV3):
     path = "crm/v3/objects/meetings/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/meetings/properties"
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
 
 
 class LineItemsStream(ObjectSearchV3):
@@ -1381,6 +1405,9 @@ class PostalMailStream(ObjectSearchV3):
         th.Property("associations", th.CustomType({"type": ["object", "array"]})),
     ).to_dict()
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 
 class CommunicationsStream(ObjectSearchV3):
     """Owners Stream"""
@@ -1405,6 +1432,9 @@ class CommunicationsStream(ObjectSearchV3):
         th.Property("archived", th.BooleanType),
         th.Property("associations", th.CustomType({"type": ["object", "array"]})),
     ).to_dict()
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
 
 
 class QuotesStream(ObjectSearchV3):
@@ -1440,3 +1470,220 @@ class CurrenciesStream(hubspotV3Stream):
         th.Property("fromCurrencyCode", th.StringType),
         th.Property("updatedAt", th.DateTimeType),
     ).to_dict()
+
+# Get associations for engagements streams in v3
+
+class AssociationMeetingsStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = MeetingsStream
+    name = "associations_meetings"
+
+    schema = association_schema
+
+
+class AssociationMeetingsCompaniesStream(AssociationMeetingsStream):
+    """Association Meetings -> Companies Stream"""
+
+    name = "associations_meetings_companies"
+    path = "crm/v4/associations/meetings/companies/batch/read"
+
+
+class AssociationMeetingsContactsStream(AssociationMeetingsStream):
+    """Association Meetings -> Contacts Stream"""
+
+    name = "associations_meetings_contacts"
+    path = "crm/v4/associations/meetings/contacts/batch/read"
+
+
+class AssociationMeetingsDealsStream(AssociationMeetingsStream):
+    """Association Meetings -> Deals Stream"""
+
+    name = "associations_meetings_deals"
+    path = "crm/v4/associations/meetings/deals/batch/read"
+
+
+class AssociationCallsStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = CallsStream
+    name = "associations_calls"
+
+    schema = association_schema
+
+class AssociationCallsCompaniesStream(AssociationCallsStream):
+    """Association Calls -> Companies Stream"""
+
+    name = "associations_calls_companies"
+    path = "crm/v4/associations/calls/companies/batch/read"
+
+
+class AssociationCallsContactsStream(AssociationCallsStream):
+    """Association Calls -> Contacts Stream"""
+
+    name = "associations_calls_contacts"
+    path = "crm/v4/associations/calls/contacts/batch/read"
+
+
+class AssociationCallsDealsStream(AssociationCallsStream):
+    """Association Calls -> Deals Stream"""
+
+    name = "associations_calls_deals"
+    path = "crm/v4/associations/calls/deals/batch/read"
+
+
+class AssociationCommunicationsStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = CommunicationsStream
+    name = "associations_communications"
+
+    schema = association_schema
+
+
+class AssociationCommunicationsCompaniesStream(AssociationCommunicationsStream):
+    """Association Communications -> Companies Stream"""
+
+    name = "associations_communications_companies"
+    path = "crm/v4/associations/communications/companies/batch/read"
+
+
+class AssociationCommunicationsContactsStream(AssociationCommunicationsStream):
+    """Association Communications -> Contacts Stream"""
+
+    name = "associations_communications_contacts"
+    path = "crm/v4/associations/communications/contacts/batch/read"
+
+
+class AssociationCommunicationsDealsStream(AssociationCommunicationsStream):
+    """Association Communications -> Deals Stream"""
+
+    name = "associations_communications_deals"
+    path = "crm/v4/associations/communications/deals/batch/read"
+
+
+class AssociationEmailsStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = EmailsStream
+    name = "associations_emails"
+
+    schema = association_schema
+
+
+class AssociationEmailsCompaniesStream(AssociationEmailsStream):
+    """Association Emails -> Companies Stream"""
+
+    name = "associations_emails_companies"
+    path = "crm/v4/associations/emails/companies/batch/read"
+
+
+class AssociationEmailsContactsStream(AssociationEmailsStream):
+    """Association Emails -> Contacts Stream"""
+
+    name = "associations_emails_contacts"
+    path = "crm/v4/associations/emails/contacts/batch/read"
+
+
+class AssociationEmailsDealsStream(AssociationEmailsStream):
+    """Association Emails -> Deals Stream"""
+
+    name = "associations_emails_deals"
+    path = "crm/v4/associations/emails/deals/batch/read"
+
+
+class AssociationNotesStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = NotesStream
+    name = "associations_notes"
+
+    schema = association_schema
+
+
+class AssociationNotesCompaniesStream(AssociationNotesStream):
+    """Association Notes -> Companies Stream"""
+
+    name = "associations_notes_companies"
+    path = "crm/v4/associations/notes/companies/batch/read"
+
+
+class AssociationNotesContactsStream(AssociationNotesStream):
+    """Association Notes -> Contacts Stream"""
+
+    name = "associations_notes_contacts"
+    path = "crm/v4/associations/notes/contacts/batch/read"
+
+
+class AssociationNotesDealsStream(AssociationNotesStream):
+    """Association Notes -> Deals Stream"""
+
+    name = "associations_notes_deals"
+    path = "crm/v4/associations/notes/deals/batch/read"
+
+
+class AssociationPostalMailStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = PostalMailStream
+    name = "associations_notes"
+
+    schema = association_schema
+
+
+class AssociationPostalMailCompaniesStream(AssociationPostalMailStream):
+    """Association PostalMail -> Companies Stream"""
+
+    name = "associations_postal_mail_companies"
+    path = "crm/v4/associations/postal_mail/companies/batch/read"
+
+
+class AssociationPostalMailContactsStream(AssociationPostalMailStream):
+    """Association PostalMail -> Contacts Stream"""
+
+    name = "associations_postal_mail_contacts"
+    path = "crm/v4/associations/postal_mail/contacts/batch/read"
+
+
+class AssociationPostalMailDealsStream(AssociationPostalMailStream):
+    """Association PostalMail -> Deals Stream"""
+
+    name = "associations_postal_mail_deals"
+    path = "crm/v4/associations/postal_mail/deals/batch/read"
+
+
+class AssociationTasksStream(hubspotV4Stream):
+    """Association Base Stream"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = TasksStream
+    name = "associations_notes"
+
+    schema = association_schema
+
+
+class AssociationTasksCompaniesStream(AssociationTasksStream):
+    """Association Tasks -> Companies Stream"""
+
+    name = "associations_tasks_companies"
+    path = "crm/v4/associations/tasks/companies/batch/read"
+
+
+class AssociationTasksContactsStream(AssociationTasksStream):
+    """Association Tasks -> Contacts Stream"""
+
+    name = "associations_tasks_contacts"
+    path = "crm/v4/associations/tasks/contacts/batch/read"
+
+
+class AssociationTasksDealsStream(AssociationTasksStream):
+    """Association Tasks -> Deals Stream"""
+
+    name = "associations_tasks_deals"
+    path = "crm/v4/associations/tasks/deals/batch/read"
