@@ -125,7 +125,7 @@ STREAM_TYPES = [
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
     AssociationMeetingsDealsStream,
-        AssociationCallsStream,
+    AssociationCallsStream,
     AssociationCallsCompaniesStream,
     AssociationCallsContactsStream,
     AssociationCallsDealsStream,
