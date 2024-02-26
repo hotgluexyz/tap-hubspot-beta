@@ -129,7 +129,7 @@ class EngagementStream(hubspotV1Stream):
         th.Property("html", th.StringType),
         th.Property("trackerKey", th.StringType),
         th.Property("messageId", th.StringType),
-        th.Property("threadId", th.IntegerType),
+        th.Property("threadId", th.StringType),
         th.Property("emailSendEventId", th.CustomType({"type": ["object", "string"]})),
         th.Property("loggedFrom", th.StringType),
         th.Property("validationSkipped", th.CustomType({"type": ["array", "string"]})),
@@ -146,6 +146,9 @@ class EngagementStream(hubspotV1Stream):
         for group in ["engagement", "associations", "metadata"]:
             flaten_row.update(row[group])
         row = super().post_process(flaten_row, context)
+        # force threadId to be a string and keep one typing
+        if row.get("threadId"):
+            row["threadId"] = str(row.get("threadId"))
         return row
 
 
