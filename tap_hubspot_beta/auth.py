@@ -83,7 +83,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         """
         return self.oauth_request_body
 
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=2)
+    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5)
     def request_token(self, endpoint, data):
         token_response = requests.post(endpoint, data)
         if 500 <= token_response.status_code <= 600:
