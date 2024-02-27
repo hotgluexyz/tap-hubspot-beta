@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional
 import requests
 from singer_sdk.authenticators import APIAuthenticatorBase
 from singer_sdk.streams import Stream as RESTStreamBase
+from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
+import backoff
 
 
 class OAuth2Authenticator(APIAuthenticatorBase):
@@ -81,6 +83,15 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         """
         return self.oauth_request_body
 
+    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=2)
+    def request_token(self, endpoint, data):
+        token_response = requests.post(endpoint, data)
+        if 500 <= token_response.status_code <= 600:
+            raise RetriableAPIError(f"Auth error: {token_response.text}")
+        elif 400 <= token_response.status_code < 500:
+            raise FatalAPIError(f"Auth error: {token_response.text}")
+        return token_response
+
     # Authentication and refresh
     def update_access_token(self) -> None:
         """Update `access_token` along with: `last_refreshed` and `expires_in`.
@@ -90,7 +101,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         """
         request_time = round(datetime.utcnow().timestamp())
         auth_request_payload = self.oauth_request_payload
-        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+        token_response = self.request_token(self.auth_endpoint, data=auth_request_payload)
         try:
             token_response.raise_for_status()
             self.logger.info("OAuth authorization attempt was successful.")
