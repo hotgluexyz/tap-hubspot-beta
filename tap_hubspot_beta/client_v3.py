@@ -38,6 +38,10 @@ class hubspotV3SearchStream(hubspotStream):
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
+
+        if not previous_token:
+            self.logger.info(f"Total records to fetch for stream = {self.name}: {response.json().get('total')}")
+
         next_page_token = next(iter(all_matches), None)
         if next_page_token == "10000":
             start_date = self.stream_state.get("progress_markers", {}).get(

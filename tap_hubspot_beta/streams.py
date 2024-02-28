@@ -882,7 +882,6 @@ class TicketsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/tickets/properties"
 
-
 class DealsStream(ObjectSearchV3):
     """Deals Stream"""
 
@@ -1212,7 +1211,6 @@ class AssociationDealsStream(hubspotV4Stream):
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
-
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
@@ -1249,13 +1247,11 @@ class AssociationDealsLineItemsStream(AssociationDealsStream):
     name = "associations_deals_line_items"
     path = "crm/v4/associations/deals/line_items/batch/read"
 
-
 class AssociationContactsTicketsStream(AssociationContactsStream):
     """Association Contacts -> Tickets Stream"""
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
 
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
@@ -1278,7 +1274,6 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
 
     name = "associations_contacts_companies"
     path = "crm/v4/associations/contacts/companies/batch/read"
-
 
 class MarketingEmailsStream(hubspotV1Stream):
     """Dispositions Stream"""
@@ -1383,7 +1378,6 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
 
-
 class PostalMailStream(ObjectSearchV3):
     """Owners Stream"""
 
@@ -1448,7 +1442,6 @@ class QuotesStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
 
-
 class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""
 
@@ -1457,7 +1450,7 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
 
 
 class CurrenciesStream(hubspotV3Stream):
-    """Owners Stream"""
+    """Currencies Stream"""
 
     name = "currencies_exchange_rate"
     path = "settings/v3/currencies/exchange-rates"
