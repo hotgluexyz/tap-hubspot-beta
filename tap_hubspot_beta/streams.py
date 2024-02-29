@@ -760,6 +760,7 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
     ]
 
@@ -798,12 +799,11 @@ class ArchivedStream(hubspotV3Stream):
 
     def post_process(self, row, context):
         # save archived values
-        if row["archived"]:
-            archived_value = row["archived"]
+        archived_value = row.get("archived")
         row = super().post_process(row, context)
 
         # add archived value to _hg_archived
-        row["_hg_archived"] = archived_value or None
+        row["_hg_archived"] = archived_value
         rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
