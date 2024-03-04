@@ -877,7 +877,7 @@ class FullsyncCompaniesStream(hubspotV2Stream):
         return new_metadata
 
 
-class ArchivedCompaniesStream(hubspotV3Stream):
+class ArchivedCompaniesStream(ArchivedStream):
     """Archived Companies Stream"""
 
     name = "companies_archived"
