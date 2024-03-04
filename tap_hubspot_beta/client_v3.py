@@ -103,14 +103,12 @@ class hubspotV3SearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        # save original archived value
-        archived_value = row.get("archived")
         if self.properties_url:
             for name, value in row["properties"].items():
                 row[name] = value
             del row["properties"]
         # store archived value in _hg_archived
-        row["_hg_archived"] = archived_value
+        row["_hg_archived"] = False
         return row
 
     def _sync_records(  # noqa C901  # too complex

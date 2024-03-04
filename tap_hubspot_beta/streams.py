@@ -798,12 +798,10 @@ class ContactsV3Stream(ObjectSearchV3):
 class ArchivedStream(hubspotV3Stream):
 
     def post_process(self, row, context):
-        # save archived values
-        archived_value = row.get("archived")
         row = super().post_process(row, context)
 
         # add archived value to _hg_archived
-        row["_hg_archived"] = archived_value
+        row["_hg_archived"] = True
         rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
