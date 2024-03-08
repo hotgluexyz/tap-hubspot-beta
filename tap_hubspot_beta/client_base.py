@@ -156,9 +156,11 @@ class hubspotStream(RESTStream):
             raise FatalAPIError(msg)
 
     @staticmethod
-    def extract_type(field):
+    def extract_type(field, type_booleancheckbox_as_boolean=False):
         field_type = field.get("type")
-        if field_type == "bool" or field.get("fieldType") == "booleancheckbox":
+        if field_type == "bool":
+            return th.BooleanType
+        if field.get("fieldType") == "booleancheckbox" and type_booleancheckbox_as_boolean:
             return th.BooleanType
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
@@ -186,7 +188,7 @@ class hubspotStream(RESTStream):
         fields = response.json()
         for field in fields:
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
