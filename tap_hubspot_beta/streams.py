@@ -19,7 +19,7 @@ from pendulum import parse
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
+from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import pytz
 from singer_sdk.helpers._state import log_sort_error
@@ -822,7 +822,7 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     name = "contacts_history_properties"
     path = "crm/v3/objects/contacts/{id}"
     properties_url = "properties/v1/contacts/properties"
-    additional_prarams = {"propertiesWithHistory": True}
+    additional_params = {"propertiesWithHistory": True}
     parent_stream_type = ContactsV3Stream
     bulk_child = False
     records_jsonpath = "$[*]"
@@ -842,21 +842,6 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
         for schema_message in self._generate_schema_messages():
             schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
             singer.write_message(schema_message)
-
-class ArchivedStream(hubspotV3Stream):
-
-    def post_process(self, row, context):
-        row = super().post_process(row, context)
-
-        # add archived value to _hg_archived
-        row["_hg_archived"] = True
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-
-        return None
 
 
 class CompaniesStream(ObjectSearchV3):
@@ -964,7 +949,7 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     name = "deals_history_properties"
     path = "crm/v3/objects/deals/{id}"
     properties_url = "properties/v1/deals/properties"
-    additional_prarams = {"propertiesWithHistory": True}
+    additional_params = {"propertiesWithHistory": True}
     parent_stream_type = DealsStream
     bulk_child = False
     records_jsonpath = "$[*]"
@@ -977,7 +962,7 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
-class DealsAssociationParent(DealsStream):
+class DealsAssociationParent(AssociationsV3ParentStream):
     name = "deals_association_parent"    
     path = "crm/v3/objects/deals"
     replication_key = None
