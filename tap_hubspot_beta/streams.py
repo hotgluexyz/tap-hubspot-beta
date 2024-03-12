@@ -18,6 +18,7 @@ from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
+from tap_hubspot_beta.client_v2 import hubspotV2Stream
 import time
 import pytz
 from singer_sdk.helpers._state import log_sort_error
@@ -760,6 +761,7 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
     ]
 
@@ -794,6 +796,7 @@ class ContactsV3Stream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
+
 class ContactsHistoryPropertiesStream(hubspotV3Stream):
     """Contacts History Properties Stream"""
 
@@ -808,6 +811,22 @@ class ContactsHistoryPropertiesStream(hubspotV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
+class ArchivedStream(hubspotV3Stream):
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+
+        # add archived value to _hg_archived
+        row["_hg_archived"] = True
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+
+        if archived_at > rep_key:
+            return row
+
+        return None
+
+
 class CompaniesStream(ObjectSearchV3):
     """Companies Stream"""
 
@@ -818,7 +837,61 @@ class CompaniesStream(ObjectSearchV3):
     properties_url = "properties/v1/companies/properties"
 
 
-class ArchivedCompaniesStream(hubspotV3Stream):
+class FullsyncCompaniesStream(hubspotV2Stream):
+    """Companies Fullsync Stream"""
+
+    name = "fullsync_companies"
+    object_type = "companies"
+    path = "companies/v2/companies/paged"
+    replication_key = "updatedAt"
+    records_jsonpath = "$.companies[*]"
+    properties_url = "properties/v2/companies/properties"
+    limit = 250
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType)
+    ]
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_companies"):
+            return False
+
+        try:
+            # Make this stream auto-select if companies is selected
+            self._tap.catalog["fullsync_companies"] = self._tap.catalog["companies"]
+            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = "companies"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
+        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
+        return new_metadata
+
+
+class ArchivedCompaniesStream(ArchivedStream):
     """Archived Companies Stream"""
 
     name = "companies_archived"
@@ -830,6 +903,7 @@ class ArchivedCompaniesStream(hubspotV3Stream):
     base_properties = [
         th.Property("id", th.StringType),
         th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType)
@@ -875,17 +949,6 @@ class ArchivedCompaniesStream(hubspotV3Stream):
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
         return params
 
-    def post_process(self, row, context):
-        row = super().post_process(row, context)
-
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-
-        return None
-
 
 class TicketsStream(ObjectSearchV3):
     """Companies Stream"""
@@ -894,7 +957,6 @@ class TicketsStream(ObjectSearchV3):
     path = "crm/v3/objects/tickets/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/tickets/properties"
-
 
 class DealsStream(ObjectSearchV3):
     """Deals Stream"""
@@ -930,7 +992,7 @@ class DealsAssociationParent(DealsStream):
     ).to_dict()
 
 
-class ArchivedDealsStream(hubspotV3Stream):
+class ArchivedDealsStream(ArchivedStream):
     """Archived Deals Stream"""
 
     name = "deals_archived"
@@ -942,6 +1004,7 @@ class ArchivedDealsStream(hubspotV3Stream):
     base_properties = [
         th.Property("id", th.StringType),
         th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
@@ -997,17 +1060,6 @@ class ArchivedDealsStream(hubspotV3Stream):
             # force this to think it's the deals stream
             record_message.stream = "deals"
             singer.write_message(record_message)
-
-    def post_process(self, row, context):
-        row = super().post_process(row, context)
-
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-
-        return None
 
 
 class ProductsStream(ObjectSearchV3):
@@ -1088,7 +1140,7 @@ class LineItemsStream(ObjectSearchV3):
     properties_url = "properties/v2/line_items/properties"
 
 
-class ArchivedLineItemsStream(hubspotV3Stream):
+class ArchivedLineItemsStream(ArchivedStream):
     """Line Items Stream"""
 
     name = "lineitems_archived"
@@ -1100,6 +1152,7 @@ class ArchivedLineItemsStream(hubspotV3Stream):
     base_properties = [
         th.Property("id", th.StringType),
         th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType)
@@ -1146,17 +1199,6 @@ class ArchivedLineItemsStream(hubspotV3Stream):
         if len(urlencode(params)) > 3000:
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
         return params
-
-    def post_process(self, row, context):
-        row = super().post_process(row, context)
-
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-
-        return None
 
 
 class ListSearchV3Stream(hubspotV3SingleSearchStream):
@@ -1239,7 +1281,6 @@ class AssociationDealsStream(hubspotV4Stream):
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
-
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
@@ -1276,13 +1317,11 @@ class AssociationDealsLineItemsStream(AssociationDealsStream):
     name = "associations_deals_line_items"
     path = "crm/v4/associations/deals/line_items/batch/read"
 
-
 class AssociationContactsTicketsStream(AssociationContactsStream):
     """Association Contacts -> Tickets Stream"""
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
 
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
@@ -1305,7 +1344,6 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
 
     name = "associations_contacts_companies"
     path = "crm/v4/associations/contacts/companies/batch/read"
-
 
 class MarketingEmailsStream(hubspotV1Stream):
     """Dispositions Stream"""
@@ -1410,7 +1448,6 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
 
-
 class PostalMailStream(ObjectSearchV3):
     """Owners Stream"""
 
@@ -1474,7 +1511,6 @@ class QuotesStream(ObjectSearchV3):
     path = "crm/v3/objects/quotes/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
-
 
 class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""

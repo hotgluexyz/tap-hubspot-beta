@@ -90,6 +90,18 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
+            
+            # only use companies stream for incremental syncs
+            if self.name == "companies":
+                fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
+                if not fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_companies_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -300,6 +312,11 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+    
+    def is_first_sync(self):
+        if self.stream_state.get("replication_key"):
+            return False
+        return True
 
 
 class hubspotStreamSchema(hubspotStream):
