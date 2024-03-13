@@ -17,6 +17,7 @@ from singer_sdk.helpers._flattening import get_flattening_options
 from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+from datetime import datetime
 
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
@@ -302,7 +303,75 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+    
+    def process_row_types(self,row) -> Dict[str, Any]:
+        schema = self.schema['properties']
+        for field, value in row.items():
+            if field not in schema:
+                # Skip fields not found in the schema
+                continue
 
+            field_info = schema[field]
+            field_type = field_info.get("type", ["null"])[0]
+            field_format = field_info.get("format", None)
+
+            if value is None:
+                continue
+
+            if field_type == "string" and field_format == "date-time":
+                try:
+                    # Attempt to parse string as date-time
+                    # If successful, no need to cast
+                    _ = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+                except ValueError:
+                    # If parsing fails, consider it as a type mismatch and attempt to cast
+                    try:
+                        row[field] = datetime.fromisoformat(value)
+                    except ValueError:
+                        # No need to raise an error, just continue with the loop
+                        continue
+
+            elif field_type == "boolean":
+                if not isinstance(value, bool):
+                    # Attempt to cast to boolean
+                    if value.lower() == "true":
+                        row[field] = True
+                    elif value.lower() == "false":
+                        row[field] = False
+                    else:
+                        # No need to raise an error, just continue with the loop
+                        continue
+
+            elif field_type == "number":
+                if isinstance(value, str):
+                    # Attempt to cast to float only if the value is a string with decimals
+                    if "." in value:
+                        try:
+                            row[field] = float(value)
+                        except ValueError:
+                            # No need to raise an error, just continue with the loop
+                            raise Exception(ValueError)
+                    else:
+                        # Attempt to cast to int if there are no decimals
+                        try:
+                            row[field] = int(value)
+                        except ValueError:
+                            # No need to raise an error, just continue with the loop
+                            raise Exception(ValueError)
+
+            elif field_type == "string":
+                if not isinstance(value, str):
+                    # Attempt to cast to string
+                    row[field] = str(value)
+
+            else:
+                # Unsupported type
+                # No need to raise an error, just continue with the loop
+                continue
+
+        return row
+
+        
 
 class hubspotStreamSchema(hubspotStream):
 

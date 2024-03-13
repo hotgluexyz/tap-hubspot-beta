@@ -149,6 +149,7 @@ class EngagementStream(hubspotV1Stream):
         # force threadId to be a string and keep one typing
         if row.get("threadId"):
             row["threadId"] = str(row.get("threadId"))
+        row = self.process_row_types(row)    
         return row
 
 
@@ -378,6 +379,7 @@ class ContactEventsStream(hubspotV3Stream):
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
         row["contact_id"] = context.get("contact_id")
+        row = self.process_row_types(row)
         return row
 
     def get_url_params(
@@ -570,6 +572,7 @@ class FormSubmissionsStream(hubspotV1Stream):
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
         row["form_id"] = context.get("form_id")
+        row = self.process_row_types(row)
         return row
 
 
@@ -746,6 +749,7 @@ class ContactListData(hubspotV1Stream):
         """As needed, append or transform raw data to match expected structure."""
         super().post_process(row, context)
         row["listId"] = int(context.get("list_id"))
+        row = self.process_row_types(row)
         return row
 
 
@@ -869,6 +873,7 @@ class ArchivedCompaniesStream(hubspotV3Stream):
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
+            row = self.process_row_types(row)
             return row
 
         return None
@@ -978,6 +983,7 @@ class ArchivedDealsStream(hubspotV3Stream):
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
+            row = self.process_row_types(row)
             return row
 
         return None
@@ -1127,6 +1133,7 @@ class ArchivedLineItemsStream(hubspotV3Stream):
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
+            row = self.process_row_types(row)
             return row
 
         return None
@@ -1194,6 +1201,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
     def post_process(self, row, context):
         row = super().post_process(row, context)
         row["list_id"] = context["list_id"]
+        row = self.process_row_types(row)
         return row
 
 
