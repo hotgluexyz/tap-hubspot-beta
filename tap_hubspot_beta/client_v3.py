@@ -27,6 +27,7 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
+    previous_starting_time = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -39,33 +40,48 @@ class hubspotV3SearchStream(hubspotStream):
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
+        # next_page_token = "10000"
         if next_page_token == "10000":
             start_date = self.stream_state.get("progress_markers", {}).get(
                 "replication_key_value"
             )
-            #We don't have a replication value. Need to paginate using lastmodifieddates after page #10000
-            if start_date is None:
-                data = response.json()
-                # extract maximum modified date to overcome 10000 pagination limit
+            # We need to paginate using lastmodifieddates after page #10000
+            data = response.json()
+               
+            # extract maximum modified date to overcome 10000 pagination limit
+            hs_lastmodifieddates = [
+                entry["properties"]["hs_lastmodifieddate"]
+                for entry in data["results"]
+                if "properties" in entry
+                and "hs_lastmodifieddate" in entry["properties"]
+                and entry["properties"]["hs_lastmodifieddate"] is not None
+            ]
+            #If hs_lastmodifieddate is empty in properties. Do the lookup using replication key
+            if not hs_lastmodifieddates and self.replication_key is not None:
                 hs_lastmodifieddates = [
-                    entry["properties"]["hs_lastmodifieddate"]
-                    for entry in data["results"]
-                    if "properties" in entry
-                    and "hs_lastmodifieddate" in entry["properties"]
+                entry[self.replication_key]
+                for entry in data["results"]
                 ]
-                hs_lastmodifieddates = [
-                    date for date in hs_lastmodifieddates if date is not None
-                ]
-                max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
-                if max_date:
-                    start_date = max_date
-                    self.special_replication = True
-                else:
-                    return None
+
+            hs_lastmodifieddates = [
+                date for date in hs_lastmodifieddates if date is not None
+            ]
+            max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
+            if max_date:
+                start_date = max_date
+                self.special_replication = True
+            else:
+                return None
 
             if start_date:
                 start_date = parse(start_date)
                 self.starting_time = int(start_date.timestamp() * 1000)
+                #Adding it just in case
+                if self.previous_starting_time:
+                    if self.previous_starting_time == self.starting_time:
+                        self.logger.warn("Date based pagination loop detected")
+                        return None
+                self.previous_starting_time = self.starting_time    
             next_page_token = "0"
         return next_page_token
 
