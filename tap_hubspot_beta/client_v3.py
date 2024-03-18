@@ -355,7 +355,7 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         row = super().post_process(row, context)
         props = row.get("propertiesWithHistory") or dict()
         row["propertiesWithHistory"] = {k:v for (k,v) in props.items() if v}
-        row = {k:v for k,v in row.items() if k in ["id", "propertiesWithHistory", "createdAt"]}
+        row = {k:v for k,v in row.items() if k in ["id", "propertiesWithHistory", "createdAt", "updatedAt", "archived", "archivedAt"]}
         return row
     
     def _write_schema_message(self) -> None:
