@@ -8,6 +8,9 @@ from singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
+from singer_sdk import typing as th
+import singer
+
 
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers._state import (
@@ -347,9 +350,17 @@ class hubspotV3SingleSearchStream(hubspotStream):
         return row
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
-        
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        for name, value in row["propertiesWithHistory"].items():
-            row[name] = value[0]["value"] if len(value) else None
+
+    def post_process(self, row: dict, context) -> dict:
+        row = super().post_process(row, context)
+        props = row.get("propertiesWithHistory") or dict()
+        row["propertiesWithHistory"] = {k:v for (k,v) in props.items() if v}
+        row = {k:v for k,v in row.items() if k in ["id", "propertiesWithHistory", "createdAt"]}
         return row
+    
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+            singer.write_message(schema_message)
+        
