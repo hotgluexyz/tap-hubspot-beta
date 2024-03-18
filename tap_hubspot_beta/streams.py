@@ -816,6 +816,48 @@ class ContactsAssociationStream(AssociationsV3ParentStream):
         th.Property("id", th.StringType),
     ).to_dict()
 
+class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
+    """Contacts History Properties Stream"""
+
+    name = "contacts_history_properties"
+    path = "crm/v3/objects/contacts/{id}"
+    properties_url = "properties/v1/contacts/properties"
+    additional_prarams = {"propertiesWithHistory": True}
+    parent_stream_type = ContactsV3Stream
+    bulk_child = False
+    records_jsonpath = "$[*]"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
+    ]
+
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+            singer.write_message(schema_message)
+
+class ArchivedStream(hubspotV3Stream):
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+
+        # add archived value to _hg_archived
+        row["_hg_archived"] = True
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+
+        if archived_at > rep_key:
+            return row
+
+        return None
+
 
 class CompaniesStream(ObjectSearchV3):
     """Companies Stream"""
@@ -915,10 +957,31 @@ class DealsStream(ObjectSearchV3):
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
+    
+class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
+    """Deals Stream"""
 
-class DealsAssociationParent(AssociationsV3ParentStream):
-    name = "deals_association_parent"
+    name = "deals_history_properties"
+    path = "crm/v3/objects/deals/{id}"
+    properties_url = "properties/v1/deals/properties"
+    additional_prarams = {"propertiesWithHistory": True}
+    parent_stream_type = DealsStream
+    bulk_child = False
+    records_jsonpath = "$[*]"
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
+    ]
+
+class DealsAssociationParent(DealsStream):
+    name = "deals_association_parent"    
     path = "crm/v3/objects/deals"
+    replication_key = None
+    primary_keys = ["id"]
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
