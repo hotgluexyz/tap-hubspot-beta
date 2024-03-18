@@ -805,7 +805,7 @@ class ContactsHistoryPropertiesStream(hubspotV3Stream):
     properties_url = "properties/v1/contacts/properties"
     additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = ContactsV3Stream
-    no_bulk_child = True
+    bulk_child = False
     records_jsonpath = "$[*]"
     base_properties = [
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
@@ -977,7 +977,7 @@ class DealsHistoryPropertiesStream(hubspotV3Stream):
     properties_url = "properties/v1/deals/properties"
     additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = DealsStream
-    no_bulk_child = True
+    bulk_child = False
     records_jsonpath = "$[*]"
     base_properties = [
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
