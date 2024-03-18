@@ -16,7 +16,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
+from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, hubspotHistoryV3Stream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 import time
@@ -797,7 +797,7 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
-class ContactsHistoryPropertiesStream(hubspotV3Stream):
+class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
     name = "contacts_history_properties"
@@ -807,7 +807,14 @@ class ContactsHistoryPropertiesStream(hubspotV3Stream):
     parent_stream_type = ContactsV3Stream
     no_bulk_child = True
     records_jsonpath = "$[*]"
+    primary_keys = ["id"]
+
     base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
@@ -969,7 +976,7 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
     
-class DealsHistoryPropertiesStream(hubspotV3Stream):
+class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Deals Stream"""
 
     name = "deals_history_properties"
@@ -980,6 +987,11 @@ class DealsHistoryPropertiesStream(hubspotV3Stream):
     no_bulk_child = True
     records_jsonpath = "$[*]"
     base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
