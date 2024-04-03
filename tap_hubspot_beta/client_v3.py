@@ -28,6 +28,8 @@ class hubspotV3SearchStream(hubspotStream):
     page_size = 100
     special_replication = False
     previous_starting_time = None
+    max_dates = []
+    starting_times = []
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -67,7 +69,18 @@ class hubspotV3SearchStream(hubspotStream):
                 date for date in hs_lastmodifieddates if date is not None
             ]
             max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
+            replication_value = self.stream_state.get("progress_markers", {}).get(
+                "replication_key_value"
+            )
+            
             if max_date:
+                if replication_value:
+                    if parse(replication_value) > parse(max_date):
+                        max_date = replication_value
+                if max_date in self.max_dates:
+                    self.logger.warn("Date based pagination loop detected")
+                    return None
+                self.max_dates.append(max_date)
                 start_date = max_date
                 self.special_replication = True
             else:
@@ -76,6 +89,7 @@ class hubspotV3SearchStream(hubspotStream):
             if start_date:
                 start_date = parse(start_date)
                 self.starting_time = int(start_date.timestamp() * 1000)
+                self.starting_times.append(self.starting_time )
                 #Adding it just in case
                 if self.previous_starting_time:
                     if self.previous_starting_time == self.starting_time:
