@@ -1095,7 +1095,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.IntegerType),
+        th.Property("list_id", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):
