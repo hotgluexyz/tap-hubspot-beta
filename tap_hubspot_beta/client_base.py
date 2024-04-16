@@ -1,6 +1,7 @@
 """REST client handling, including hubspotStream base class."""
 import copy
 import logging
+import curlify
 
 import requests
 import backoff
@@ -164,6 +165,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
             raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
         if 429 == response.status_code:
@@ -175,6 +179,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
             raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
 
     @staticmethod
