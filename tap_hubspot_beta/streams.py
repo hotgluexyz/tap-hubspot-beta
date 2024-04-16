@@ -1723,7 +1723,7 @@ class AssociationPostalMailDealsStream(AssociationPostalMailStream):
 
 
 class TasksAssociationStream(TasksStream):
-    name = "communications_association_parent"    
+    name = "tasks_association_parent"    
     replication_key = None
     primary_keys = ["id"]
     schema = th.PropertiesList(
