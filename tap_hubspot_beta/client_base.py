@@ -159,23 +159,23 @@ class hubspotStream(RESTStream):
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
-        if 500 <= response.status_code < 600 or response.status_code in [401, 104]:
+        if 500 <= response.status_code < 600 or response.status_code in [400, 401, 104]:
             msg = (
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise RetriableAPIError(msg)
+            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
         if 429 == response.status_code:
             self.log_rate_limit(response)
             raise RetriableAPIError(f"429 Too Many Requests, response {response.text}")
 
-        elif 400 <= response.status_code < 500:
+        elif 400 < response.status_code < 500:
             msg = (
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise FatalAPIError(msg)
+            raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
 
     @staticmethod
     def extract_type(field):
