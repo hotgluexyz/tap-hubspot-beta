@@ -16,7 +16,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
+from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import time
 import pytz
@@ -795,10 +795,9 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
-class ContactsAssociationStream(ContactsV3Stream):
-    name = "contacts_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class ContactsAssociationStream(AssociationsV3ParentStream):
+    name = "contacts_association_parent"
+    path = "crm/v3/objects/contacts"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -903,10 +902,9 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-class DealsAssociationParent(DealsStream):
-    name = "deals_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class DealsAssociationParent(AssociationsV3ParentStream):
+    name = "deals_association_parent"
+    path = "crm/v3/objects/deals"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1266,22 +1264,6 @@ class AssociationContactsTicketsStream(AssociationContactsStream):
     path = "crm/v4/associations/contacts/tickets/batch/read"
 
 
-class AssociationContactsStream(hubspotV4Stream):
-    """Association Base Stream"""
-
-    primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
-
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
-
-
 class AssociationContactsCompaniesStream(AssociationContactsStream):
     """Association Contacts -> Companies Stream"""
 
@@ -1484,10 +1466,10 @@ class CurrenciesStream(hubspotV3Stream):
     ).to_dict()
 
 # Get associations for engagements streams in v3
-class MeetingsAssociationStream(MeetingsStream):
+class MeetingsAssociationStream(AssociationsV3ParentStream):
     name = "meetings_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+    path = "crm/v3/objects/meetings"
+
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1523,10 +1505,10 @@ class AssociationMeetingsDealsStream(AssociationMeetingsStream):
     name = "associations_meetings_deals"
     path = "crm/v4/associations/meetings/deals/batch/read"
 
-class CallsAssociationStream(CallsStream):
-    name = "calls_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+
+class CallsAssociationStream(AssociationsV3ParentStream):
+    name = "calls_association_parent"
+    path = "crm/v3/objects/calls"    
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1561,10 +1543,9 @@ class AssociationCallsDealsStream(AssociationCallsStream):
     path = "crm/v4/associations/calls/deals/batch/read"
 
 
-class CommunicationsAssociationStream(CommunicationsStream):
-    name = "communications_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class CommunicationsAssociationStream(AssociationsV3ParentStream):
+    name = "communications_association_parent"
+    path = "crm/v3/objects/communications"    
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1601,10 +1582,9 @@ class AssociationCommunicationsDealsStream(AssociationCommunicationsStream):
     path = "crm/v4/associations/communications/deals/batch/read"
 
 
-class EmailsAssociationStream(EmailsStream):
-    name = "emails_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class EmailsAssociationStream(AssociationsV3ParentStream):
+    name = "emails_association_parent"
+    path = "crm/v3/objects/emails"    
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1616,7 +1596,6 @@ class AssociationEmailsStream(hubspotV4Stream):
     primary_keys = ["from_id", "to_id"]
     parent_stream_type = EmailsAssociationStream
     name = "associations_emails"
-    replication_key = None
 
     schema = association_schema
 
@@ -1642,10 +1621,9 @@ class AssociationEmailsDealsStream(AssociationEmailsStream):
     path = "crm/v4/associations/emails/deals/batch/read"
 
 
-class NotesAssociationStream(NotesStream):
-    name = "notes_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class NotesAssociationStream(AssociationsV3ParentStream):
+    name = "notes_association_parent"
+    path = "crm/v3/objects/notes"    
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1682,10 +1660,9 @@ class AssociationNotesDealsStream(AssociationNotesStream):
     path = "crm/v4/associations/notes/deals/batch/read"
 
 
-class PostalAssociationStream(PostalMailStream):
+class PostalAssociationStream(AssociationsV3ParentStream):
     name = "postal_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+    path = "crm/v3/objects/postal_mail" 
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1722,10 +1699,9 @@ class AssociationPostalMailDealsStream(AssociationPostalMailStream):
     path = "crm/v4/associations/postal_mail/deals/batch/read"
 
 
-class TasksAssociationStream(TasksStream):
-    name = "tasks_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class TasksAssociationStream(AssociationsV3ParentStream):
+    name = "tasks_association_parent"
+    path = "crm/v3/objects/tasks"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
