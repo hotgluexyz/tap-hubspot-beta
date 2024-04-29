@@ -38,6 +38,7 @@ class hubspotV2Stream(hubspotStreamSchema):
                 if row.get(field) in [0, ""]:
                     row[field] = None
                 else:
+                    # format datetime as hubspot standard ex. 2024-04-24T20:20:53.386Z
                     dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
                     row[field] = dt_field.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         row["updatedAt"] = row["hs_lastmodifieddate"]
