@@ -835,20 +835,6 @@ class ArchivedStream(hubspotV3Stream):
         archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
 
         if archived_at > rep_key:
-            # datetimes for archived endpoints have format %Y-%m-%dT%H:%M:%SZ, 
-            # giving standard hubspot-beta format %Y-%m-%dT%H:%M:%S.%f
-            for field in self.datetime_fields:
-                if row.get(field) is not None:
-                    if row.get(field) in [0, ""]:
-                        row[field] = None
-                    else:
-                        try:
-                            #if dt_field is a date-time string
-                            dt_field = parse(row[field])
-                        except:
-                            # if dt_field is a timestamp
-                            dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                        row[field] = dt_field.strftime("%Y-%m-%dT%H:%M:%S.%f")
             return row
         return None
 
