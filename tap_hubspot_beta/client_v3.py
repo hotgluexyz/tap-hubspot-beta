@@ -239,6 +239,8 @@ class hubspotV3Stream(hubspotStream):
             params["properties"] = ",".join(self.selected_properties)
         if next_page_token:
             params["after"] = next_page_token
+        if self.name == "forms":
+            params["formTypes"] = "all"    
         return params
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
