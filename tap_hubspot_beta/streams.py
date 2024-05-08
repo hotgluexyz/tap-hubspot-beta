@@ -1,5 +1,5 @@
 """Stream type classes for tap-hubspot."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
@@ -1690,3 +1690,107 @@ class AssociationTasksDealsStream(AssociationTasksStream):
 
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
+
+class FormsSummaryMonthlyStream(hubspotV1Stream):
+    """Association Base Stream"""
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-by-object
+    name = "forms_summary_monthly"
+    path = "analytics/v2/reports/forms/total" # :time_period make it configurable based on further requirements
+    paginate = True
+    page_size = 100
+    #if requested change to be dynamic based on month
+    days_delta = 30
+    start_date = None
+    end_date = None
+    skip = 0
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("formViews", th.NumberType),
+            th.Property("clickThroughPerFormView", th.NumberType),
+            th.Property("submissionsPerFormView", th.NumberType),
+            th.Property("submissions", th.NumberType),
+            th.Property("submissionsPerClickThrough", th.NumberType),
+            th.Property("completions", th.NumberType),
+            th.Property("completionsAndUnenrolls", th.NumberType),
+            th.Property("visibles", th.NumberType),
+            th.Property("nonContactSubmissions", th.NumberType),
+            th.Property("installs", th.NumberType),
+            th.Property("contactSubmissions", th.NumberType),
+            th.Property("interactions", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        # Check if pagination is enabled
+        if self.paginate:
+            data = response.json()
+            # Check if offset exists and matches the total to stop paginating for this filter range
+            if "offset" in data and "total" in data and self.skip != data['total']:
+                # Increment the skip counter for pagination
+                self.skip = data['offset']
+                # Update the previous token if it exists
+                if previous_token:
+                    previous_token = previous_token["token"]
+                # Return the next page token and the updated skip value
+                return {"token": previous_token, "skip": self.skip}
+            else:
+                # Reset skip value for a new pagination sequence
+                self.skip = 0
+                # Set new start date by adding +1 to previous end_date for the next pagination sequence
+                start_date = parse(self.end_date) + timedelta(days=1) or  parse(self.config.get("start_date"))
+                today = datetime.today()
+                if (
+                    previous_token
+                    and "token" in previous_token
+                    and previous_token["token"]
+                    and start_date.replace(tzinfo=None)
+                    <= previous_token["token"].replace(tzinfo=None)
+                ):
+                    start_date = previous_token["token"] + timedelta(
+                        days=self.days_delta
+                    )
+                #Replace timezone info with None    
+                next_token = start_date.replace(tzinfo=None)
+                #Stop paginating if next_token is greater than today
+                if (today - next_token).days < 0:
+                    self.paginate = False
+                # Return the next token and the current skip value
+                return {"token": next_token, "skip": self.skip}
+        else:
+            # Return None if pagination is not enabled
+            return None
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        skip = 0
+        token_date = None
+        if next_page_token:
+            token_date, skip = next_page_token["token"], next_page_token["skip"]
+        start_date = token_date or self.config.get("start_date") or datetime(2000, 1, 1)
+        #Convert to datetime if start date is in string
+        if isinstance(start_date, str):
+            start_date = parse(start_date)
+        end_date = start_date + timedelta(days=self.days_delta)    
+        params['limit'] = self.page_size
+        params['offset'] = skip
+        params['start'] = start_date.strftime("%Y%m%d")
+        params['end'] = end_date.strftime("%Y%m%d")
+        #Set start and end date so we can save it the row and use end date to calculate next page token
+        self.start_date = start_date.strftime("%Y-%m-%d")
+        self.end_date = end_date.strftime("%Y-%m-%d")
+        return params
+    
+    def post_process(self, row: dict, context: Optional[dict] = None) -> Optional[dict]:
+        #Once last page is fetched breakdowns are empty
+        if "breakdowns" in row and not row['breakdowns']:
+            return None
+        row['start_date'] = self.start_date
+        row['end_date'] = self.end_date
+        return row   
