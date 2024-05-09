@@ -16,7 +16,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
+from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import time
 import pytz
@@ -521,7 +521,11 @@ class EmailEventsStream(hubspotV1Stream):
 
 
 class FormsStream(hubspotV3Stream):
-    """Forms Stream"""
+    """
+        Forms Stream
+        The V3 is in beta and for now only support form types
+        Hubspot, captured, flow, blog_comment
+    """
 
     name = "forms"
     path = "marketing/v3/forms/"
@@ -795,6 +799,14 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
+class ContactsAssociationStream(AssociationsV3ParentStream):
+    name = "contacts_association_parent"
+    path = "crm/v3/objects/contacts"
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class CompaniesStream(ObjectSearchV3):
     """Companies Stream"""
 
@@ -894,10 +906,9 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-class DealsAssociationParent(DealsStream):
-    name = "deals_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class DealsAssociationParent(AssociationsV3ParentStream):
+    name = "deals_association_parent"
+    path = "crm/v3/objects/deals"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1217,7 +1228,7 @@ class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
+    parent_stream_type = ContactsAssociationStream
 
     schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
@@ -1255,22 +1266,6 @@ class AssociationContactsTicketsStream(AssociationContactsStream):
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
-
-class AssociationContactsStream(hubspotV4Stream):
-    """Association Base Stream"""
-
-    primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
-
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
 
 
 class AssociationContactsCompaniesStream(AssociationContactsStream):
@@ -1475,12 +1470,20 @@ class CurrenciesStream(hubspotV3Stream):
     ).to_dict()
 
 # Get associations for engagements streams in v3
+class MeetingsAssociationStream(AssociationsV3ParentStream):
+    name = "meetings_association_parent"    
+    path = "crm/v3/objects/meetings"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
 
 class AssociationMeetingsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = MeetingsStream
+    parent_stream_type = MeetingsAssociationStream
     name = "associations_meetings"
 
     schema = association_schema
@@ -1507,11 +1510,18 @@ class AssociationMeetingsDealsStream(AssociationMeetingsStream):
     path = "crm/v4/associations/meetings/deals/batch/read"
 
 
+class CallsAssociationStream(AssociationsV3ParentStream):
+    name = "calls_association_parent"
+    path = "crm/v3/objects/calls"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
 class AssociationCallsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CallsStream
+    parent_stream_type = CallsAssociationStream
     name = "associations_calls"
 
     schema = association_schema
@@ -1537,11 +1547,19 @@ class AssociationCallsDealsStream(AssociationCallsStream):
     path = "crm/v4/associations/calls/deals/batch/read"
 
 
+class CommunicationsAssociationStream(AssociationsV3ParentStream):
+    name = "communications_association_parent"
+    path = "crm/v3/objects/communications"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationCommunicationsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CommunicationsStream
+    parent_stream_type = CommunicationsAssociationStream
     name = "associations_communications"
 
     schema = association_schema
@@ -1568,11 +1586,19 @@ class AssociationCommunicationsDealsStream(AssociationCommunicationsStream):
     path = "crm/v4/associations/communications/deals/batch/read"
 
 
+class EmailsAssociationStream(AssociationsV3ParentStream):
+    name = "emails_association_parent"
+    path = "crm/v3/objects/emails"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationEmailsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = EmailsStream
+    parent_stream_type = EmailsAssociationStream
     name = "associations_emails"
 
     schema = association_schema
@@ -1599,11 +1625,19 @@ class AssociationEmailsDealsStream(AssociationEmailsStream):
     path = "crm/v4/associations/emails/deals/batch/read"
 
 
+class NotesAssociationStream(AssociationsV3ParentStream):
+    name = "notes_association_parent"
+    path = "crm/v3/objects/notes"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationNotesStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = NotesStream
+    parent_stream_type = NotesAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1630,11 +1664,19 @@ class AssociationNotesDealsStream(AssociationNotesStream):
     path = "crm/v4/associations/notes/deals/batch/read"
 
 
+class PostalAssociationStream(AssociationsV3ParentStream):
+    name = "postal_association_parent"    
+    path = "crm/v3/objects/postal_mail" 
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationPostalMailStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = PostalMailStream
+    parent_stream_type = PostalAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1661,11 +1703,19 @@ class AssociationPostalMailDealsStream(AssociationPostalMailStream):
     path = "crm/v4/associations/postal_mail/deals/batch/read"
 
 
+class TasksAssociationStream(AssociationsV3ParentStream):
+    name = "tasks_association_parent"
+    path = "crm/v3/objects/tasks"
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationTasksStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = TasksStream
+    parent_stream_type = TasksAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1763,7 +1813,6 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
         else:
             # Return None if pagination is not enabled
             return None
-    
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -1786,11 +1835,120 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
         self.start_date = start_date.strftime("%Y-%m-%d")
         self.end_date = end_date.strftime("%Y-%m-%d")
         return params
-    
+
     def post_process(self, row: dict, context: Optional[dict] = None) -> Optional[dict]:
-        #Once last page is fetched breakdowns are empty
-        if "breakdowns" in row and not row['breakdowns']:
+        # Once last page is fetched breakdowns are empty
+        if "breakdowns" in row and not row["breakdowns"]:
             return None
-        row['start_date'] = self.start_date
-        row['end_date'] = self.end_date
-        return row   
+        row["start_date"] = self.start_date
+        row["end_date"] = self.end_date
+        return row
+
+
+class TeamsStream(hubspotV3Stream):
+    """Teams Stream"""
+
+    name = "teams"
+    path = "settings/v3/users/teams"
+    primary_keys = ["id"]
+
+    schema = th.PropertiesList(
+        th.Property("userIds", th.CustomType({"type": ["array", "string"]})),
+        th.Property("name", th.StringType),
+        th.Property("id", th.StringType),
+        th.Property("secondaryUserIds", th.CustomType({"type": ["array", "string"]})),
+    ).to_dict()
+
+class FormsAllStream(hubspotV3Stream):
+    """
+        Forms V2 Stream
+        This stream supports all of the form types supported by V3 and 
+        Meeting, Payments ....
+    """
+
+    name = "all_forms"
+    path = "forms/v2/forms/"
+    primary_keys = ["guid"]
+    replication_key = None
+    records_jsonpath = "$.[*]"
+
+    schema = th.PropertiesList(
+        th.Property("portalId", th.NumberType),
+        th.Property("guid", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("action", th.StringType),
+        th.Property("method", th.StringType),
+        th.Property("cssClass", th.StringType),
+        th.Property("redirect", th.StringType),
+        th.Property("submitText", th.StringType),
+        th.Property("followUpId", th.StringType),
+        th.Property("notifyRecipients", th.StringType),
+        th.Property("leadNurturingCampaignId", th.StringType),
+        th.Property("formFieldGroups", th.CustomType({"type": ["array", "string"]})),
+        th.Property("metaData", th.CustomType({"type": ["array", "string"]})),
+        th.Property("deletable", th.BooleanType),
+        th.Property("inlineMessage", th.StringType),
+        th.Property("tmsId", th.StringType),
+        th.Property("captchaEnabled", th.BooleanType),
+        th.Property("campaignGuid", th.StringType),
+        th.Property("cloneable", th.BooleanType),
+        th.Property("editable", th.BooleanType),
+        th.Property("formType", th.StringType),
+        th.Property("deletedAt", th.IntegerType),
+        th.Property("themeName", th.StringType),
+        th.Property("parentId", th.IntegerType),
+        th.Property("isPublished", th.BooleanType),
+        th.Property("publishAt", th.IntegerType),
+        th.Property("unpublishAt", th.IntegerType),
+        th.Property("publishedAt", th.IntegerType),
+        th.Property("customUid", th.StringType),
+        th.Property("createMarketableContact", th.BooleanType),
+        th.Property("editVersion", th.IntegerType),
+        th.Property("thankYouMessageJson", th.StringType),
+        th.Property("themeColor", th.StringType),
+        th.Property("alwaysCreateNewCompany", th.BooleanType),
+        th.Property("internalUpdatedAt", th.IntegerType),
+        th.Property("businessUnitId", th.IntegerType),
+        th.Property("portableKey", th.StringType),
+        th.Property("embedVersion", th.StringType),
+        th.Property("selectedExternalOptions", th.CustomType({"type": ["array", "string"]})),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "form_id": record["guid"],
+        }
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        data = response.json()
+        next_page_token = None
+        if not previous_token:
+            previous_token = 0
+        if len(data)>0:
+            next_page_token = previous_token + self.page_size
+        return next_page_token
+        
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}   
+        params["limit"] = self.page_size
+        if next_page_token:
+            params['offset'] = next_page_token
+        params["formTypes"] = "ALL" # V2 is case sensitive     
+        return params
+    
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        row = super().post_process(row, context)
+        for field in ["createdAt", "updatedAt"]:
+            if field in row:
+                #This endpoint seems to be sending time in milliseconds
+                dt_field = datetime.fromtimestamp((int(row[field]))/1000)
+                row[field] = dt_field.isoformat()
+        return row

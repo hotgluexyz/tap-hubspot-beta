@@ -13,6 +13,7 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+import curlify
 
 from pendulum import parse
 
@@ -146,6 +147,11 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            #We need logs for 500
+            if response.status_code == 500:
+                curl_command = curlify.to_curl(response.request)
+                logging.error(f"Response code: {response.status_code}, info: {response.text}")
+                logging.error(f"CURL command for failed request: {curl_command}")
             raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
@@ -153,14 +159,18 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
+            if "invalid json input" in response.text.lower():
+                raise RetriableAPIError(msg)
             raise FatalAPIError(msg)
 
     @staticmethod
     def extract_type(field, type_booleancheckbox_as_boolean=False):
         field_type = field.get("type")
-        if field_type == "bool":
-            return th.BooleanType
-        if field.get("fieldType") == "booleancheckbox" and type_booleancheckbox_as_boolean:
+        if field_type == "bool" or field.get("fieldType") == "booleancheckbox":
             return th.BooleanType
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
