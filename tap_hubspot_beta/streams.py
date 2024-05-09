@@ -1847,9 +1847,4 @@ class FormsAllStream(hubspotV3Stream):
                 #This endpoint seems to be sending time in milliseconds
                 dt_field = datetime.fromtimestamp((int(row[field]))/1000)
                 row[field] = dt_field.isoformat()
-        return row        
-
-class FormAllSubmissionsStream(FormSubmissionsStream):
-    """FormSubmissions Stream"""
-    name = "all_form_submissions"
-    parent_stream_type = FormsAllStream
+        return row
