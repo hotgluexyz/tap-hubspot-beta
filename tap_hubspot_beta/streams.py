@@ -521,7 +521,11 @@ class EmailEventsStream(hubspotV1Stream):
 
 
 class FormsStream(hubspotV3Stream):
-    """Forms Stream"""
+    """
+        Forms Stream
+        The V3 is in beta and for now only support form types
+        Hubspot, captured, flow, blog_comment
+    """
 
     name = "forms"
     path = "marketing/v3/forms/"
@@ -1750,3 +1754,102 @@ class TeamsStream(hubspotV3Stream):
         th.Property("id", th.StringType),
         th.Property("secondaryUserIds", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
+
+class FormsAllStream(hubspotV3Stream):
+    """
+        Forms V2 Stream
+        This stream supports all of the form types supported by V3 and 
+        Meeting, Payments ....
+    """
+
+    name = "all_forms"
+    path = "forms/v2/forms/"
+    primary_keys = ["guid"]
+    replication_key = None
+    records_jsonpath = "$.[*]"
+
+    schema = th.PropertiesList(
+        th.Property("portalId", th.NumberType),
+        th.Property("guid", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("action", th.StringType),
+        th.Property("method", th.StringType),
+        th.Property("cssClass", th.StringType),
+        th.Property("redirect", th.StringType),
+        th.Property("submitText", th.StringType),
+        th.Property("followUpId", th.StringType),
+        th.Property("notifyRecipients", th.StringType),
+        th.Property("leadNurturingCampaignId", th.StringType),
+        th.Property("formFieldGroups", th.CustomType({"type": ["array", "string"]})),
+        th.Property("metaData", th.CustomType({"type": ["array", "string"]})),
+        th.Property("deletable", th.BooleanType),
+        th.Property("inlineMessage", th.StringType),
+        th.Property("tmsId", th.StringType),
+        th.Property("captchaEnabled", th.BooleanType),
+        th.Property("campaignGuid", th.StringType),
+        th.Property("cloneable", th.BooleanType),
+        th.Property("editable", th.BooleanType),
+        th.Property("formType", th.StringType),
+        th.Property("deletedAt", th.IntegerType),
+        th.Property("themeName", th.StringType),
+        th.Property("parentId", th.IntegerType),
+        th.Property("isPublished", th.BooleanType),
+        th.Property("publishAt", th.IntegerType),
+        th.Property("unpublishAt", th.IntegerType),
+        th.Property("publishedAt", th.IntegerType),
+        th.Property("customUid", th.StringType),
+        th.Property("createMarketableContact", th.BooleanType),
+        th.Property("editVersion", th.IntegerType),
+        th.Property("thankYouMessageJson", th.StringType),
+        th.Property("themeColor", th.StringType),
+        th.Property("alwaysCreateNewCompany", th.BooleanType),
+        th.Property("internalUpdatedAt", th.IntegerType),
+        th.Property("businessUnitId", th.IntegerType),
+        th.Property("portableKey", th.StringType),
+        th.Property("embedVersion", th.StringType),
+        th.Property("selectedExternalOptions", th.CustomType({"type": ["array", "string"]})),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "form_id": record["guid"],
+        }
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        data = response.json()
+        next_page_token = 0
+        if not previous_token:
+            previous_token = 0
+        if len(data)>0:
+            next_page_token = previous_token + self.page_size
+        return next_page_token
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        params["limit"] = self.page_size
+        if next_page_token:
+            params['offset'] = next_page_token
+        params["formTypes"] = "ALL" # V2 is case sensitive     
+        return params
+    
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        row = super().post_process(row, context)
+        for field in ["createdAt", "updatedAt"]:
+            if field in row:
+                #This endpoint seems to be sending time in milliseconds
+                dt_field = datetime.fromtimestamp((int(row[field]))/1000)
+                row[field] = dt_field.isoformat()
+        return row        
+
+class FormAllSubmissionsStream(FormSubmissionsStream):
+    """FormSubmissions Stream"""
+    name = "all_form_submissions"
+    parent_stream_type = FormsAllStream
