@@ -1822,7 +1822,7 @@ class FormsAllStream(hubspotV3Stream):
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
         data = response.json()
-        next_page_token = 0
+        next_page_token = None
         if not previous_token:
             previous_token = 0
         if len(data)>0:
