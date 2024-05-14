@@ -1749,8 +1749,6 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
     path = "analytics/v2/reports/forms/total" # :time_period make it configurable based on further requirements
     paginate = True
     page_size = 100
-    #if requested change to be dynamic based on month
-    days_delta = 30
     start_date = None
     end_date = None
     skip = 0
@@ -1802,7 +1800,7 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
                     <= previous_token["token"].replace(tzinfo=None)
                 ):
                     start_date = previous_token["token"] + timedelta(
-                        days=self.days_delta
+                        days=1
                     )
                 #Replace timezone info with None    
                 next_token = start_date.replace(tzinfo=None)
