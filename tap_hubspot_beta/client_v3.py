@@ -136,8 +136,8 @@ class hubspotV3SearchStream(hubspotStream):
         """As needed, append or transform raw data to match expected structure."""
         if self.properties_url:
             for name, value in row["properties"].items():
-                #Skip empty id, empty id in properties overrides the id value to none
-                if name == "id" and not value:
+                #Skip id property
+                if name == "id":
                     continue
                 row[name] = value
             del row["properties"]
