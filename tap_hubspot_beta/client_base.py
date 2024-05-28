@@ -14,6 +14,7 @@ from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
 import curlify
+import time
 
 from pendulum import parse
 
@@ -141,6 +142,31 @@ class hubspotStream(RESTStream):
         return selected_properties
 
     def validate_response(self, response: requests.Response) -> None:
+        #Rate limit logic
+        #@TODO enable this if 429 handling fails. 
+        # not using because if it is daily limit it could cause job to be stuck for a day
+        # headers = response.headers
+        # #Prevent rate limit from being triggered
+        # if (
+        #     "X-HubSpot-RateLimit-Remaining" in headers
+        #     and int(headers["X-HubSpot-RateLimit-Remaining"]) <= 10
+        # ):
+        #     #Default sleep time
+        #     sleep_time = 10
+        #     if "X-HubSpot-RateLimit-Interval-Milliseconds" in headers:
+        #         # Sleep based on milliseconds limit of the API
+        #         sleep_time = int(headers["X-HubSpot-RateLimit-Interval-Milliseconds"]) / 1000
+        #         if sleep_time < 0:
+        #             sleep_time = 10
+        #     self.logger.warn(f"Rate limit reached. Sleeping for {sleep_time} seconds.")        
+        #     time.sleep(sleep_time)
+        
+        # if 429 is triggered log the response code and retry    
+        if response.status_code == 429:
+            self.logger.warn(f"Rate limit reached. Response code: {response.status_code}, info: {response.text}, headers: {response.headers}")
+            time.sleep(30)
+            raise RetriableAPIError(f"Response code: {response.status_code}, info: {response.text}")    
+            
         """Validate HTTP response."""
         if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = (
