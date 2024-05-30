@@ -1442,3 +1442,132 @@ class CurrenciesStream(hubspotV3SearchStream):
         th.Property("fromCurrencyCode", th.StringType),
         th.Property("updatedAt", th.DateTimeType),
     ).to_dict()
+
+
+#--- Base stream for dynamic associations based in config flag
+
+class DynamicAssociationsStream(hubspotV4Stream):
+    """Base association stream for 2 objects in hubspot - Static Object -> Dynamic Object"""
+
+    associated_object = None
+    assoc_index = None
+    object_name = None
+
+    schema = th.PropertiesList(
+        th.Property("from_id", th.StringType),
+        th.Property("to_id", th.StringType),
+        th.Property("typeId", th.NumberType),
+        th.Property("category", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
+    ).to_dict()
+
+    @property
+    def path(self):
+        self.assoc_index = self.assoc_index or 0
+        if len(self.association_objects) > self.assoc_index:
+            self.associated_object = self.association_objects[self.assoc_index]
+            self._write_schema_message()
+        if self.associated_object:
+            return f"crm/v4/associations/{self.object_name}/{self.associated_object}/batch/read"
+
+    @property
+    def association_objects(self):
+        parent_name = self.parent_stream_type.name
+        if self.config.get("fetch_associations", {}).get(parent_name) and self.parent_stream_type.selected:
+            return self.config["fetch_associations"][parent_name]
+        else:
+            return []
+
+    @property
+    def selected(self) -> bool:
+        # selects the association stream by default if fetch_associations is in config and base stream is selected
+        if not self.association_objects:
+            return False
+        else:
+            return self._tap.catalog[self.parent_stream_type.name].metadata.get(()).selected
+    
+    @property
+    def metadata(self):
+        # select by default all properties
+        new_metadata = super().metadata
+        for field in new_metadata:
+            new_metadata[field].selected = True
+        return new_metadata
+
+
+    def get_next_page_token(self, response, previous_token):
+        # iterate through all the associations set for the same object in fetch_associations
+        previous_token = previous_token or 0
+        if self.assoc_index < len(self.association_objects):
+            next_page_token = previous_token + 1
+            self.assoc_index =  next_page_token
+            return next_page_token
+
+
+    # write the schema and record names after the association object 
+    @property
+    def stream_alias(self):
+        # name for schema and output file
+        return f"associations_{self.object_name}_{self.associated_object}"
+
+    def _write_record_message(self, record: dict) -> None:
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = self.stream_alias
+            singer.write_message(record_message)
+
+    def _write_schema_message(self) -> None:
+        for schema_message in self._generate_schema_messages():
+            if self.associated_object:
+                schema_message.stream = self.stream_alias
+            singer.write_message(schema_message)
+
+
+# child classes of dynamic association 
+class ContactsAssociationsStream(DynamicAssociationsStream):
+    name = "contacts_associations"
+    parent_stream_type = ContactsV3Stream
+    object_name = "contacts"
+
+
+class MeetingsAssociationsStream(DynamicAssociationsStream):
+    name = "meetings_associations"
+    parent_stream_type = MeetingsStream
+    object_name = "meetings"
+
+
+class CallsAssociationsStream(DynamicAssociationsStream):
+    name = "calls_associations"
+    parent_stream_type = CallsStream
+    object_name = "calls"
+
+
+class CommunicationsAssociationsStream(DynamicAssociationsStream):
+    name = "communications_associations"
+    parent_stream_type = CommunicationsStream
+    object_name = "communications"
+
+
+class EmailsAssociationsStream(DynamicAssociationsStream):
+    name = "emails_associations"
+    parent_stream_type = EmailsStream
+    object_name = "emails"
+
+
+class NotesAssociationsStream(DynamicAssociationsStream):
+    name = "notes_associations"
+    parent_stream_type = NotesStream
+    object_name = "notes"
+
+
+class PostalMailAssociationsStream(DynamicAssociationsStream):
+    name = "postal_mail_associations"
+    parent_stream_type = PostalMailStream
+    object_name = "postal_mail"
+
+
+class TasksAssociationsStream(DynamicAssociationsStream):
+    name = "tasks_associations"
+    parent_stream_type = TasksStream
+    object_name = "tasks"
