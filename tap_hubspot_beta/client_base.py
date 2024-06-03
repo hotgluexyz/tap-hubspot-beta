@@ -188,6 +188,9 @@ class hubspotStream(RESTStream):
             curl_command = curlify.to_curl(response.request)
             logging.error(f"Response code: {response.status_code}, info: {response.text}")
             logging.error(f"CURL command for failed request: {curl_command}")
+            if "FORM_TYPE_NOT_ALLOWED" in response.text:
+                #Skip this form and continue sync
+                return
             #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
             if "invalid json input" in response.text.lower():
                 raise RetriableAPIError(msg)
