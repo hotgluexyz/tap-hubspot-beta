@@ -160,7 +160,7 @@ class hubspotStream(RESTStream):
             curl_command = curlify.to_curl(response.request)
             logging.error(f"Response code: {response.status_code}, info: {response.text}")
             logging.error(f"CURL command for failed request: {curl_command}")
-            raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
+            raise FatalAPIError(f"Msg {msg}, response {response.text}")
 
     @staticmethod
     def extract_type(field):
