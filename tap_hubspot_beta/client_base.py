@@ -152,7 +152,7 @@ class hubspotStream(RESTStream):
             logging.error(f"CURL command for failed request: {curl_command}")
             raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
-        elif 400 < response.status_code < 500:
+        elif 400 <= response.status_code < 500:
             msg = (
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
