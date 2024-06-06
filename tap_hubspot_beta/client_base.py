@@ -142,7 +142,7 @@ class hubspotStream(RESTStream):
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
-        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104, 400]:
+        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = (
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
