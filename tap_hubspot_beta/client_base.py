@@ -317,6 +317,18 @@ class hubspotStream(RESTStream):
         if self.stream_state.get("replication_key"):
             return False
         return True
+    
+    def parse_value(self, field, value):
+        if "boolean" == self.schema["properties"].get(field, {}).get("type", [""])[0] and value in ["true", "false", "True", "False"]:
+            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        return value
+    
+    def parse_properties(self, row):
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                row[name] = self.parse_value(name, value)
+            del row["properties"]
+        return row
 
 
 class hubspotStreamSchema(hubspotStream):
