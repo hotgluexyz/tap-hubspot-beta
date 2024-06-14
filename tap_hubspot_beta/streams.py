@@ -1953,3 +1953,131 @@ class FormsAllStream(hubspotV3Stream):
                 dt_field = datetime.fromtimestamp((int(row[field]))/1000)
                 row[field] = dt_field.isoformat()
         return row
+
+class SourcesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "sources_summary_monthly"
+    path = "analytics/v2/reports/sources/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("contactsPerPageview", th.NumberType),
+            th.Property("returningVisits", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("contactToCustomerRate", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("customersPerPageview", th.NumberType),
+            th.Property("sessionToContactRate", th.NumberType),
+            th.Property("pageviewsPerSession", th.NumberType),
+            th.Property("opportunities", th.NumberType),
+            th.Property("bounceRate", th.NumberType),
+            th.Property("salesQualifiedLeads", th.NumberType),
+            th.Property("marketingQualifiedLeads", th.NumberType),
+            th.Property("visits", th.NumberType),
+            th.Property("visitors", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("leadsPerView", th.NumberType),
+            th.Property("customers", th.NumberType),
+            th.Property("bounces", th.NumberType),
+            th.Property("time", th.NumberType),
+            th.Property("timePerSession", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("others", th.NumberType),
+            th.Property("newVisitorSessionRate", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+class PagesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "pages_summary_monthly"
+    path = "analytics/v2/reports/pages/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("newVisitorRawViews", th.NumberType),
+            th.Property("ctaViews", th.NumberType),
+            th.Property("exitsPerPageview", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("pageTime", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("ctaClicks", th.NumberType),
+            th.Property("ctaRate", th.NumberType),
+            th.Property("pageBounceRate", th.NumberType),
+            th.Property("exits", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("pageBounces", th.NumberType),
+            th.Property("timePerPageview", th.NumberType),
+            th.Property("entrances", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+class LandingPagesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "landing_pages_summary_monthly"
+    path = "analytics/v2/reports/landing-pages/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("rawViews", th.NumberType),
+            th.Property("ctaViews", th.NumberType),
+            th.Property("submissions", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("entrances", th.NumberType),
+            th.Property("exits", th.NumberType),
+            th.Property("timePerPageview", th.NumberType),
+            th.Property("pageBounceRate", th.NumberType),
+            th.Property("exitsPerPageview", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+
+class LandingPagesStream(hubspotV3Stream):
+    """Landing Pages Stream"""
+    name = "landing_pages"
+    path = "cms/v3/pages/landing-pages"
+    primary_keys = ["id"]
+    replication_key = None
+
+    schema = th.PropertiesList(
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("archivedInDashboard", th.BooleanType),
+        th.Property("attachedStylesheets", th.CustomType({"type": ["array", "string"]})),
+        th.Property("authorName", th.StringType),
+        th.Property("categoryId", th.IntegerType),
+        th.Property("contentTypeCategory", th.IntegerType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("createdById", th.StringType),
+        th.Property("currentState", th.StringType),
+        th.Property("domain", th.StringType),
+        th.Property("featuredImage", th.StringType),
+        th.Property("featuredImageAltText", th.StringType),
+        th.Property("htmlTitle", th.StringType),
+        th.Property("id", th.StringType),
+        th.Property("includeDefaultCustomCss", th.BooleanType),
+        th.Property("layoutSections", th.CustomType({"type": ["object", "string"]})),
+        th.Property("metaDescription", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("pageExpiryEnabled", th.BooleanType),
+        th.Property("pageRedirected", th.BooleanType),
+        th.Property("publicAccessRules", th.CustomType({"type": ["array", "string"]})),
+        th.Property("publicAccessRulesEnabled", th.BooleanType),
+        th.Property("publishDate", th.DateTimeType),
+        th.Property("publishImmediately", th.BooleanType),
+        th.Property("published", th.BooleanType),
+        th.Property("slug", th.StringType),
+        th.Property("state", th.StringType),
+        th.Property("subcategory", th.StringType),
+        th.Property("templatePath", th.StringType),
+        th.Property("translations", th.CustomType({"type": ["object", "string"]})),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("updatedById", th.StringType),
+        th.Property("url", th.StringType),
+        th.Property("useFeaturedImage", th.BooleanType),
+        th.Property("widgetContainers", th.CustomType({"type": ["object", "string"]})),
+        th.Property("widgets", th.CustomType({"type": ["object", "string"]})),
+    ).to_dict()    
