@@ -1778,7 +1778,7 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
         if self.paginate:
             data = response.json()
             # Check if offset exists and matches the total to stop paginating for this filter range
-            if "offset" in data and "total" in data and self.skip != data['total']:
+            if "offset" in data and "total" in data and data['total'] > 0 and self.skip != data['total']:
                 # Increment the skip counter for pagination
                 self.skip = data['offset']
                 # Update the previous token if it exists
