@@ -34,6 +34,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    visible_in_catalog = True
 
     def load_fields_metadata(self):
         if not self.properties_url:
