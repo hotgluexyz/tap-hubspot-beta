@@ -224,7 +224,7 @@ class Taphubspot(Tap):
 
         # change name for v3 streams and hide streams with the same base name (personalized request HGI-5253)
         del_streams = []
-        if not self.config.get("use_legacy_streams", False):
+        if not self.config.get("use_legacy_streams", True):
             for stream in streams_by_type.values():
                 if "_v3" in stream.name:
                     # if stream name has v3 in it remove 'v3' from the stream name 
