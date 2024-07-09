@@ -136,7 +136,18 @@ class Taphubspot(Tap):
         Returns:
             The tap's catalog as a dict
         """
-        catalog = super().catalog_dict
+
+        # add visible field to metadata
+        original_catalog = self._singer_catalog
+        # for some reason to_dict() gets rid of the value visible so we'll add it back before json dumping the catalog
+        _catalog = self._singer_catalog.to_dict()
+        new_catalog = []
+        for i, stream in enumerate(_catalog["streams"]):
+            stream["metadata"][-1]["metadata"]["visible"] = original_catalog[stream["tap_stream_id"]].metadata[()].visible
+            new_catalog.append(stream)
+        catalog =  cast(dict, {"streams": new_catalog})
+
+        # add metadata fields to catalog
         if self.config.get("catalog_metadata", False):
             streams = self.streams
             for stream in catalog["streams"]:
@@ -169,23 +180,6 @@ class Taphubspot(Tap):
                 setattr(stream.metadata[()], "visible", stream.visible_in_catalog)
                 self._streams[stream.name] = stream
         return self._streams
-    
-
-    @property
-    def catalog_dict(self) -> dict:
-        """Get catalog dictionary.
-
-        Returns:
-            The tap's catalog as a dict
-        """
-        original_catalog = self._singer_catalog
-        # for some reason to_dict() gets rid of the value visible so we'll add it back before json dumping the catalog
-        _catalog = self._singer_catalog.to_dict()
-        new_catalog = []
-        for i, stream in enumerate(_catalog["streams"]):
-            stream["metadata"][-1]["metadata"]["visible"] = original_catalog[stream["tap_stream_id"]].metadata[()].visible
-            new_catalog.append(stream)
-        return cast(dict, {"streams": new_catalog})
     
     @final
     def load_streams(self) -> List[Stream]:
