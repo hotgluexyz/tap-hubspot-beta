@@ -47,6 +47,7 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    # FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -69,6 +70,8 @@ from tap_hubspot_beta.streams import (
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream
 )
 
 STREAM_TYPES = [
@@ -113,6 +116,7 @@ STREAM_TYPES = [
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    # FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -135,6 +139,8 @@ STREAM_TYPES = [
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream
 ]
 
 

@@ -8,6 +8,9 @@ from singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
+from singer_sdk import typing as th
+import singer
+
 
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers._state import (
@@ -111,12 +114,15 @@ class hubspotV3SearchStream(hubspotStream):
             for name, value in row["properties"].items():
                 row[name] = value
             del row["properties"]
+        # store archived value in _hg_archived
+        row["_hg_archived"] = False
         return row
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
     ) -> None:
         """Sync records, emitting RECORD and STATE messages. """
+
         record_count = 0
         current_context: Optional[dict]
         context_list: Optional[List[dict]]
@@ -187,6 +193,16 @@ class hubspotV3SearchStream(hubspotStream):
         # Reset interim bookmarks before emitting final STATE message:
         self._write_state_message()
 
+    
+    def _sync_children(self, child_context: dict) -> None:
+        for child_stream in self.child_streams:
+            if child_stream.selected or child_stream.has_selected_descendents:
+                if not child_stream.bulk_child:
+                    ids = child_context.get("ids") or []
+                    for id in ids:
+                        child_stream.sync(context=id)
+                else:
+                    child_stream.sync(context=child_context)
 
 class hubspotV3Stream(hubspotStream):
     """hubspot stream class."""
@@ -209,7 +225,12 @@ class hubspotV3Stream(hubspotStream):
         params["limit"] = self.page_size
         params.update(self.additional_prarams)
         if self.properties_url:
-            params["properties"] = ",".join(self.selected_properties)
+            # requesting either properties or properties with history
+            # if we send both it returns an error saying the url is too long
+            if params.get("propertiesWithHistory"):
+                params["propertiesWithHistory"] = ",".join(self.selected_properties)
+            else:
+                params["properties"] = ",".join(self.selected_properties)
         if next_page_token:
             params["after"] = next_page_token
         return params
@@ -276,3 +297,19 @@ class hubspotV3SingleSearchStream(hubspotStream):
                 row[name] = value
             del row["properties"]
         return row
+    
+class hubspotHistoryV3Stream(hubspotV3Stream):
+
+    def post_process(self, row: dict, context) -> dict:
+        row = super().post_process(row, context)
+        props = row.get("propertiesWithHistory") or dict()
+        row["propertiesWithHistory"] = {k:v for (k,v) in props.items() if v}
+        row = {k:v for k,v in row.items() if k in ["id", "propertiesWithHistory", "createdAt", "updatedAt", "archived", "archivedAt"]}
+        return row
+    
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+            singer.write_message(schema_message)
+        
