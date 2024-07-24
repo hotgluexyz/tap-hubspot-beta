@@ -161,15 +161,34 @@ class hubspotStream(RESTStream):
         field_type = field.get("type")
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
-        if field_type == "number":
-            return th.StringType
-        if field_type == "datetime":
-            return th.DateTimeType
-        if field_type == "bool":
+        if field_type == "bool" or field.get("fieldType") == "booleancheckbox":
             return th.BooleanType
+        if field_type == "number":
+            return th.NumberType    
+        if field_type in ["datetime", "date", "dateTime"]:
+            return th.DateTimeType
         else:
             # TODO: Changed default because tap errors if type is None
             return th.StringType
+        
+    def parse_value(self, field, value):
+        field_type = self.schema["properties"].get(field, {}).get("type", [""])[0]
+        if field_type == "boolean" and isinstance(value, str) and value.lower() in ["true", "false"]:
+            value = True if value.lower() == "true" else False
+        elif field_type == "number" and value is not None:
+            try:
+                value = float(value)  
+            except:
+                self.logger.info(f"Value {value} for field {field} can't be coerced to a number value, replacing with null")
+                value = None
+        return value
+
+    def parse_properties(self, row):
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                row[name] = self.parse_value(name, value)
+            del row["properties"]
+        return row
 
     def request_schema(self, url, headers):
         response = requests.get(url, headers=headers)
