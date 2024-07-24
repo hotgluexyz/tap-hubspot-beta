@@ -327,9 +327,9 @@ class hubspotStream(RESTStream):
 
     def parse_value(self, field, value):
         field_type = self.schema["properties"].get(field, {}).get("type", [""])[0]
-        if field_type == "boolean" and value.lower() in ["true", "false"]:
+        if field_type == "boolean" and isinstance(value, str) and value.lower() in ["true", "false"]:
             value = True if value.lower() == "true" else False
-        elif field_type == "number" and value:
+        elif field_type == "number" and value is not None:
             try:
                 value = float(value)  
             except:
