@@ -327,19 +327,14 @@ class hubspotStream(RESTStream):
 
     def parse_value(self, field, value):
         field_type = self.schema["properties"].get(field, {}).get("type", [""])[0]
-        if value in ["N/A", "null", "none", ""]:
-            value = None
-        elif field_type == "boolean" and value.lower() in ["true", "false"]:
-            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        if field_type == "boolean" and value.lower() in ["true", "false"]:
+            value = True if value.lower() == "true" else False
         elif field_type == "number" and value:
-            if value.isdigit():
-                value = int(value)
-            else:
-                try:
-                    value = float(value)  
-                except:
-                    self.logger.info(f"Value {value} for field {field} can't be coerced to a number value, replacing with null")
-                    value = None
+            try:
+                value = float(value)  
+            except:
+                self.logger.info(f"Value {value} for field {field} can't be coerced to a number value, replacing with null")
+                value = None
         return value
     
 
