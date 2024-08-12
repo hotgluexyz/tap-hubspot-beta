@@ -751,6 +751,9 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("archivedAt", th.DateTimeType),
     ]
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 
 class ContactsV3Stream(ObjectSearchV3):
     """Contacts Stream"""
@@ -1571,3 +1574,27 @@ class TasksAssociationsStream(DynamicAssociationsStream):
     name = "tasks_associations"
     parent_stream_type = TasksStream
     object_name = "tasks"
+
+
+class CompaniesAssociationsStream(DynamicAssociationsStream):
+    name = "companies_associations"
+    parent_stream_type = CompaniesStream
+    object_name = "companies"
+
+
+class TicketsAssociationsStream(DynamicAssociationsStream):
+    name = "tickets_associations"
+    parent_stream_type = TicketsStream
+    object_name = "tickets"
+
+
+class ProductsAssociationsStream(DynamicAssociationsStream):
+    name = "products_associations"
+    parent_stream_type = ProductsStream
+    object_name = "products"
+
+
+class QuotesAssociationsStream(DynamicAssociationsStream):
+    name = "quotes_associations"
+    parent_stream_type = QuotesStream
+    object_name = "quotes"
