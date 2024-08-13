@@ -1517,10 +1517,12 @@ class DynamicAssociationsStream(hubspotV4Stream):
     def get_next_page_token(self, response, previous_token):
         # iterate through all the associations set for the same object in fetch_associations
         previous_token = previous_token or 0
-        if self.assoc_index < len(self.association_objects):
-            next_page_token = previous_token + 1
-            self.assoc_index =  next_page_token
+        next_page_token = previous_token + 1
+        if next_page_token < len(self.association_objects):
+            self.assoc_index = next_page_token
             return next_page_token
+        else:
+            self.assoc_index = None
     
     def get_child_context(self, record, context) -> dict:
         associated_id = record["to_id"]
