@@ -63,7 +63,18 @@ from tap_hubspot_beta.streams import (
     ProductsAssociationsStream,
     TicketsAssociationsStream,
     CompaniesAssociationsStream,
-    ContactsAssociatedRecords
+    ContactsAssociatedRecords,
+    QuotesAssociatedRecords,
+    ProductsAssociatedRecords,
+    TicketsAssociatedRecords,
+    CompaniesAssociatedRecords,
+    TasksAssociatedRecords,
+    PostalMailAssociatedRecords,
+    NotesAssociatedRecords,
+    EmailsAssociatedRecords,
+    CommunicationsAssociatedRecords,
+    CallsAssociatedRecords,
+    MeetingsAssociatedRecords
 )
 
 STREAM_TYPES = [
@@ -121,7 +132,18 @@ STREAM_TYPES = [
     ProductsAssociationsStream,
     TicketsAssociationsStream,
     CompaniesAssociationsStream,
-    ContactsAssociatedRecords
+    ContactsAssociatedRecords,
+    QuotesAssociatedRecords,
+    ProductsAssociatedRecords,
+    TicketsAssociatedRecords,
+    CompaniesAssociatedRecords,
+    TasksAssociatedRecords,
+    PostalMailAssociatedRecords,
+    NotesAssociatedRecords,
+    EmailsAssociatedRecords,
+    CommunicationsAssociatedRecords,
+    CallsAssociatedRecords,
+    MeetingsAssociatedRecords
 ]
 
 
@@ -282,7 +304,7 @@ class Taphubspot(Tap):
         self._set_compatible_replication_methods()
         stream: "Stream"
         # force dynamic associations streams to be synced at the end:
-        associations_stream = {stream_name: stream for stream_name, stream in self.streams.items() if "_associations" in stream_name}
+        associations_stream = {stream_name: stream for stream_name, stream in self.streams.items() if ("_associations" in stream_name or "_associated_records" in stream_name)}
         # pop associations streams from self.streams to order them later
         [self.streams.pop(stream_name) for stream_name in associations_stream]
         # order self.streams to sync associations at the end

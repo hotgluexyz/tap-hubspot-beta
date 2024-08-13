@@ -1,6 +1,6 @@
 """Stream type classes for tap-hubspot."""
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Generator
 import copy
 
 from singer_sdk.exceptions import InvalidStreamSortException
@@ -26,7 +26,10 @@ from urllib.parse import urlencode
 from singer_sdk.helpers._singer import (
     MetadataMapping,
 )
-from singer import SchemaMessage
+from singer import SchemaMessage, RecordMessage
+from singer_sdk.helpers._util import utc_now
+from singer_sdk.helpers._typing import conform_record_data_types
+
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -756,15 +759,25 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("isAssociated", th.BooleanType),
     ]
 
-    def get_child_context(self, record: dict, context) -> dict:
-        record_id = record["id"]
+    def add_fetched_ids(self, record_id):
         # add fetched ids to a global var to avoid dups when fetching associated object records
         fetched_ids = self._tap.fetched_objects_ids.get(self.name)
         if fetched_ids:
             fetched_ids.append(record_id)
         else:
             self._tap.fetched_objects_ids[self.name] = [record_id]
+
+    def get_child_context(self, record: dict, context) -> dict:
+        record_id = record["id"]
+        # add fetched ids to a global var to avoid dups when fetching associated object records
+        self.add_fetched_ids(record_id)
         return {"id": record_id}
+    
+    def post_process(self, row, context) -> dict:
+        row = super().post_process(row, context)
+        fetched_ids = self._tap.fetched_objects_ids.get(self.name, [])
+        if row["id"] not in fetched_ids:
+           return row
 
 
 class ContactsV3Stream(ObjectSearchV3):
@@ -1538,6 +1551,10 @@ class DynamicAssociationsStream(hubspotV4Stream):
     def _sync_children(self, child_context: dict) -> None:
         if child_context:
             return super()._sync_children(child_context)
+    
+    def _sync_records(self, context) -> None:
+        if self.association_objects:
+            return super()._sync_records(context)
 
     # write the schema and record names after the association object 
     @property
@@ -1634,6 +1651,7 @@ class QuotesAssociationsStream(DynamicAssociationsStream):
 class AssociatedObjects(ObjectSearchV3):
     associated_object = None
     replication_key = None
+    visible_in_catalog = False
 
     @property
     def path(self):
@@ -1653,7 +1671,9 @@ class AssociatedObjects(ObjectSearchV3):
     def selected(self) -> bool:
         # selects by default if parent class is selected
         parent_name = self.parent_stream_type.name
-        return self._tap.catalog[parent_name].metadata.get(()).selected
+        selected_asc = self.config.get("fetch_associations", {})
+        if selected_asc.get(parent_name) and self.parent_stream_type.selected:
+            return True
 
     # write the schema and record names after the association object 
     @property
@@ -1661,34 +1681,27 @@ class AssociatedObjects(ObjectSearchV3):
         # name for schema and output file
         return self.associated_object
     
-    @property
-    def metadata(self):
-        if self._tap_input_catalog and self.associated_object:
-            catalog_entry = self._tap_input_catalog.get_stream(self.associated_object)
-            if catalog_entry:
-                self._metadata = catalog_entry.metadata
-                new_metadata = self._metadata
-
-        else:
-            self._metadata = MetadataMapping.get_standard_metadata(
-                schema=self.schema,
-                replication_method=self.forced_replication_method,
-                key_properties=self.primary_keys or [],
-                valid_replication_keys=(
-                    [self.replication_key] if self.replication_key else None
-                ),
-                schema_name=None,
-            )
-
-            # If there's no input catalog, select all streams
-            if self._tap_input_catalog is None:
-                self._metadata.root.selected = True
-            
-            new_metadata = self._metadata
-        
-        for field in new_metadata:
-            new_metadata[field].selected = True
-        return new_metadata
+    def _generate_record_messages(
+        self,
+        record: dict,
+    ) -> Generator[RecordMessage, None, None]:
+        record = conform_record_data_types(
+            stream_name=self.name,
+            row=record,
+            schema=self.schema,
+            logger=self.logger,
+        )
+        for stream_map in self.stream_maps:
+            mapped_record = stream_map.transform(record)
+            # Emit record if not filtered
+            if mapped_record is not None:
+                record_message = RecordMessage(
+                    stream=stream_map.stream_alias,
+                    record=mapped_record,
+                    version=None,
+                    time_extracted=utc_now(),
+                )
+                yield record_message
 
     def _write_record_message(self, record: dict) -> None:
         for record_message in self._generate_record_messages(record):
@@ -1709,13 +1722,33 @@ class AssociatedObjects(ObjectSearchV3):
     def _sync_records(self, context) -> None:
         # get object that will be fetched
         self.associated_object = context.pop("object", None)
-        # update schema and metadata for object
-        self.schema
-        self.metadata
-        self._write_schema_message()
-        return super()._sync_records(context)
+        catalog_entry = self._tap_input_catalog.get_stream(self.associated_object)
+        if catalog_entry:
+            # update schema and metadata for object
+            self.schema
+            self.metadata
+            self._write_schema_message()
+            return super()._sync_records(context)
+    
+    @cached_property
+    def selected_properties(self):
+        metadata = {}
+        # get fields from associated object schema
+        if self._tap_input_catalog and self.associated_object:
+            catalog_entry = self._tap_input_catalog.get_stream(self.associated_object)
+            if catalog_entry:
+                metadata = catalog_entry.metadata
+
+        # get list of all properties for the payload
+        selected_properties = []
+        for key, value in metadata.items():
+            if isinstance(key, tuple) and len(key) == 2:
+                selected_properties.append(key[-1])
+        return selected_properties
     
     def prepare_request_payload(self, context, next_page_token):
+        self.add_fetched_ids(context["associated_id"])
+        self.logger.info("IS IT COMING FROM HERE?")
         return {
             "properties": self.selected_properties,
             "filterGroups": [
@@ -1745,3 +1778,59 @@ class AssociatedObjects(ObjectSearchV3):
 class ContactsAssociatedRecords(AssociatedObjects):
     name = "contacts_associated_records"
     parent_stream_type = ContactsAssociationsStream
+
+
+class MeetingsAssociatedRecords(AssociatedObjects):
+    name = "meetings_associated_records"
+    parent_stream_type = MeetingsAssociationsStream
+
+
+class CallsAssociatedRecords(AssociatedObjects):
+    name = "calls_associated_records"
+    parent_stream_type = CallsAssociationsStream
+
+
+class CommunicationsAssociatedRecords(AssociatedObjects):
+    name = "communications_associated_records"
+    parent_stream_type = CommunicationsAssociationsStream
+
+
+class EmailsAssociatedRecords(AssociatedObjects):
+    name = "emails_associated_records"
+    parent_stream_type = EmailsAssociationsStream
+
+
+class NotesAssociatedRecords(AssociatedObjects):
+    name = "notes_associated_records"
+    parent_stream_type = NotesAssociationsStream
+
+
+class PostalMailAssociatedRecords(AssociatedObjects):
+    name = "postal_mail_associated_records"
+    parent_stream_type = PostalMailAssociationsStream
+    object_name = "postal_mail"
+
+
+class TasksAssociatedRecords(AssociatedObjects):
+    name = "tasks_associated_records"
+    parent_stream_type = TasksAssociationsStream
+
+
+class CompaniesAssociatedRecords(AssociatedObjects):
+    name = "companies_associated_records"
+    parent_stream_type = CompaniesAssociationsStream
+
+
+class TicketsAssociatedRecords(AssociatedObjects):
+    name = "tickets_associated_records"
+    parent_stream_type = TicketsAssociationsStream
+
+
+class ProductsAssociatedRecords(AssociatedObjects):
+    name = "products_associated_records"
+    parent_stream_type = ProductsAssociationsStream
+
+
+class QuotesAssociatedRecords(AssociatedObjects):
+    name = "quotes_associated_records"
+    parent_stream_type = QuotesAssociationsStream
