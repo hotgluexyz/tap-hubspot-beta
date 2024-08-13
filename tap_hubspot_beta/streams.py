@@ -23,6 +23,10 @@ import pytz
 from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
 from urllib.parse import urlencode
+from singer_sdk.helpers._singer import (
+    MetadataMapping,
+)
+from singer import SchemaMessage
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -749,10 +753,18 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
+        th.Property("isAssociated", th.BooleanType),
     ]
 
     def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
+        record_id = record["id"]
+        # add fetched ids to a global var to avoid dups when fetching associated object records
+        fetched_ids = self._tap.fetched_objects_ids.get(self.name)
+        if fetched_ids:
+            fetched_ids.append(record_id)
+        else:
+            self._tap.fetched_objects_ids[self.name] = [record_id]
+        return {"id": record_id}
 
 
 class ContactsV3Stream(ObjectSearchV3):
@@ -781,9 +793,6 @@ class ContactsV3Stream(ObjectSearchV3):
             self.primary_keys = catalog_entry.key_properties
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
-
-    def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
 
 
 class CompaniesStream(ObjectSearchV3):
@@ -1474,21 +1483,28 @@ class DynamicAssociationsStream(hubspotV4Stream):
         if self.associated_object:
             return f"crm/v4/associations/{self.object_name}/{self.associated_object}/batch/read"
 
+    def parent_name(self):
+        parent_name = self.parent_stream_type.name
+        selected_asc = self.config.get("fetch_associations", {})
+        return parent_name if selected_asc.get(parent_name) else parent_name.split("_v3")[0]
+
     @property
     def association_objects(self):
-        parent_name = self.parent_stream_type.name
-        if self.config.get("fetch_associations", {}).get(parent_name) and self.parent_stream_type.selected:
-            return self.config["fetch_associations"][parent_name]
+        parent_name = self.parent_name()
+        selected_asc = self.config.get("fetch_associations", {})
+
+        if selected_asc.get(parent_name) and self.parent_stream_type.selected:
+            return selected_asc[parent_name]
         else:
             return []
-
+        
     @property
     def selected(self) -> bool:
         # selects the association stream by default if fetch_associations is in config and base stream is selected
         if not self.association_objects:
             return False
         else:
-            return self._tap.catalog[self.parent_stream_type.name].metadata.get(()).selected
+            return self._tap.catalog[self.parent_name()].metadata.get(()).selected
     
     @property
     def metadata(self):
@@ -1498,7 +1514,6 @@ class DynamicAssociationsStream(hubspotV4Stream):
             new_metadata[field].selected = True
         return new_metadata
 
-
     def get_next_page_token(self, response, previous_token):
         # iterate through all the associations set for the same object in fetch_associations
         previous_token = previous_token or 0
@@ -1506,7 +1521,21 @@ class DynamicAssociationsStream(hubspotV4Stream):
             next_page_token = previous_token + 1
             self.assoc_index =  next_page_token
             return next_page_token
-
+    
+    def get_child_context(self, record, context) -> dict:
+        associated_id = record["to_id"]
+        # check if associated record has been fetched to avoid dups 
+        fetched_ids = self._tap.fetched_objects_ids.get(self.associated_object, [])
+        if associated_id not in fetched_ids:
+            if fetched_ids:
+                fetched_ids.append(associated_id)
+            else:
+                self._tap.fetched_objects_ids[self.associated_object] = [associated_id]
+            return {"associated_id": record["to_id"], "object": self.associated_object}
+    
+    def _sync_children(self, child_context: dict) -> None:
+        if child_context:
+            return super()._sync_children(child_context)
 
     # write the schema and record names after the association object 
     @property
@@ -1525,7 +1554,7 @@ class DynamicAssociationsStream(hubspotV4Stream):
             if self.associated_object:
                 schema_message.stream = self.stream_alias
             singer.write_message(schema_message)
-
+    
 
 # child classes of dynamic association 
 class ContactsAssociationsStream(DynamicAssociationsStream):
@@ -1598,3 +1627,119 @@ class QuotesAssociationsStream(DynamicAssociationsStream):
     name = "quotes_associations"
     parent_stream_type = QuotesStream
     object_name = "quotes"
+
+
+class AssociatedObjects(ObjectSearchV3):
+    associated_object = None
+    replication_key = None
+
+    @property
+    def path(self):
+        return f"crm/v3/objects/{self.associated_object}/search"
+    
+    @property
+    def schema(self):
+        if self.associated_object:
+            object_schema = self._tap.catalog[self.associated_object].schema
+            return object_schema.to_dict()
+        # placeholder for discover
+        return th.PropertiesList(
+            th.Property("id", th.StringType),
+        ).to_dict()
+
+    @property
+    def selected(self) -> bool:
+        # selects by default if parent class is selected
+        parent_name = self.parent_stream_type.name
+        return self._tap.catalog[parent_name].metadata.get(()).selected
+
+    # write the schema and record names after the association object 
+    @property
+    def stream_alias(self):
+        # name for schema and output file
+        return self.associated_object
+    
+    @property
+    def metadata(self):
+        if self._tap_input_catalog and self.associated_object:
+            catalog_entry = self._tap_input_catalog.get_stream(self.associated_object)
+            if catalog_entry:
+                self._metadata = catalog_entry.metadata
+                new_metadata = self._metadata
+
+        else:
+            self._metadata = MetadataMapping.get_standard_metadata(
+                schema=self.schema,
+                replication_method=self.forced_replication_method,
+                key_properties=self.primary_keys or [],
+                valid_replication_keys=(
+                    [self.replication_key] if self.replication_key else None
+                ),
+                schema_name=None,
+            )
+
+            # If there's no input catalog, select all streams
+            if self._tap_input_catalog is None:
+                self._metadata.root.selected = True
+            
+            new_metadata = self._metadata
+        
+        for field in new_metadata:
+            new_metadata[field].selected = True
+        return new_metadata
+
+    def _write_record_message(self, record: dict) -> None:
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = self.stream_alias
+            singer.write_message(record_message)
+
+    def _write_schema_message(self) -> None:
+        schema_message = SchemaMessage(
+            self.stream_alias,
+            self.schema,
+            ['id'],
+            None,
+        )
+        schema_message.stream = self.stream_alias
+        singer.write_message(schema_message)
+    
+    def _sync_records(self, context) -> None:
+        # get object that will be fetched
+        self.associated_object = context.pop("object", None)
+        # update schema and metadata for object
+        self.schema
+        self.metadata
+        self._write_schema_message()
+        return super()._sync_records(context)
+    
+    def prepare_request_payload(self, context, next_page_token):
+        return {
+            "properties": self.selected_properties,
+            "filterGroups": [
+                {
+                    "filters": [
+                            {
+                                "propertyName": "id",
+                                "value": context["associated_id"],
+                                "operator": "EQ"
+                            }
+                        ]
+                }
+            ]
+        }
+    
+    def get_next_page_token(self, response, previous_token):
+        return None
+    
+    def post_process(self, row, context) -> dict:
+        for name, value in row["properties"].items():
+            row[name] = self.parse_value(name, value)
+        del row["properties"]
+        row["isAssociated"] = True
+        return row
+
+
+class ContactsAssociatedRecords(AssociatedObjects):
+    name = "contacts_associated_records"
+    parent_stream_type = ContactsAssociationsStream
