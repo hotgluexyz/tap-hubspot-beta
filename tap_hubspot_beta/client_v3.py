@@ -104,6 +104,7 @@ class hubspotV3SearchStream(hubspotStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = self.parse_properties(row)
+        row["isAssociated"] = False
         return row
 
     def _sync_records(  # noqa C901  # too complex

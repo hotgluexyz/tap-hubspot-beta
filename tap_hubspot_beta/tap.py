@@ -50,7 +50,33 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
-    CurrenciesStream
+    CurrenciesStream,
+    ContactsAssociationsStream,
+    MeetingsAssociationsStream,
+    CallsAssociationsStream,
+    CommunicationsAssociationsStream,
+    EmailsAssociationsStream,
+    NotesAssociationsStream,
+    PostalMailAssociationsStream,
+    TasksAssociationsStream,
+    QuotesAssociationsStream,
+    ProductsAssociationsStream,
+    TicketsAssociationsStream,
+    CompaniesAssociationsStream,
+    DealsAssociationsStream,
+    ContactsAssociatedRecords,
+    QuotesAssociatedRecords,
+    ProductsAssociatedRecords,
+    TicketsAssociatedRecords,
+    CompaniesAssociatedRecords,
+    TasksAssociatedRecords,
+    PostalMailAssociatedRecords,
+    NotesAssociatedRecords,
+    EmailsAssociatedRecords,
+    CommunicationsAssociatedRecords,
+    CallsAssociatedRecords,
+    MeetingsAssociatedRecords,
+    DealsAssociatedRecords
 )
 
 STREAM_TYPES = [
@@ -95,7 +121,33 @@ STREAM_TYPES = [
     # ArchivedCompaniesStream,
     # ArchivedDealsStream,
     # DealsAssociationParent,
-    CurrenciesStream
+    CurrenciesStream,
+    ContactsAssociationsStream,
+    MeetingsAssociationsStream,
+    CallsAssociationsStream,
+    CommunicationsAssociationsStream,
+    EmailsAssociationsStream,
+    NotesAssociationsStream,
+    PostalMailAssociationsStream,
+    TasksAssociationsStream,
+    QuotesAssociationsStream,
+    DealsAssociationsStream,
+    ProductsAssociationsStream,
+    TicketsAssociationsStream,
+    CompaniesAssociationsStream,
+    ContactsAssociatedRecords,
+    QuotesAssociatedRecords,
+    ProductsAssociatedRecords,
+    TicketsAssociatedRecords,
+    CompaniesAssociatedRecords,
+    TasksAssociatedRecords,
+    PostalMailAssociatedRecords,
+    NotesAssociatedRecords,
+    EmailsAssociatedRecords,
+    CommunicationsAssociatedRecords,
+    CallsAssociatedRecords,
+    MeetingsAssociatedRecords,
+    DealsAssociatedRecords
 ]
 
 
@@ -114,6 +166,8 @@ class Taphubspot(Tap):
     ) -> None:
         self.config_file = config[0]
         super().__init__(config, catalog, state, parse_env_config, validate_config)
+    
+    fetched_objects_ids = {}
 
     config_jsonschema = th.PropertiesList(
         th.Property("client_id", th.StringType, required=True),
@@ -246,6 +300,35 @@ class Taphubspot(Tap):
             key=lambda x: x.name,
             reverse=False,
         )
+
+    @final
+    def sync_all(self) -> None:
+        """Sync all streams."""
+        self._reset_state_progress_markers()
+        self._set_compatible_replication_methods()
+        stream: "Stream"
+        # force dynamic associations streams to be synced at the end:
+        associations_stream = {stream_name: stream for stream_name, stream in self.streams.items() if ("_associations" in stream_name or "_associated_records" in stream_name)}
+        # pop associations streams from self.streams to order them later
+        [self.streams.pop(stream_name) for stream_name in associations_stream]
+        # order self.streams to sync associations at the end
+        self.streams.update(associations_stream)
+
+        for stream in self.streams.values():
+            if not stream.selected and not stream.has_selected_descendents:
+                self.logger.info(f"Skipping deselected stream '{stream.name}'.")
+                continue
+
+            if stream.parent_stream_type:
+                self.logger.debug(
+                    f"Child stream '{type(stream).__name__}' is expected to be called "
+                    f"by parent stream '{stream.parent_stream_type.__name__}'. "
+                    "Skipping direct invocation."
+                )
+                continue
+
+            stream.sync()
+            stream.finalize_state_progress_markers()
 
 
 if __name__ == "__main__":
