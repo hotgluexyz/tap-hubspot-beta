@@ -1648,6 +1648,12 @@ class QuotesAssociationsStream(DynamicAssociationsStream):
     object_name = "quotes"
 
 
+class DealsAssociationsStream(DynamicAssociationsStream):
+    name = "deals_associations"
+    parent_stream_type = DealsStream
+    object_name = "deals"
+
+
 class AssociatedObjects(ObjectSearchV3):
     associated_object = None
     replication_key = None
@@ -1670,7 +1676,7 @@ class AssociatedObjects(ObjectSearchV3):
     @property
     def selected(self) -> bool:
         # selects by default if parent class is selected
-        parent_name = self.parent_stream_type.name
+        parent_name = self.parent_stream_type.parent_stream_type.name
         selected_asc = self.config.get("fetch_associations", {})
         if selected_asc.get(parent_name) and self.parent_stream_type.selected:
             return True
@@ -1748,14 +1754,13 @@ class AssociatedObjects(ObjectSearchV3):
     
     def prepare_request_payload(self, context, next_page_token):
         self.add_fetched_ids(context["associated_id"])
-        self.logger.info("IS IT COMING FROM HERE?")
         return {
             "properties": self.selected_properties,
             "filterGroups": [
                 {
                     "filters": [
                             {
-                                "propertyName": "id",
+                                "propertyName": "hs_object_id",
                                 "value": context["associated_id"],
                                 "operator": "EQ"
                             }
@@ -1834,3 +1839,8 @@ class ProductsAssociatedRecords(AssociatedObjects):
 class QuotesAssociatedRecords(AssociatedObjects):
     name = "quotes_associated_records"
     parent_stream_type = QuotesAssociationsStream
+
+
+class DealsAssociatedRecords(AssociatedObjects):
+    name = "deals_associated_records"
+    parent_stream_type = DealsAssociationsStream
