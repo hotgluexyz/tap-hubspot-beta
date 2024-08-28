@@ -332,12 +332,6 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         for schema_message in self._generate_schema_messages():
             schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
             singer.write_message(schema_message)
-        
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
-        return row
 
 class AssociationsV3ParentStream(hubspotV3Stream):
     name = "associations_v3_parent"
