@@ -213,7 +213,7 @@ class hubspotStream(RESTStream):
             # filter duplicated columns (case insensitive)
             if deduplicate_columns:
                 if field_name.lower() in base_properties:
-                    self.logger.info(f"Not including field {field_name} as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                    self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
                     continue
 
             if not field.get("deleted"):
