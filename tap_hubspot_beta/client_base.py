@@ -201,11 +201,23 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
-
         fields = response.json()
+
+        deduplicate_columns = self.config.get("deduplicate_columns", True)
+        base_properties = []
+        if isinstance(self.base_properties, list):
+            base_properties = [property.name.lower() for property in self.base_properties]
+
         for field in fields:
+            field_name = field.get("name")
+            # filter duplicated columns (case insensitive)
+            if deduplicate_columns:
+                if field_name.lower() in base_properties:
+                    self.logger.info(f"Not including field {field_name} as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                    continue
+
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
