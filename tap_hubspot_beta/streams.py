@@ -2111,4 +2111,43 @@ class UtmCampaignSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
-    ).to_dict()        
+    ).to_dict() 
+
+
+class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    # https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    """Geolocation Summary Monthly Stream"""
+    name = "geolocation_summary_monthly"
+    path = "analytics/v2/reports/geolocation/total"
+
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("contactsPerPageview", th.NumberType),
+            th.Property("returningVisits", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("contactToCustomerRate", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("customersPerPageview", th.NumberType),
+            th.Property("sessionToContactRate", th.NumberType),
+            th.Property("pageviewsPerSession", th.NumberType),
+            th.Property("opportunities", th.NumberType),
+            th.Property("bounceRate", th.NumberType),
+            th.Property("salesQualifiedLeads", th.NumberType),
+            th.Property("marketingQualifiedLeads", th.NumberType),
+            th.Property("visits", th.NumberType),
+            th.Property("visitors", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("leadsPerView", th.NumberType),
+            th.Property("customers", th.NumberType),
+            th.Property("bounces", th.NumberType),
+            th.Property("time", th.NumberType),
+            th.Property("timePerSession", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("others", th.NumberType),
+            th.Property("newVisitorSessionRate", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict() 
