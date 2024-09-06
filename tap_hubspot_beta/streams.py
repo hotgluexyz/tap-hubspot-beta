@@ -1147,17 +1147,17 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         return "updatedAt"
 
     schema = th.PropertiesList(
-        th.Property("listId", th.NumberType()),
-        th.Property("listVersion", th.NumberType()),
-        th.Property("createdAt", th.DateTimeType()),
-        th.Property("updatedAt", th.DateTimeType()),
-        th.Property("filtersUpdateAt", th.DateTimeType()),
-        th.Property("processingStatus", th.StringType()),
-        th.Property("createdById", th.NumberType()),
-        th.Property("updatedById", th.NumberType()),
-        th.Property("processingType", th.StringType()),
-        th.Property("objectTypeId", th.StringType()),
-        th.Property("name", th.StringType()),
+        th.Property("listId", th.StringType),
+        th.Property("listVersion", th.NumberType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("filtersUpdateAt", th.DateTimeType),
+        th.Property("processingStatus", th.StringType),
+        th.Property("createdById", th.StringType),
+        th.Property("updatedById", th.StringType),
+        th.Property("processingType", th.StringType),
+        th.Property("objectTypeId", th.StringType),
+        th.Property("name", th.StringType),
         th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -1188,7 +1188,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.IntegerType),
+        th.Property("list_id", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):

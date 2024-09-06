@@ -1,6 +1,7 @@
 """REST client handling, including hubspotStream base class."""
 import copy
 import logging
+import curlify
 
 import requests
 import backoff
@@ -139,21 +140,51 @@ class hubspotStream(RESTStream):
                 selected_properties.append(key[-1])
         return selected_properties
 
+    def log_rate_limit(self, resp):
+        """
+        Prints out the content for the rate limits headers in the response.
+        """
+        for header in [
+            'x-hubspot-ratelimit-interval-milliseconds',
+            'x-hubspot-ratelimit-max',
+            'x-hubspot-ratelimit-remaining',
+            'x-hubspot-ratelimit-secondly',
+            'x-hubspot-ratelimit-secondly-remaining',
+        ]:
+            self.logger.info("Header: {}, value: {}".format(
+                header,
+                resp.headers.get(header)
+            ))
+            self.logger.info("429 response from path: {} - {}".format(
+                resp.url,
+                resp.content
+            ))
+
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
-        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
+        if 500 <= response.status_code < 600 or response.status_code in [400, 401, 104]:
             msg = (
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise RetriableAPIError(msg)
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
-        elif 400 <= response.status_code < 500:
+        if 429 == response.status_code:
+            self.log_rate_limit(response)
+            raise RetriableAPIError(f"429 Too Many Requests, response {response.text}")
+
+        elif 400 < response.status_code < 500:
             msg = (
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise FatalAPIError(msg)
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
 
     @staticmethod
     def extract_type(field, type_booleancheckbox_as_boolean=False):
@@ -251,6 +282,13 @@ class hubspotStream(RESTStream):
                 finalize_state_progress_markers(state)
             return
         finalize_state_progress_markers(state)
+
+    def backoff_wait_generator(self):
+        return backoff.constant(interval=15)
+
+    @property
+    def backoff_max_tries(self):
+        return 10
 
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
