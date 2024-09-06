@@ -610,7 +610,7 @@ class ListsStream(hubspotV1Stream):
     page_size = 250
 
     schema = th.PropertiesList(
-        th.Property("listId", th.StringType),
+        th.Property("listId", th.IntegerType),
         th.Property("name", th.StringType),
         th.Property("authorId", th.IntegerType),
         th.Property("portalId", th.IntegerType),
@@ -625,6 +625,12 @@ class ListsStream(hubspotV1Stream):
         th.Property("deleteable", th.BooleanType),
         th.Property("archived", th.BooleanType),
     ).to_dict()
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
+        row["listId"] = int(row["listId"])
+        return row
 
 
 class DealsPipelinesStream(hubspotV1Stream):
@@ -744,7 +750,7 @@ class ContactListData(hubspotV1Stream):
         th.Property("vid", th.IntegerType),
         th.Property("addedAt", th.DateTimeType),
         th.Property("portal-id", th.IntegerType),
-        th.Property("listId", th.StringType),
+        th.Property("listId", th.IntegerType),
     ]
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
@@ -1159,14 +1165,14 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         return "updatedAt"
 
     schema = th.PropertiesList(
-        th.Property("listId", th.StringType()),
+        th.Property("listId", th.IntegerType()),
         th.Property("listVersion", th.NumberType()),
         th.Property("createdAt", th.DateTimeType()),
         th.Property("updatedAt", th.DateTimeType()),
         th.Property("filtersUpdateAt", th.DateTimeType()),
         th.Property("processingStatus", th.StringType()),
-        th.Property("createdById", th.StringType()),
-        th.Property("updatedById", th.StringType()),
+        th.Property("createdById", th.IntegerType()),
+        th.Property("updatedById", th.IntegerType()),
         th.Property("processingType", th.StringType()),
         th.Property("objectTypeId", th.StringType()),
         th.Property("name", th.StringType()),
@@ -1183,8 +1189,15 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     def get_child_context(self, record, context):
         return {
-            "list_id": record["listId"],
+            "list_id": int(record["listId"]),
         }
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
+        row["listId"] = int(row.get("listId"))
+        return row
+
 
 
 class ListMembershipV3Stream(hubspotV3Stream):
@@ -1311,7 +1324,7 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("contentTypeCategory", th.IntegerType),
         th.Property("createPage", th.BooleanType),
         th.Property("created", th.IntegerType),
-        th.Property("createdById", th.StringType),
+        th.Property("createdById", th.IntegerType),
         th.Property("currentState", th.StringType),
         th.Property("currentlyPublished", th.BooleanType),
         th.Property("domain", th.StringType),
@@ -1371,7 +1384,7 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("transactional", th.BooleanType),
         th.Property("unpublishedAt", th.IntegerType),
         th.Property("updated", th.IntegerType),
-        th.Property("updatedById", th.StringType),
+        th.Property("updatedById", th.IntegerType),
         th.Property("url", th.StringType),
         th.Property("useRssHeadlineAsSubject", th.BooleanType),
         th.Property("userPerms", th.CustomType({"type": ["array", "string"]})),
