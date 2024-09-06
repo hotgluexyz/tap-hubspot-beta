@@ -1165,17 +1165,17 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         return "updatedAt"
 
     schema = th.PropertiesList(
-        th.Property("listId", th.IntegerType()),
-        th.Property("listVersion", th.NumberType()),
-        th.Property("createdAt", th.DateTimeType()),
-        th.Property("updatedAt", th.DateTimeType()),
-        th.Property("filtersUpdateAt", th.DateTimeType()),
-        th.Property("processingStatus", th.StringType()),
-        th.Property("createdById", th.IntegerType()),
-        th.Property("updatedById", th.IntegerType()),
-        th.Property("processingType", th.StringType()),
-        th.Property("objectTypeId", th.StringType()),
-        th.Property("name", th.StringType()),
+        th.Property("listId", th.StringType),
+        th.Property("listVersion", th.NumberType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("filtersUpdateAt", th.DateTimeType),
+        th.Property("processingStatus", th.StringType),
+        th.Property("createdById", th.StringType),
+        th.Property("updatedById", th.StringType),
+        th.Property("processingType", th.StringType),
+        th.Property("objectTypeId", th.StringType),
+        th.Property("name", th.StringType),
         th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -1189,14 +1189,8 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     def get_child_context(self, record, context):
         return {
-            "list_id": int(record["listId"]),
+            "list_id": record["listId"],
         }
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        super().post_process(row, context)
-        row["listId"] = int(row.get("listId"))
-        return row
 
 
 
@@ -1213,7 +1207,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.IntegerType),
+        th.Property("list_id", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):
