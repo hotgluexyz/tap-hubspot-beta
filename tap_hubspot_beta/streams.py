@@ -485,7 +485,7 @@ class EmailEventsStream(hubspotV1Stream):
     name = "email_events"
     path = "email/public/v1/events"
     records_jsonpath = "$.events[*]"
-    primary_keys = ["listId", "created"]
+    primary_keys = ["id", "created"]
     replication_key = "created"
     page_size = 250
 
