@@ -485,7 +485,7 @@ class EmailEventsStream(hubspotV1Stream):
     name = "email_events"
     path = "email/public/v1/events"
     records_jsonpath = "$.events[*]"
-    primary_keys = ["listId", "created"]
+    primary_keys = ["id", "created"]
     replication_key = "created"
     page_size = 250
 
@@ -1153,7 +1153,7 @@ class ArchivedLineItemsStream(hubspotV3Stream):
 class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     name = "lists_v3"
-    primary_keys = ["id"]
+    primary_keys = ["listId"]
     path = "crm/v3/lists/search"
     replication_key = "updatedAt"
     replication_key_filter = "hs_last_record_added_at"
