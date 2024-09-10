@@ -1722,7 +1722,7 @@ breakdown_properties_list = [
     th.Property("contactToCustomerRate", th.NumberType),
 ]
 
-class SessionAnalyticsReportBaseStream(hubspotV3Stream, ABC):
+class SessionAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
 
     schema = th.PropertiesList(
         *breakdown_properties_list
@@ -1736,22 +1736,22 @@ class SessionAnalyticsReportBaseStream(hubspotV3Stream, ABC):
                 yield data_obj
 
 
-class SessionAnalyticsDailyReportStream(SessionAnalyticsReportBaseStream):
-    name = "session_analytics_daily_report"
+class SessionAnalyticsDailyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_daily_reports"
     path = "analytics/v2/reports/sessions/daily"
 
 
-class SessionAnalyticsWeeklyReportStream(SessionAnalyticsReportBaseStream):
-    name = "session_analytics_weekly_report"
+class SessionAnalyticsWeeklyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_weekly_reports"
     path = "analytics/v2/reports/sessions/weekly"
 
 
-class SessionAnalyticsMonthlyReportStream(SessionAnalyticsReportBaseStream):
-    name = "session_analytics_monthly_report"
+class SessionAnalyticsMonthlyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_monthly_reports"
     path = "analytics/v2/reports/sessions/monthly"
 
 
-class SessionAnalyticsTotalReportStream(hubspotV1Stream):
+class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
     name = "session_analytics_total_report"
     path = "analytics/v2/reports/sessions/total"
     __offset = 0
@@ -1779,10 +1779,14 @@ class SessionAnalyticsTotalReportStream(hubspotV1Stream):
         return self.additional_prarams
 
 
-class BreakdownsAnalyticsReportsBaseStream(hubspotV1Stream, ABC):
+class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
     page_size = None
     __offset = 0
     __current_d1 = None
+
+    @property
+    def d1_options(self):
+        raise NotImplementedError #['regions', 'us', 'organic', 'referrals', 'social', 'test']
 
     schema = th.PropertiesList(
         *breakdown_properties_list,
@@ -1791,12 +1795,13 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV1Stream, ABC):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
-        if d1_options := self._config.get("d1_options"):
-            if isinstance(d1_options, list):
-                self.d1_options = d1_options
-            if isinstance(d1_options, str):
-                self.d1_options = [d1_options]
+        d1_options = self._config.get(f"d1_options_{self.name}")
+        if d1_options and isinstance(d1_options, list):
+            self.__d1_options = d1_options
+        elif d1_options and isinstance(d1_options, str):
+            self.__d1_options = [d1_options]
+        else:
+            self.__d1_options = self.d1_options
 
     @property
     def d1(self):
@@ -1809,7 +1814,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV1Stream, ABC):
         return dict(offset=self.__offset, d1=self.d1)
 
     def update_d1(self):
-        self.__current_d1 = self.d1_options.pop()
+        self.__current_d1 = self.__d1_options.pop()
     
     def reset_offset(self):
         self.__offset = 0
@@ -1819,19 +1824,22 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV1Stream, ABC):
             row["d1"] = self.d1
             yield row
 
+    def next_token(self):
+        if len(self.__d1_options) == 0:
+            return None
+        
+        self.update_d1()
+        self.reset_offset()
+        return self.additional_prarams
+
     def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
         offset = response.json().get('offset', 0)
         if not offset:
-            return None
+            return self.next_token()
         
         total = response.json().get('total')
         if not total or offset >= total:
-            if len(self.d1_options) == 0:
-                return None
-            
-            self.update_d1()
-            self.reset_offset()
-            return self.additional_prarams
+            return self.next_token()
         
         if not self.page_size:
             self.page_size = offset
@@ -1840,16 +1848,19 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV1Stream, ABC):
         return self.additional_prarams
 
 
-class BreakdownsAnalyticsReportsSourceStream(BreakdownsAnalyticsReportsBaseStream):
+class BreakdownsAnalyticsReportsSourcesStream(BreakdownsAnalyticsReportsBaseStream):
     name = "analytics_reports_sources"
     path = "analytics/v2/reports/sources/total"
+    d1_options = ['organic', 'referrals', 'social']
 
 
 class BreakdownsAnalyticsReportsGeolocationStream(BreakdownsAnalyticsReportsBaseStream):
-    name = "analytics_reports_geolocations"
-    path = "analytics/v2/reports/geolocations/total"
+    name = "analytics_reports_geolocation"
+    path = "analytics/v2/reports/geolocation/total"
+    d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
 
 
-class BreakdownsAnalyticsReportsUtmCampaignStream(BreakdownsAnalyticsReportsBaseStream):
+class BreakdownsAnalyticsReportsUtmCampaignsStream(BreakdownsAnalyticsReportsBaseStream):
     name = "analytics_reports_utm_campaigns"
     path = "analytics/v2/reports/utm-campaigns/total"
+    d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
