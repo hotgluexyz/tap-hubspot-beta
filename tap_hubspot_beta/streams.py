@@ -1155,14 +1155,8 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     name = "lists_v3"
     primary_keys = ["listId"]
     path = "crm/v3/lists/search"
-    replication_key = "updatedAt"
-    replication_key_filter = "hs_last_record_added_at"
     records_jsonpath = "$.lists[*]"
 
-
-    @property
-    def replication_key(self):
-        return "updatedAt"
 
     schema = th.PropertiesList(
         th.Property("listId", th.StringType),
