@@ -161,7 +161,7 @@ class ContactsStream(hubspotV1Stream):
     records_jsonpath = "$.contacts[*]"
     primary_keys = ["vid"]
     replication_key = None
-    additional_prarams = dict(showListMemberships=True)
+    additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
 
     base_properties = [
@@ -1760,7 +1760,7 @@ class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
         yield from (row for row in response.json().get('breakdowns', [{}]))
     
     @property
-    def additional_prarams(self):
+    def additional_params(self):
         return dict(offset=self.__offset)
     
     def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
@@ -1776,7 +1776,7 @@ class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
             self.page_size = offset
         
         self.__offset += self.page_size
-        return self.additional_prarams
+        return self.additional_params
 
 
 class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
@@ -1810,7 +1810,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
         return self.__current_d1
 
     @property
-    def additional_prarams(self):
+    def additional_params(self):
         return dict(offset=self.__offset, d1=self.d1)
 
     def update_d1(self):
@@ -1830,7 +1830,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
         
         self.update_d1()
         self.reset_offset()
-        return self.additional_prarams
+        return self.additional_params
 
     def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
         offset = response.json().get('offset', 0)
@@ -1845,7 +1845,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
             self.page_size = offset
         
         self.__offset += self.page_size
-        return self.additional_prarams
+        return self.additional_params
 
 
 class BreakdownsAnalyticsReportsSourcesStream(BreakdownsAnalyticsReportsBaseStream):

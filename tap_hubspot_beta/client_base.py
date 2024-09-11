@@ -26,7 +26,7 @@ class hubspotStream(RESTStream):
 
     url_base = "https://api.hubapi.com/"
     base_properties = []
-    additional_prarams = {}
+    additional_params = {}
     properties_url = None
     page_size = 100
 

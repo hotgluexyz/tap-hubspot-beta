@@ -203,7 +203,7 @@ class hubspotV3Stream(hubspotStream):
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         params["limit"] = self.page_size
-        params.update(self.additional_prarams)
+        params.update(self.additional_params)
         if self.properties_url:
             params["properties"] = ",".join(self.selected_properties)
         if next_page_token:
