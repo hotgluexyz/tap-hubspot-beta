@@ -43,7 +43,7 @@ class hubspotV3SearchStream(hubspotStream):
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
         # next_page_token = "10000"
-        if float(next_page_token) + self.page_size >= 10000:
+        if next_page_token is not None and float(next_page_token) + self.page_size >= 10000:
             start_date = self.stream_state.get("progress_markers", {}).get(
                 "replication_key_value"
             )
