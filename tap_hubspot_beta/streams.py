@@ -18,7 +18,6 @@ from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
-import time
 import pytz
 from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
@@ -33,6 +32,7 @@ association_schema = th.PropertiesList(
         th.Property("label", th.StringType),
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
+
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -161,7 +161,7 @@ class ContactsStream(hubspotV1Stream):
     records_jsonpath = "$.contacts[*]"
     primary_keys = ["vid"]
     replication_key = None
-    additional_prarams = dict(showListMemberships=True)
+    additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
 
     base_properties = [
@@ -1743,6 +1743,178 @@ class AssociationTasksDealsStream(AssociationTasksStream):
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
 
+
+breakdown_properties_list = [
+    th.Property("breakdown", th.StringType),
+    th.Property("others", th.IntegerType),
+    th.Property("otherCampaigns", th.IntegerType),
+    th.Property("mobile", th.IntegerType),
+    th.Property("desktop", th.IntegerType),
+    th.Property("organicSearch", th.IntegerType),
+    th.Property("paidSearch", th.IntegerType),
+    th.Property("paidSocial", th.IntegerType),
+    th.Property("socialMedia", th.IntegerType),
+    th.Property("directTraffic", th.IntegerType),
+    th.Property("referrals", th.IntegerType),
+    th.Property("date", th.DateType),
+    th.Property("rawViews", th.IntegerType),
+    th.Property("visits", th.IntegerType),
+    th.Property("visitors", th.IntegerType),
+    th.Property("leads", th.IntegerType),
+    th.Property("contacts", th.IntegerType),
+    th.Property("subscribers", th.IntegerType),
+    th.Property("opportunities", th.IntegerType),
+    th.Property("customers", th.IntegerType),
+    th.Property("pageviewsPerSession", th.NumberType),
+    th.Property("bounceRate", th.NumberType),
+    th.Property("timePerSession", th.NumberType),
+    th.Property("newVisitorSessionRate", th.NumberType),
+    th.Property("sessionToContactRate", th.NumberType),
+    th.Property("contactToCustomerRate", th.NumberType),
+]
+
+class SessionAnalyticsReportsBaseStream(hubspotV3Stream):
+
+    schema = th.PropertiesList(
+        *breakdown_properties_list
+    ).to_dict()
+    
+    def parse_response(self, response: requests.Response):
+        res_json = response.json()
+        for date_str, list_data_obj in res_json.items():
+            for data_obj in list_data_obj:
+                data_obj["date"] = date_str
+                yield data_obj
+
+
+class SessionAnalyticsDailyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_daily_reports"
+    path = "analytics/v2/reports/sessions/daily"
+
+
+class SessionAnalyticsWeeklyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_weekly_reports"
+    path = "analytics/v2/reports/sessions/weekly"
+
+
+class SessionAnalyticsMonthlyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_monthly_reports"
+    path = "analytics/v2/reports/sessions/monthly"
+
+
+class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_total_report"
+    path = "analytics/v2/reports/sessions/total"
+    __offset = 0
+
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        yield from (row for row in response.json().get('breakdowns', [{}]))
+    
+    @property
+    def additional_params(self):
+        return dict(offset=self.__offset)
+    
+    def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
+        offset = response.json().get('offset', 0)
+        if not offset:
+            return None
+        
+        total = response.json().get('total')
+        if not total or offset >= total:
+            return None
+        
+        if not self.page_size:
+            self.page_size = offset
+        
+        self.__offset += self.page_size
+        return self.additional_params
+
+
+class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream):
+    page_size = None
+    __offset = 0
+    __current_d1 = None
+
+    @property
+    def d1_options(self):
+        raise NotImplementedError #['regions', 'us', 'organic', 'referrals', 'social', 'test']
+
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("d1", th.StringType)
+    ).to_dict()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        d1_options = self._config.get(f"d1_options_{self.name}")
+        if d1_options and isinstance(d1_options, list):
+            self.__d1_options = d1_options
+        elif d1_options and isinstance(d1_options, str):
+            self.__d1_options = [d1_options]
+        else:
+            self.__d1_options = self.d1_options
+
+    @property
+    def d1(self):
+        if not self.__current_d1:
+            self.update_d1()
+        return self.__current_d1
+
+    @property
+    def additional_params(self):
+        return dict(offset=self.__offset, d1=self.d1)
+
+    def update_d1(self):
+        self.__current_d1 = self.__d1_options.pop()
+    
+    def reset_offset(self):
+        self.__offset = 0
+
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        for row in response.json().get('breakdowns', [{}]):
+            row["d1"] = self.d1
+            yield row
+
+    def next_token(self):
+        if len(self.__d1_options) == 0:
+            return None
+        
+        self.update_d1()
+        self.reset_offset()
+        return self.additional_params
+
+    def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
+        offset = response.json().get('offset', 0)
+        if not offset:
+            return self.next_token()
+        
+        total = response.json().get('total')
+        if not total or offset >= total:
+            return self.next_token()
+        
+        if not self.page_size:
+            self.page_size = offset
+        
+        self.__offset += self.page_size
+        return self.additional_params
+
+
+class BreakdownsAnalyticsReportsSourcesStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_sources"
+    path = "analytics/v2/reports/sources/total"
+    d1_options = ['organic', 'referrals', 'social']
+
+
+class BreakdownsAnalyticsReportsGeolocationStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_geolocation"
+    path = "analytics/v2/reports/geolocation/total"
+    d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
+
+
+class BreakdownsAnalyticsReportsUtmCampaignsStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_utm_campaigns"
+    path = "analytics/v2/reports/utm-campaigns/total"
+    d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
 class FormsSummaryMonthlyStream(hubspotV1Stream):
     """Association Base Stream"""
     #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-by-object
