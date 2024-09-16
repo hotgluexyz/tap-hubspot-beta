@@ -1,6 +1,5 @@
 """Stream type classes for tap-hubspot."""
-from abc import ABC
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
@@ -17,12 +16,13 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
+from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import pytz
 from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
 from urllib.parse import urlencode
+import calendar
 
 association_schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
@@ -485,7 +485,7 @@ class EmailEventsStream(hubspotV1Stream):
     name = "email_events"
     path = "email/public/v1/events"
     records_jsonpath = "$.events[*]"
-    primary_keys = ["listId", "created"]
+    primary_keys = ["id", "created"]
     replication_key = "created"
     page_size = 250
 
@@ -522,7 +522,11 @@ class EmailEventsStream(hubspotV1Stream):
 
 
 class FormsStream(hubspotV3Stream):
-    """Forms Stream"""
+    """
+        Forms Stream
+        The V3 is in beta and for now only support form types
+        Hubspot, captured, flow, blog_comment
+    """
 
     name = "forms"
     path = "marketing/v3/forms/"
@@ -621,6 +625,12 @@ class ListsStream(hubspotV1Stream):
         th.Property("deleteable", th.BooleanType),
         th.Property("archived", th.BooleanType),
     ).to_dict()
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
+        row["listId"] = int(row["listId"])
+        return row
 
 
 class DealsPipelinesStream(hubspotV1Stream):
@@ -796,6 +806,14 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
+class ContactsAssociationStream(AssociationsV3ParentStream):
+    name = "contacts_association_parent"
+    path = "crm/v3/objects/contacts"
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class CompaniesStream(ObjectSearchV3):
     """Companies Stream"""
 
@@ -895,10 +913,9 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-class DealsAssociationParent(DealsStream):
-    name = "deals_association_parent"    
-    replication_key = None
-    primary_keys = ["id"]
+class DealsAssociationParent(AssociationsV3ParentStream):
+    name = "deals_association_parent"
+    path = "crm/v3/objects/deals"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1136,29 +1153,23 @@ class ArchivedLineItemsStream(hubspotV3Stream):
 class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     name = "lists_v3"
-    primary_keys = ["id"]
+    primary_keys = ["listId"]
     path = "crm/v3/lists/search"
-    replication_key = "updatedAt"
-    replication_key_filter = "hs_last_record_added_at"
     records_jsonpath = "$.lists[*]"
 
 
-    @property
-    def replication_key(self):
-        return "updatedAt"
-
     schema = th.PropertiesList(
-        th.Property("listId", th.NumberType()),
-        th.Property("listVersion", th.NumberType()),
-        th.Property("createdAt", th.DateTimeType()),
-        th.Property("updatedAt", th.DateTimeType()),
-        th.Property("filtersUpdateAt", th.DateTimeType()),
-        th.Property("processingStatus", th.StringType()),
-        th.Property("createdById", th.NumberType()),
-        th.Property("updatedById", th.NumberType()),
-        th.Property("processingType", th.StringType()),
-        th.Property("objectTypeId", th.StringType()),
-        th.Property("name", th.StringType()),
+        th.Property("listId", th.StringType),
+        th.Property("listVersion", th.NumberType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("filtersUpdateAt", th.DateTimeType),
+        th.Property("processingStatus", th.StringType),
+        th.Property("createdById", th.StringType),
+        th.Property("updatedById", th.StringType),
+        th.Property("processingType", th.StringType),
+        th.Property("objectTypeId", th.StringType),
+        th.Property("name", th.StringType),
         th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -1176,6 +1187,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         }
 
 
+
 class ListMembershipV3Stream(hubspotV3Stream):
     """
     List members - child stream from ListsStream
@@ -1189,7 +1201,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.IntegerType),
+        th.Property("list_id", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):
@@ -1218,7 +1230,7 @@ class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
+    parent_stream_type = ContactsAssociationStream
 
     schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
@@ -1256,22 +1268,6 @@ class AssociationContactsTicketsStream(AssociationContactsStream):
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
-
-class AssociationContactsStream(hubspotV4Stream):
-    """Association Base Stream"""
-
-    primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
-
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
 
 
 class AssociationContactsCompaniesStream(AssociationContactsStream):
@@ -1476,12 +1472,20 @@ class CurrenciesStream(hubspotV3Stream):
     ).to_dict()
 
 # Get associations for engagements streams in v3
+class MeetingsAssociationStream(AssociationsV3ParentStream):
+    name = "meetings_association_parent"    
+    path = "crm/v3/objects/meetings"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
 
 class AssociationMeetingsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = MeetingsStream
+    parent_stream_type = MeetingsAssociationStream
     name = "associations_meetings"
 
     schema = association_schema
@@ -1508,11 +1512,18 @@ class AssociationMeetingsDealsStream(AssociationMeetingsStream):
     path = "crm/v4/associations/meetings/deals/batch/read"
 
 
+class CallsAssociationStream(AssociationsV3ParentStream):
+    name = "calls_association_parent"
+    path = "crm/v3/objects/calls"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
 class AssociationCallsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CallsStream
+    parent_stream_type = CallsAssociationStream
     name = "associations_calls"
 
     schema = association_schema
@@ -1538,11 +1549,19 @@ class AssociationCallsDealsStream(AssociationCallsStream):
     path = "crm/v4/associations/calls/deals/batch/read"
 
 
+class CommunicationsAssociationStream(AssociationsV3ParentStream):
+    name = "communications_association_parent"
+    path = "crm/v3/objects/communications"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationCommunicationsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CommunicationsStream
+    parent_stream_type = CommunicationsAssociationStream
     name = "associations_communications"
 
     schema = association_schema
@@ -1569,11 +1588,19 @@ class AssociationCommunicationsDealsStream(AssociationCommunicationsStream):
     path = "crm/v4/associations/communications/deals/batch/read"
 
 
+class EmailsAssociationStream(AssociationsV3ParentStream):
+    name = "emails_association_parent"
+    path = "crm/v3/objects/emails"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationEmailsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = EmailsStream
+    parent_stream_type = EmailsAssociationStream
     name = "associations_emails"
 
     schema = association_schema
@@ -1600,11 +1627,19 @@ class AssociationEmailsDealsStream(AssociationEmailsStream):
     path = "crm/v4/associations/emails/deals/batch/read"
 
 
+class NotesAssociationStream(AssociationsV3ParentStream):
+    name = "notes_association_parent"
+    path = "crm/v3/objects/notes"    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationNotesStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = NotesStream
+    parent_stream_type = NotesAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1631,11 +1666,19 @@ class AssociationNotesDealsStream(AssociationNotesStream):
     path = "crm/v4/associations/notes/deals/batch/read"
 
 
+class PostalAssociationStream(AssociationsV3ParentStream):
+    name = "postal_association_parent"    
+    path = "crm/v3/objects/postal_mail" 
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationPostalMailStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = PostalMailStream
+    parent_stream_type = PostalAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1662,11 +1705,19 @@ class AssociationPostalMailDealsStream(AssociationPostalMailStream):
     path = "crm/v4/associations/postal_mail/deals/batch/read"
 
 
+class TasksAssociationStream(AssociationsV3ParentStream):
+    name = "tasks_association_parent"
+    path = "crm/v3/objects/tasks"
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+    ).to_dict()
+
+
 class AssociationTasksStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = TasksStream
+    parent_stream_type = TasksAssociationStream
     name = "associations_notes"
 
     schema = association_schema
@@ -1722,7 +1773,7 @@ breakdown_properties_list = [
     th.Property("contactToCustomerRate", th.NumberType),
 ]
 
-class SessionAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
+class SessionAnalyticsReportsBaseStream(hubspotV3Stream):
 
     schema = th.PropertiesList(
         *breakdown_properties_list
@@ -1779,7 +1830,7 @@ class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
         return self.additional_params
 
 
-class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
+class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream):
     page_size = None
     __offset = 0
     __current_d1 = None
@@ -1864,3 +1915,412 @@ class BreakdownsAnalyticsReportsUtmCampaignsStream(BreakdownsAnalyticsReportsBas
     name = "analytics_reports_utm_campaigns"
     path = "analytics/v2/reports/utm-campaigns/total"
     d1_options = ['regions', 'us', 'organic', 'referrals', 'social', 'test']
+class FormsSummaryMonthlyStream(hubspotV1Stream):
+    """Association Base Stream"""
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-by-object
+    name = "forms_summary_monthly"
+    path = "analytics/v2/reports/forms/total" # :time_period make it configurable based on further requirements
+    paginate = True
+    page_size = 100
+    start_date = None
+    end_date = None
+    skip = 0
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("formViews", th.NumberType),
+            th.Property("clickThroughPerFormView", th.NumberType),
+            th.Property("submissionsPerFormView", th.NumberType),
+            th.Property("submissions", th.NumberType),
+            th.Property("submissionsPerClickThrough", th.NumberType),
+            th.Property("completions", th.NumberType),
+            th.Property("completionsAndUnenrolls", th.NumberType),
+            th.Property("visibles", th.NumberType),
+            th.Property("nonContactSubmissions", th.NumberType),
+            th.Property("installs", th.NumberType),
+            th.Property("contactSubmissions", th.NumberType),
+            th.Property("interactions", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        # Check if pagination is enabled
+        if self.paginate:
+            data = response.json()
+            # Check if offset exists and matches the total to stop paginating for this filter range
+            if "offset" in data and "total" in data and data['total'] > 0 and self.skip != data['total']:
+                # Increment the skip counter for pagination
+                self.skip = data['offset']
+                # Update the previous token if it exists
+                if previous_token:
+                    previous_token = previous_token["token"]
+                # Return the next page token and the updated skip value
+                return {"token": previous_token, "skip": self.skip}
+            else:
+                # Reset skip value for a new pagination sequence
+                self.skip = 0
+                # Set new start date by adding +1 to previous end_date for the next pagination sequence
+                start_date = parse(self.end_date) + timedelta(days=1) or  parse(self.config.get("start_date"))
+                today = datetime.today()
+                if (
+                    previous_token
+                    and "token" in previous_token
+                    and previous_token["token"]
+                    and start_date.replace(tzinfo=None)
+                    <= previous_token["token"].replace(tzinfo=None)
+                ):
+                    start_date = previous_token["token"] + timedelta(
+                        days=1
+                    )
+                #Replace timezone info with None    
+                next_token = start_date.replace(tzinfo=None)
+                #Stop paginating if next_token is greater than today
+                if (today - next_token).days < 0:
+                    self.paginate = False
+                # Return the next token and the current skip value
+                return {"token": next_token, "skip": self.skip}
+        else:
+            # Return None if pagination is not enabled
+            return None
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        skip = 0
+        token_date = None
+        if next_page_token:
+            token_date, skip = next_page_token["token"], next_page_token["skip"]
+        start_date = token_date or self.config.get("start_date") or datetime(2000, 1, 1)
+        #Convert to datetime if start date is in string
+        if isinstance(start_date, str):
+            start_date = parse(start_date)
+        #Set end date to last day of month      
+        last_day_of_month = calendar.monthrange(start_date.year, start_date.month)[1]
+        end_date = start_date.replace(day=last_day_of_month)    
+        params['limit'] = self.page_size
+        params['offset'] = skip
+        params['start'] = start_date.strftime("%Y%m%d")
+        params['end'] = end_date.strftime("%Y%m%d")
+        #Set start and end date so we can save it the row and use end date to calculate next page token
+        self.start_date = start_date.strftime("%Y-%m-%d")
+        self.end_date = end_date.strftime("%Y-%m-%d")
+        return params
+
+    def post_process(self, row: dict, context: Optional[dict] = None) -> Optional[dict]:
+        # Once last page is fetched breakdowns are empty
+        if "breakdowns" in row and not row["breakdowns"]:
+            return None
+        row["start_date"] = self.start_date
+        row["end_date"] = self.end_date
+        return row
+
+
+class TeamsStream(hubspotV3Stream):
+    """Teams Stream"""
+
+    name = "teams"
+    path = "settings/v3/users/teams"
+    primary_keys = ["id"]
+
+    schema = th.PropertiesList(
+        th.Property("userIds", th.CustomType({"type": ["array", "string"]})),
+        th.Property("name", th.StringType),
+        th.Property("id", th.StringType),
+        th.Property("secondaryUserIds", th.CustomType({"type": ["array", "string"]})),
+    ).to_dict()
+
+class FormsAllStream(hubspotV3Stream):
+    """
+        Forms V2 Stream
+        This stream supports all of the form types supported by V3 and 
+        Meeting, Payments ....
+    """
+
+    name = "all_forms"
+    path = "forms/v2/forms/"
+    primary_keys = ["guid"]
+    replication_key = None
+    records_jsonpath = "$.[*]"
+
+    schema = th.PropertiesList(
+        th.Property("portalId", th.NumberType),
+        th.Property("guid", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("action", th.StringType),
+        th.Property("method", th.StringType),
+        th.Property("cssClass", th.StringType),
+        th.Property("redirect", th.StringType),
+        th.Property("submitText", th.StringType),
+        th.Property("followUpId", th.StringType),
+        th.Property("notifyRecipients", th.StringType),
+        th.Property("leadNurturingCampaignId", th.StringType),
+        th.Property("formFieldGroups", th.CustomType({"type": ["array", "string"]})),
+        th.Property("metaData", th.CustomType({"type": ["array", "string"]})),
+        th.Property("deletable", th.BooleanType),
+        th.Property("inlineMessage", th.StringType),
+        th.Property("tmsId", th.StringType),
+        th.Property("captchaEnabled", th.BooleanType),
+        th.Property("campaignGuid", th.StringType),
+        th.Property("cloneable", th.BooleanType),
+        th.Property("editable", th.BooleanType),
+        th.Property("formType", th.StringType),
+        th.Property("deletedAt", th.IntegerType),
+        th.Property("themeName", th.StringType),
+        th.Property("parentId", th.IntegerType),
+        th.Property("isPublished", th.BooleanType),
+        th.Property("publishAt", th.IntegerType),
+        th.Property("unpublishAt", th.IntegerType),
+        th.Property("publishedAt", th.IntegerType),
+        th.Property("customUid", th.StringType),
+        th.Property("createMarketableContact", th.BooleanType),
+        th.Property("editVersion", th.IntegerType),
+        th.Property("thankYouMessageJson", th.StringType),
+        th.Property("themeColor", th.StringType),
+        th.Property("alwaysCreateNewCompany", th.BooleanType),
+        th.Property("internalUpdatedAt", th.IntegerType),
+        th.Property("businessUnitId", th.IntegerType),
+        th.Property("portableKey", th.StringType),
+        th.Property("embedVersion", th.StringType),
+        th.Property("selectedExternalOptions", th.CustomType({"type": ["array", "string"]})),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "form_id": record["guid"],
+        }
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        data = response.json()
+        next_page_token = None
+        if not previous_token:
+            previous_token = 0
+        if len(data)>0:
+            next_page_token = previous_token + self.page_size
+        return next_page_token
+        
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}   
+        params["limit"] = self.page_size
+        if next_page_token:
+            params['offset'] = next_page_token
+        params["formTypes"] = "ALL" # V2 is case sensitive     
+        return params
+    
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        row = super().post_process(row, context)
+        for field in ["createdAt", "updatedAt"]:
+            if field in row:
+                #This endpoint seems to be sending time in milliseconds
+                dt_field = datetime.fromtimestamp((int(row[field]))/1000)
+                row[field] = dt_field.isoformat()
+        return row
+
+class SourcesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "sources_summary_monthly"
+    path = "analytics/v2/reports/sources/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("contactsPerPageview", th.NumberType),
+            th.Property("returningVisits", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("contactToCustomerRate", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("customersPerPageview", th.NumberType),
+            th.Property("sessionToContactRate", th.NumberType),
+            th.Property("pageviewsPerSession", th.NumberType),
+            th.Property("opportunities", th.NumberType),
+            th.Property("bounceRate", th.NumberType),
+            th.Property("salesQualifiedLeads", th.NumberType),
+            th.Property("marketingQualifiedLeads", th.NumberType),
+            th.Property("visits", th.NumberType),
+            th.Property("visitors", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("leadsPerView", th.NumberType),
+            th.Property("customers", th.NumberType),
+            th.Property("bounces", th.NumberType),
+            th.Property("time", th.NumberType),
+            th.Property("timePerSession", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("others", th.NumberType),
+            th.Property("newVisitorSessionRate", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+class PagesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "pages_summary_monthly"
+    path = "analytics/v2/reports/pages/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("newVisitorRawViews", th.NumberType),
+            th.Property("ctaViews", th.NumberType),
+            th.Property("exitsPerPageview", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("pageTime", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("ctaClicks", th.NumberType),
+            th.Property("ctaRate", th.NumberType),
+            th.Property("pageBounceRate", th.NumberType),
+            th.Property("exits", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("pageBounces", th.NumberType),
+            th.Property("timePerPageview", th.NumberType),
+            th.Property("entrances", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+class LandingPagesSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    name = "landing_pages_summary_monthly"
+    path = "analytics/v2/reports/landing-pages/total" 
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("rawViews", th.NumberType),
+            th.Property("ctaViews", th.NumberType),
+            th.Property("submissions", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("entrances", th.NumberType),
+            th.Property("exits", th.NumberType),
+            th.Property("timePerPageview", th.NumberType),
+            th.Property("pageBounceRate", th.NumberType),
+            th.Property("exitsPerPageview", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict()
+
+class LandingPagesStream(hubspotV3Stream):
+    """Landing Pages Stream"""
+    name = "landing_pages"
+    path = "cms/v3/pages/landing-pages"
+    primary_keys = ["id"]
+    replication_key = None
+
+    schema = th.PropertiesList(
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("archivedInDashboard", th.BooleanType),
+        th.Property("attachedStylesheets", th.CustomType({"type": ["array", "string"]})),
+        th.Property("authorName", th.StringType),
+        th.Property("categoryId", th.IntegerType),
+        th.Property("contentTypeCategory", th.IntegerType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("createdById", th.StringType),
+        th.Property("currentState", th.StringType),
+        th.Property("domain", th.StringType),
+        th.Property("featuredImage", th.StringType),
+        th.Property("featuredImageAltText", th.StringType),
+        th.Property("htmlTitle", th.StringType),
+        th.Property("id", th.StringType),
+        th.Property("includeDefaultCustomCss", th.BooleanType),
+        th.Property("layoutSections", th.CustomType({"type": ["object", "string"]})),
+        th.Property("metaDescription", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("pageExpiryEnabled", th.BooleanType),
+        th.Property("pageRedirected", th.BooleanType),
+        th.Property("publicAccessRules", th.CustomType({"type": ["array", "string"]})),
+        th.Property("publicAccessRulesEnabled", th.BooleanType),
+        th.Property("publishDate", th.DateTimeType),
+        th.Property("publishImmediately", th.BooleanType),
+        th.Property("published", th.BooleanType),
+        th.Property("slug", th.StringType),
+        th.Property("state", th.StringType),
+        th.Property("subcategory", th.StringType),
+        th.Property("templatePath", th.StringType),
+        th.Property("translations", th.CustomType({"type": ["object", "string"]})),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("updatedById", th.StringType),
+        th.Property("url", th.StringType),
+        th.Property("useFeaturedImage", th.BooleanType),
+        th.Property("widgetContainers", th.CustomType({"type": ["object", "string"]})),
+        th.Property("widgets", th.CustomType({"type": ["object", "string"]})),
+    ).to_dict()
+
+class UtmCampaignSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    # https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    """Utm Campaign Summary Monthly Stream"""
+    name = "utm_campaigns_summary_monthly"
+    path = "analytics/v2/reports/utm-campaigns/total"
+
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("contactsPerPageview", th.NumberType),
+            th.Property("returningVisits", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("sessionToContactRate", th.NumberType),
+            th.Property("pageviewsPerSession", th.NumberType),
+            th.Property("bounceRate", th.NumberType),
+            th.Property("visits", th.NumberType),
+            th.Property("visitors", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("leadsPerView", th.NumberType),
+            th.Property("bounces", th.NumberType),
+            th.Property("timePerSession", th.NumberType),
+            th.Property("time", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("newVisitorSessionRate", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict() 
+
+
+class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
+    # https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns
+    """Geolocation Summary Monthly Stream"""
+    name = "geolocation_summary_monthly"
+    path = "analytics/v2/reports/geolocation/total"
+
+    schema = th.PropertiesList(
+        th.Property("totals", th.ObjectType(
+            th.Property("contactsPerPageview", th.NumberType),
+            th.Property("returningVisits", th.NumberType),
+            th.Property("rawViews", th.NumberType),
+            th.Property("contactToCustomerRate", th.NumberType),
+            th.Property("standardViews", th.NumberType),
+            th.Property("customersPerPageview", th.NumberType),
+            th.Property("sessionToContactRate", th.NumberType),
+            th.Property("pageviewsPerSession", th.NumberType),
+            th.Property("opportunities", th.NumberType),
+            th.Property("bounceRate", th.NumberType),
+            th.Property("salesQualifiedLeads", th.NumberType),
+            th.Property("marketingQualifiedLeads", th.NumberType),
+            th.Property("visits", th.NumberType),
+            th.Property("visitors", th.NumberType),
+            th.Property("pageviewsMinusExits", th.NumberType),
+            th.Property("leads", th.NumberType),
+            th.Property("leadsPerView", th.NumberType),
+            th.Property("customers", th.NumberType),
+            th.Property("bounces", th.NumberType),
+            th.Property("time", th.NumberType),
+            th.Property("timePerSession", th.NumberType),
+            th.Property("contacts", th.NumberType),
+            th.Property("others", th.NumberType),
+            th.Property("newVisitorSessionRate", th.NumberType),
+        )),
+        th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
+        th.Property("start_date", th.DateType),
+        th.Property("end_date", th.DateType),
+    ).to_dict() 
