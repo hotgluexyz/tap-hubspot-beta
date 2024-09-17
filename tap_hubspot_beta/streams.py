@@ -1763,7 +1763,7 @@ class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
     def additional_params(self):
         return dict(offset=self.__offset)
     
-    def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
+    def get_next_page_token(self, response: requests.Response, previous_token):
         offset = response.json().get('offset', 0)
         if not offset:
             return None
@@ -1832,7 +1832,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV3Stream, ABC):
         self.reset_offset()
         return self.additional_params
 
-    def get_next_page_token(self, response: requests.Response, previous_token: Any | None) -> Any | None:
+    def get_next_page_token(self, response: requests.Response, previous_token):
         offset = response.json().get('offset', 0)
         if not offset:
             return self.next_token()
