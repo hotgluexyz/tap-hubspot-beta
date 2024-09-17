@@ -51,7 +51,7 @@ class hubspotV1Stream(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         params.update(self.additional_prarams)
-        params["property"] = self.selected_properties
+        params["property"] = ",".join(self.selected_properties)
         return params
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:

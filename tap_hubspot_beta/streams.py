@@ -1,6 +1,7 @@
 """Stream type classes for tap-hubspot."""
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
+import json
 import copy
 
 from singer_sdk.exceptions import InvalidStreamSortException
@@ -178,6 +179,15 @@ class ContactsStream(hubspotV1Stream):
                     for identity in identity_profile["identities"]:
                         if identity['type'] == 'EMAIL':
                            record['subscriber_email'] = identity['value']
+            if record.get("custom_fields", []):
+                stringfied_custom_fields = []
+                for custom_field in record["custom_fields"]:
+                    if isinstance(custom_field, dict):
+                        stringfied_custom_fields.append(
+                            json.dumps(custom_field)
+                        )
+
+
             yield record
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
