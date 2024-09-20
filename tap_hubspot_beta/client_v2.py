@@ -28,16 +28,17 @@ class hubspotV2Stream(hubspotStream):
             del row["properties"]
         return row
     
-    def populate_d1_breakdowns(context):
-        raise NotImplementedError("Streams that uses d1 and/or d2 breakdowns, needs to implement populate_d1_breakdowns")
+    def populate_params(self, context):
+        """Should be implemented to populate helpers params like d1, d2 and f (filters)"""
+        pass
 
     def request_records(self, context):
         """Request records from REST endpoint(s), returning response records."""
         next_page_token = None
         finished = False
         decorated_request = self.request_decorator(self._request)
-        if getattr(self, "is_d1_stream", False) or getattr(self, "is_d2_stream", False):
-            self.populate_d1_breakdowns(context)
+
+        self.populate_params(context)
 
         while not finished:
             self.logger.setLevel(logging.CRITICAL)
