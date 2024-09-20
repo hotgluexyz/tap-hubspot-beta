@@ -1,11 +1,11 @@
 """Stream type classes for tap-hubspot."""
+from abc import ABC
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
 from singer_sdk.exceptions import InvalidStreamSortException
-from singer_sdk.helpers._compat import final
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 from singer_sdk.exceptions import FatalAPIError
 import singer
@@ -1809,14 +1809,14 @@ class SessionAnalyticsMonthlyReportsStream(SessionAnalyticsReportsBaseStream):
 class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
     name = "session_analytics_total_report"
     path = "analytics/v2/reports/sessions/total"
-    __offset = 0
+    offset = 0
 
     def parse_response(self, response: requests.Response) -> Iterable[Dict]:
         yield from (row for row in response.json().get('breakdowns', [{}]))
     
     @property
     def additional_params(self):
-        return dict(offset=self.__offset)
+        return dict(offset=self.offset)
     
     def get_next_page_token(self, response: requests.Response, previous_token):
         offset = response.json().get('offset', 0)
@@ -1830,19 +1830,149 @@ class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
         if not self.page_size:
             self.page_size = offset
         
-        self.__offset += self.page_size
+        self.offset += self.page_size
         return self.additional_params
 
 
-class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream):
+class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
     page_size = None
-    __offset = 0
-    is_d1_stream = False
-    is_d2_stream = False  # if it is True, must set is_d1_stream = True. This is executed in init method
-    d1_options = defaultdict(list)  # will be a dictionary where the keys are d1 breakdowns and the values are lists of d2 breakdowns
-
+    offset = 0
+    
     schema = th.PropertiesList(
         *breakdown_properties_list,
+    ).to_dict()
+    
+    def update_additional_params(self, additional_params):
+        pass
+
+    @property
+    def additional_params(self):
+        additional_params = dict(offset=self.offset)
+        start_date = self._tap.config.get("start_date")
+        end_date = self._tap.config.get("end_date")
+        if start_date:
+            additional_params["start"] = parse(start_date).strftime("%Y%m%d")
+        if end_date:
+            additional_params["end"] = parse(end_date).strftime("%Y%m%d")
+        self.update_additional_params(additional_params)  # include filters (f), d1, d2
+        return additional_params
+    
+    def reset_offset(self):
+        self.offset = 0
+
+    def next_token(self):
+        raise NotImplementedError
+
+    def get_next_page_token(self, response: requests.Response, previous_token):
+        offset = response.json().get('offset', 0)
+        if not offset:
+            return self.next_token()
+        
+        total = response.json().get('total')
+        if not total or offset >= total:
+            return self.next_token()
+        
+        if not self.page_size:
+            self.page_size = offset
+        
+        self.offset += self.page_size
+        return self.additional_params
+
+
+class D1BreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBaseStream):
+    is_d1_stream = True
+    d1_options = defaultdict(list)  # will be a dictionary where the keys are d1 breakdowns and the values are lists of d2 breakdowns
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("d1", th.StringType),
+    ).to_dict()
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.is_d1_stream:
+            self.current_d1 = None
+        else:
+            self.schema.get("properties", {"d1":[]}).pop("d1")
+
+    @property
+    def d1(self):
+        if not self.d1_options or not self.is_d1_stream:
+            return None
+        if not self.current_d1:
+            self.update_d1()
+        return self.current_d1
+    
+    def update_d1(self):
+        if self.is_d1_stream and len(self.d1_options):
+            self.current_d1 = next(iter(self.d1_options), None)
+            if self.current_d1 and len(self.d1_options.get(self.current_d1, [])) == 0:
+                self.d1_options.pop(self.current_d1)
+                self.current_d1 = next(iter(self.d1_options), None)
+    
+    def update_additional_params(self, additional_params):
+        d1 = self.d1
+        if self.is_d1_stream and d1:
+            additional_params["d1"] = d1
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if context and context.get("populate_d2_breakdowns"):
+            params["d1"] = context.get("d1_breakdown")
+            if params.get("d2"):
+                del params["d2"]
+        return params
+    
+    def add_drill_downs_to_row(self, row):
+        d1 = self.d1
+        if self.is_d1_stream and d1:
+            row["d1"] = d1
+        return row
+
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        res_json = response.json()
+        breakdowns = res_json.get('breakdowns')
+        if breakdowns is not None:
+            for row in breakdowns:
+                row = self.add_drill_downs_to_row(row)
+                yield row
+
+    def next_token(self):
+        self.update_d1()
+        self.reset_offset()
+        
+        if len(self.d1_options) == 0:
+            return None
+        
+        return self.additional_params
+    
+    def populate_d2_breakdowns(context):
+        raise NotImplementedError("Streams that uses d2 breakdowns, needs to implement populate_d2_breakdowns")
+
+    def populate_d1_breakdowns(self, context):
+        # dynamically update d1 options
+        decorated_request = self.request_decorator(self._request)
+        prepared_request = self.prepare_request(
+            context, next_page_token=None
+        )
+        resp = decorated_request(prepared_request, context)
+        for d1_breakdown in resp.json().get("breakdowns") or [{}]:
+            d1_breakdown_name = d1_breakdown.get("breakdown")
+            if d1_breakdown_name:
+                self.d1_options[d1_breakdown_name] = []
+                if getattr(self, "is_d2_stream", False):
+                    self.populate_d2_breakdowns(context, d1_breakdown_name)
+
+    def populate_params(self, context):
+        if self.is_d1_stream:
+            self.populate_d1_breakdowns(context)
+
+
+class D2BreakdownsAnalyticsReportsStream(D1BreakdownsAnalyticsReportsStream):
+    is_d2_stream = True
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("d1", th.StringType),
+        th.Property("d2", th.StringType),
     ).to_dict()
 
     def __init__(self, *args, **kwargs):
@@ -1850,88 +1980,34 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream):
         if self.is_d2_stream:
             if self._tap.config.get("d2_stream"):
                 self.d2_options = []  # to track d2 breakdowns for current d1 breakdowns
-                self._current_d2 = None
-                self.is_d1_stream = True
+                self.current_d2 = None
             else:
                 self.is_d2_stream = False
                 self.schema.get("properties", {"d2":[]}).pop("d2")
 
-        if self.is_d1_stream:
-            self._current_d1 = None
-
-    @property
-    def d1(self):
-        if not self.d1_options or not self.is_d1_stream:
-            return None
-        if not self._current_d1:
-            self.update_d1()
-        return self._current_d1
-    
     @property
     def d2(self):
         if not self.d1_options or not self.is_d2_stream:
             return None
-        if not self._current_d2:
+        if not self.current_d2:
             self.update_d2()
-        return self._current_d2
+        return self.current_d2
 
-    def update_d1(self):
-        if self.is_d1_stream and len(self.d1_options):
-            self._current_d1 = next(iter(self.d1_options), None)
-            if self._current_d1 and len(self.d1_options.get(self._current_d1, [])) == 0:
-                self.d1_options.pop(self._current_d1)
-                self._current_d1 = next(iter(self.d1_options), None)
-    
     def update_d2(self):
         if self.is_d2_stream:
             d1 = self.d1
             self.d2_options = self.d1_options.get(d1)
             if self.d2_options:
-                self._current_d2 = self.d2_options.pop()
+                self.current_d2 = self.d2_options.pop()
                 self.d1_options[d1] = self.d2_options
 
-    @property
-    def additional_params(self):
-        additional_params = dict(offset=self.__offset)
-        d1 = self.d1 if self.is_d1_stream else None
-        d2 = self.d2 if self.is_d2_stream else None
-        start_date = self._tap.config.get("start_date")
-        end_date = self._tap.config.get("end_date")
-        if d1:
-            additional_params["d1"] = d1
-        if d2:
+    def update_additional_params(self, additional_params):
+        super().update_additional_params(additional_params)
+        d2 = self.d2
+        if self.is_d2_stream and d2:
             additional_params["d2"] = d2
-        if start_date:
-            additional_params["start"] = parse(start_date).strftime("%Y%m%d")
-        if end_date:
-            additional_params["end"] = parse(end_date).strftime("%Y%m%d")
-        return additional_params
-    
-    def reset_offset(self):
-        self.__offset = 0
-    
-    def parse_response_total(self, breakdowns):
-        for row in breakdowns:
-            if self.d1:
-                row["d1"] = self.d1
-            if self.d2:
-                row["d2"] = self.d2
-            yield row
-
-    def parse_response_periodically(self, res_json):
-        for date_str, list_data_obj in res_json.items():
-            for row in list_data_obj:
-                row["date"] = date_str
-                yield row
-
-    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
-        if (breakdowns := response.json().get('breakdowns')) is not None:
-            yield from self.parse_response_total(breakdowns)
-        else:
-            yield from self.parse_response_periodically(response.json())
 
     def next_token(self):
-        # TODO: this may cause the issue
         if self.is_d2_stream:
             if len(self.d2_options) == 0:
                 self.update_d1()
@@ -1945,29 +2021,13 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream):
         
         return self.additional_params
 
-    def get_next_page_token(self, response: requests.Response, previous_token):
-        offset = response.json().get('offset', 0)
-        if not offset:
-            return self.next_token()
-        
-        total = response.json().get('total')
-        if not total or offset >= total:
-            return self.next_token()
-        
-        if not self.page_size:
-            self.page_size = offset
-        
-        self.__offset += self.page_size
-        return self.additional_params
-    
-    def get_url_params(self, context, next_page_token):
-        params = super().get_url_params(context, next_page_token)
-        if context and context.get("populate_d2_breakdowns"):
-            params["d1"] = context.get("d1_breakdown")
-            if params.get("d2"):
-                del params["d2"]
-        return params
-    
+    def add_drill_downs_to_row(self, row):
+        row  = super().add_drill_downs_to_row(row)
+        d2 = self.d2
+        if self.is_d2_stream and d2:
+            row["d2"] = d2
+        return row
+
     def populate_d2_breakdowns(self, context, d1_breakdown):
         decorated_request = self.request_decorator(self._request)
         if not context:
@@ -1984,46 +2044,89 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream):
             if d2_breakdown.get("breakdown") is not None
         ]
 
-    def populate_d1_breakdowns(self, context):
+
+class PeriodicallyBreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBaseStream):
+    is_periodic = True
+    __curr_filter = None
+    periodic_filters = []  # it may confuse, but these filters are used by periodic requests, that doesn't mean they are periods
+
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("filter", th.StringType),
+        th.Property("date", th.StringType),
+    ).to_dict()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_periodic:
+            self.schema.get("properties", {"filter":[]}).pop("filter")
+    
+    def populate_params(self, context):
+        if self.is_periodic:
+            self.populate_periodic_filters(context)
+
+    @property
+    def current_filter(self):
+        if not self.periodic_filters or not self.is_periodic:
+            return None
+        if not self.__curr_filter:
+            self.update_filter()
+        return self.__curr_filter
+    
+    def update_filter(self):
+        self.__curr_filter = self.periodic_filters.pop()
+
+    def next_token(self):
+        if self.is_periodic:
+            self.update_filter()
+            self.reset_offset()
+        
+        if len(self.periodic_filters) == 0:
+            return None
+        
+        return self.additional_params
+    
+    def update_additional_params(self, additional_params):
+        curr_filter = self.current_filter
+        if self.is_periodic and curr_filter:
+            additional_params["f"] = curr_filter
+    
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        res_json = response.json()
+        for date_str, list_data_obj in res_json.items():
+            for row in list_data_obj:
+                row["date"] = date_str
+                if self.is_periodic:
+                    row["filter"] = self.current_filter
+                yield row
+    
+    def populate_periodic_filters(self, context):
         # dynamically update d1 options
         decorated_request = self.request_decorator(self._request)
         prepared_request = self.prepare_request(
             context, next_page_token=None
         )
+        period = prepared_request.url.split('/')[-1].split('?')[0]
+        prepared_request.url = prepared_request.url.replace(period, "total")
         resp = decorated_request(prepared_request, context)
-        for d1_breakdown in resp.json().get("breakdowns") or [{}]:
-            d1_breakdown_name = d1_breakdown.get("breakdown")
-            if d1_breakdown_name:
-                self.d1_options[d1_breakdown_name] = []
-                if self.is_d2_stream:
-                    self.populate_d2_breakdowns(context, d1_breakdown_name)
-
-
-class D1BreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBaseStream):
-    is_d1_stream = True
-    schema = th.PropertiesList(
-        *breakdown_properties_list,
-        th.Property("d1", th.StringType),
-    ).to_dict()
-
-
-class D2BreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBaseStream):
-    is_d1_stream = True
-    is_d2_stream = True
-    schema = th.PropertiesList(
-        *breakdown_properties_list,
-        th.Property("d1", th.StringType),
-        th.Property("d2", th.StringType),
-    ).to_dict()
+        breakdowns = resp.json().get("breakdowns") or [{}]
+        if breakdowns:
+            self.periodic_filters = [
+                breakdown.get("breakdown")
+                for breakdown in breakdowns
+                if breakdown is not None
+            ]
+        pass
 
 class BreakdownsAnalyticsReportsSourcesTotalStream(D2BreakdownsAnalyticsReportsStream):
     name = "analytics_reports_sources"
     path = "analytics/v2/reports/sources/total"
 
 
-class BreakdownsAnalyticsReportsSourcesMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+class BreakdownsAnalyticsReportsSourcesMonthlyStream(PeriodicallyBreakdownsAnalyticsReportsStream):
     name = "analytics_reports_sources_monthly"
     path = "analytics/v2/reports/sources/monthly"
+    is_periodic = False
 
 
 class BreakdownsAnalyticsReportsGeolocationTotalStream(D1BreakdownsAnalyticsReportsStream):
@@ -2031,7 +2134,7 @@ class BreakdownsAnalyticsReportsGeolocationTotalStream(D1BreakdownsAnalyticsRepo
     path = "analytics/v2/reports/geolocation/total"
 
 
-class BreakdownsAnalyticsReportsGeolocationMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+class BreakdownsAnalyticsReportsGeolocationMonthlyStream(PeriodicallyBreakdownsAnalyticsReportsStream):
     name = "analytics_reports_geolocation_monthly"
     path = "analytics/v2/reports/geolocation/monthly"
 
@@ -2041,7 +2144,7 @@ class BreakdownsAnalyticsReportsUtmCampaignsTotalStream(D1BreakdownsAnalyticsRep
     path = "analytics/v2/reports/utm-campaigns/total"
 
 
-class BreakdownsAnalyticsReportsUtmCampaignsMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+class BreakdownsAnalyticsReportsUtmCampaignsMonthlyStream(PeriodicallyBreakdownsAnalyticsReportsStream):
     name = "analytics_reports_utm_campaigns_monthly"
     path = "analytics/v2/reports/utm-campaigns/monthly"
 
