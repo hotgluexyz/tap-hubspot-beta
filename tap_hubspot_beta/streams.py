@@ -2047,7 +2047,6 @@ class D2BreakdownsAnalyticsReportsStream(D1BreakdownsAnalyticsReportsStream):
 
 class PeriodicallyBreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBaseStream):
     is_periodic = True
-    __curr_filter = None
     periodic_filters = []  # it may confuse, but these filters are used by periodic requests, that doesn't mean they are periods
 
     schema = th.PropertiesList(
@@ -2055,49 +2054,31 @@ class PeriodicallyBreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBas
         th.Property("filter", th.StringType),
         th.Property("date", th.StringType),
     ).to_dict()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.is_periodic:
-            self.schema.get("properties", {"filter":[]}).pop("filter")
     
     def populate_params(self, context):
         if self.is_periodic:
             self.populate_periodic_filters(context)
 
-    @property
-    def current_filter(self):
-        if not self.periodic_filters or not self.is_periodic:
-            return None
-        if not self.__curr_filter:
-            self.update_filter()
-        return self.__curr_filter
-    
-    def update_filter(self):
-        self.__curr_filter = self.periodic_filters.pop()
-
     def next_token(self):
-        if self.is_periodic:
-            self.update_filter()
-            self.reset_offset()
-        
+        self.reset_offset()        
         if len(self.periodic_filters) == 0:
             return None
-        
         return self.additional_params
     
-    def update_additional_params(self, additional_params):
-        curr_filter = self.current_filter
-        if self.is_periodic and curr_filter:
-            additional_params["f"] = curr_filter
+    def prepare_request(self, context, next_page_token):
+        prepared_request = super().prepare_request(context, next_page_token)
+        joined_filters = "&f=".join([curr_filter for curr_filter in self.periodic_filters])
+        if joined_filters:
+            first_symbol = "&" if "&" in prepared_request.url else "?"
+            prepared_request.url = prepared_request.url + first_symbol + "f=" + joined_filters
+            self.periodic_filters = []
+        return prepared_request
     
     def parse_response(self, response: requests.Response) -> Iterable[Dict]:
         res_json = response.json()
         for date_str, list_data_obj in res_json.items():
             for row in list_data_obj:
                 row["date"] = date_str
-                if self.is_periodic:
-                    row["filter"] = self.current_filter
                 yield row
     
     def populate_periodic_filters(self, context):
@@ -2125,7 +2106,7 @@ class BreakdownsAnalyticsReportsSourcesTotalStream(D2BreakdownsAnalyticsReportsS
 class BreakdownsAnalyticsReportsSourcesMonthlyStream(PeriodicallyBreakdownsAnalyticsReportsStream):
     name = "analytics_reports_sources_monthly"
     path = "analytics/v2/reports/sources/monthly"
-    is_periodic = False
+    is_periodic = True
 
 
 class BreakdownsAnalyticsReportsGeolocationTotalStream(D1BreakdownsAnalyticsReportsStream):
