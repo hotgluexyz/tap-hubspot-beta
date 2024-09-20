@@ -2116,7 +2116,6 @@ class PeriodicallyBreakdownsAnalyticsReportsStream(BreakdownsAnalyticsReportsBas
                 for breakdown in breakdowns
                 if breakdown is not None
             ]
-        pass
 
 class BreakdownsAnalyticsReportsSourcesTotalStream(D2BreakdownsAnalyticsReportsStream):
     name = "analytics_reports_sources"
