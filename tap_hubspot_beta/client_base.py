@@ -13,6 +13,7 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+import curlify
 
 from pendulum import parse
 
@@ -146,14 +147,20 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise RetriableAPIError(msg)
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
         elif 400 <= response.status_code < 500:
             msg = (
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            raise FatalAPIError(msg)
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            raise FatalAPIError(f"Msg {msg}, response {response.text}")
 
     @staticmethod
     def extract_type(field, type_booleancheckbox_as_boolean=False):

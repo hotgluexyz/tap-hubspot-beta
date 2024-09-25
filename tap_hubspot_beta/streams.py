@@ -20,9 +20,13 @@ from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, h
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import time
 import pytz
-from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
 from urllib.parse import urlencode
+
+from singer_sdk.helpers._state import (
+    finalize_state_progress_markers,
+    log_sort_error
+)
 
 association_schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
@@ -882,7 +886,6 @@ class TicketsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/tickets/properties"
 
-
 class DealsStream(ObjectSearchV3):
     """Deals Stream"""
 
@@ -894,13 +897,100 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-class DealsAssociationParent(DealsStream):
-    name = "deals_association_parent"    
+
+class DealsAssociationParent(hubspotV1Stream):
+    name = "deals_association_parent"
+    path = "deals/v1/deal/paged"
     replication_key = None
     primary_keys = ["id"]
+
+    records_jsonpath = "$.deals[*]"
+
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+        row["id"] = str(row["dealId"])
+        return row
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
+    def _sync_records(  # noqa C901  # too complex
+        self, context: Optional[dict] = None
+    ) -> None:
+        """Sync records, emitting RECORD and STATE messages. """
+        record_count = 0
+        current_context: Optional[dict]
+        context_list: Optional[List[dict]]
+        context_list = [context] if context is not None else self.partitions
+        selected = self.selected
+
+        for current_context in context_list or [{}]:
+            partition_record_count = 0
+            current_context = current_context or None
+            state = self.get_context_state(current_context)
+            state_partition_context = self._get_state_partition_context(current_context)
+            self._write_starting_replication_value(current_context)
+            child_context: Optional[dict] = (
+                None if current_context is None else copy.copy(current_context)
+            )
+            child_context_bulk = {"ids": []}
+            for record_result in self.get_records(current_context):
+                if isinstance(record_result, tuple):
+                    # Tuple items should be the record and the child context
+                    record, child_context = record_result
+                else:
+                    record = record_result
+                child_context = copy.copy(
+                    self.get_child_context(record=record, context=child_context)
+                )
+                for key, val in (state_partition_context or {}).items():
+                    # Add state context to records if not already present
+                    if key not in record:
+                        record[key] = val
+
+                # Sync children, except when primary mapper filters out the record
+                if self.stream_maps[0].get_filter_result(record):
+                    child_context_bulk["ids"].append(child_context)
+                if len(child_context_bulk["ids"])>=5000:
+                    self._sync_children(child_context_bulk)
+                    child_context_bulk = {"ids": []}
+                self._check_max_record_limit(record_count)
+                if selected:
+                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
+                        self._write_state_message()
+                    self._write_record_message(record)
+                    try:
+                        self._increment_stream_state(record, context=current_context)
+                    except InvalidStreamSortException as ex:
+                        log_sort_error(
+                            log_fn=self.logger.error,
+                            ex=ex,
+                            record_count=record_count + 1,
+                            partition_record_count=partition_record_count + 1,
+                            current_context=current_context,
+                            state_partition_context=state_partition_context,
+                            stream_name=self.name,
+                        )
+                        raise ex
+
+                record_count += 1
+                partition_record_count += 1
+            if len(child_context_bulk):
+                self._sync_children(child_context_bulk)
+            if current_context == state_partition_context:
+                # Finalize per-partition state only if 1:1 with context
+                finalize_state_progress_markers(state)
+        if not context:
+            # Finalize total stream only if we have the full full context.
+            # Otherwise will be finalized by tap at end of sync.
+            finalize_state_progress_markers(self.stream_state)
+        self._write_record_count_log(record_count=record_count, context=context)
+        # Reset interim bookmarks before emitting final STATE message:
+        self._write_state_message()
 
 
 class ArchivedDealsStream(hubspotV3Stream):
@@ -1212,7 +1302,6 @@ class AssociationDealsStream(hubspotV4Stream):
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
 
-
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
@@ -1249,13 +1338,11 @@ class AssociationDealsLineItemsStream(AssociationDealsStream):
     name = "associations_deals_line_items"
     path = "crm/v4/associations/deals/line_items/batch/read"
 
-
 class AssociationContactsTicketsStream(AssociationContactsStream):
     """Association Contacts -> Tickets Stream"""
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
 
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
@@ -1278,7 +1365,6 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
 
     name = "associations_contacts_companies"
     path = "crm/v4/associations/contacts/companies/batch/read"
-
 
 class MarketingEmailsStream(hubspotV1Stream):
     """Dispositions Stream"""
@@ -1383,7 +1469,6 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
 
-
 class PostalMailStream(ObjectSearchV3):
     """Owners Stream"""
 
@@ -1448,7 +1533,6 @@ class QuotesStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
 
-
 class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""
 
@@ -1457,7 +1541,7 @@ class AssociationQuotesDealsStream(AssociationDealsStream):
 
 
 class CurrenciesStream(hubspotV3Stream):
-    """Owners Stream"""
+    """Currencies Stream"""
 
     name = "currencies_exchange_rate"
     path = "settings/v3/currencies/exchange-rates"
