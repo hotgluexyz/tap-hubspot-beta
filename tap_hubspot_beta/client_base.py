@@ -331,7 +331,33 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
-    
+
+    def process_row_types(self,row) -> Dict[str, Any]:
+        schema = self.schema['properties']
+        # If the row is null we ignore
+        if row is None:
+            return row
+
+        for field, value in row.items():
+            if field not in schema:
+                # Skip fields not found in the schema
+                continue
+
+            field_info = schema[field]
+            field_type = field_info.get("type", ["null"])[0]
+
+            if field_type == "boolean":
+                if value is None:
+                    row[field] = False
+                elif not isinstance(value, bool):
+                    # Attempt to cast to boolean
+                    if value.lower() == "true":
+                        row[field] = True
+                    elif value == "" or value.lower() == "false":
+                        row[field] = False
+
+        return row
+
     def is_first_sync(self):
         if self.stream_state.get("replication_key"):
             return False

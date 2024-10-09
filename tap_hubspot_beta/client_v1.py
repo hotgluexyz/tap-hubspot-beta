@@ -73,4 +73,5 @@ class hubspotV1Stream(hubspotStream):
                         dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
                         dt_field = dt_field.replace(tzinfo=None)
                         row[field] = dt_field.isoformat()
+        row = self.process_row_types(row)
         return row

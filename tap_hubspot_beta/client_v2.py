@@ -44,6 +44,7 @@ class hubspotV2Stream(hubspotStreamSchema):
         row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row["createdate"]
         row["archived"] = False
+        row = self.process_row_types(row)
         return row
 
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:

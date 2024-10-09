@@ -116,6 +116,7 @@ class hubspotV3SearchStream(hubspotStream):
             del row["properties"]
         # store archived value in _hg_archived
         row["_hg_archived"] = False
+        row = self.process_row_types(row)
         return row
 
     def _sync_records(  # noqa C901  # too complex
@@ -241,6 +242,7 @@ class hubspotV3Stream(hubspotStream):
             for name, value in row["properties"].items():
                 row[name] = value
             del row["properties"]
+        row = self.process_row_types(row)
         return row
 
 
@@ -296,6 +298,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
             for name, value in row["properties"].items():
                 row[name] = value
             del row["properties"]
+        row = self.process_row_types(row)
         return row
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
