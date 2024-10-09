@@ -349,7 +349,7 @@ class hubspotStream(RESTStream):
             if field_type == "boolean":
                 if value is None:
                     row[field] = False
-                elif not isinstance(value, bool):
+                elif isinstance(value, str):
                     # Attempt to cast to boolean
                     if value.lower() == "true":
                         row[field] = True
