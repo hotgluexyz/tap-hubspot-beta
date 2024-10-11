@@ -577,7 +577,14 @@ class FormSubmissionsStream(hubspotV1Stream):
         row = super().post_process(row, context)
         row["form_id"] = context.get("form_id")
         return row
-
+    
+    def get_next_page_token(self, response, previous_token):
+        res_json = response.json()
+        after = res_json.get("paging",{}).get("next", {}).get("after", None)
+        if after:
+            return {"after": after, "limit": 50}
+        return super().get_next_page_token(response, previous_token)
+    
 
 class OwnersStream(hubspotV3Stream):
     """Owners Stream"""
