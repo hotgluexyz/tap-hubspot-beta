@@ -886,7 +886,7 @@ class FullsyncCompaniesStream(hubspotV2Stream):
             # Make this stream auto-select if companies is selected
             self._tap.catalog["fullsync_companies"] = self._tap.catalog["companies"]
             params = self.get_url_params(dict(), None)
-            if len(urlencode(params)) > 16000:
+            if len(urlencode(params)) > 15000:
                 self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
                 # TODO: in this case we can fall back and split the requests
                 return False
