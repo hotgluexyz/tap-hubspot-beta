@@ -872,7 +872,7 @@ class FullsyncCompaniesStream(hubspotV2Stream):
         th.Property("updatedAt", th.DateTimeType)
     ]
 
-    @property
+    @cached_property
     def selected(self) -> bool:
         """Check if stream is selected.
         Returns:
@@ -885,6 +885,11 @@ class FullsyncCompaniesStream(hubspotV2Stream):
         try:
             # Make this stream auto-select if companies is selected
             self._tap.catalog["fullsync_companies"] = self._tap.catalog["companies"]
+            params = self.get_url_params(dict(), None)
+            if len(urlencode(params)) > 16000:
+                self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
+                # TODO: in this case we can fall back and split the requests
+                return False
             return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
