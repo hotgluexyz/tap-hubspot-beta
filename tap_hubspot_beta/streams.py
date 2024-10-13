@@ -869,8 +869,15 @@ class FullsyncCompaniesStream(hubspotV2Stream):
         th.Property("archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType)
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
     ]
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+        # add archived value to _hg_archived
+        row["_hg_archived"] = row["archived"]
+        return row
 
     @cached_property
     def selected(self) -> bool:
