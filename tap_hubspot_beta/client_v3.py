@@ -1,10 +1,12 @@
 """REST client handling, including hubspotStream base class."""
 
+import time
 from typing import Any, Dict, Optional, List
 import copy
 
 import requests
 from singer_sdk.helpers.jsonpath import extract_jsonpath
+import urllib
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
@@ -17,6 +19,8 @@ from singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
+
+from tap_hubspot_beta.utils import merge_responses
 
 
 class hubspotV3SearchStream(hubspotStream):
@@ -471,4 +475,64 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         for schema_message in self._generate_schema_messages():
             schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
             singer.write_message(schema_message)
+    
+    def get_params_from_url(self, url):
+        parsed_url = urllib.parse.urlparse(url)
+        return urllib.parse.parse_qs(parsed_url.query)
+
+    def split_request_generator(self, prepared_request: requests.PreparedRequest, context: Optional[dict]):
+        MAX_LEN_URL = 3000 - max(len(prop) for prop in self.selected_properties)
+        url = self.get_url(context)
+        fixed_params = self.get_params_from_url(prepared_request.url)
+        fixed_params["propertiesWithHistory"] = self.primary_keys
+        params = copy.deepcopy(fixed_params)
+        counter = 0
+
+        for prop in self.selected_properties:
+            if prop not in self.primary_keys:
+                params["propertiesWithHistory"].append(prop)
+                prepared_request.prepare_url(url, params)
+                if len(prepared_request.url) >= MAX_LEN_URL:
+                    yield prepared_request
+                    params = copy.deepcopy(fixed_params)
+                
+                # this is necessary to avoid ten_secondly_rolling limit
+                counter += 1
+                if counter == 10:
+                    time.sleep(1.5)
+                    counter = 0
+        if params != fixed_params:
+            yield prepared_request
+    
+    def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:
+        response = self.requests_session.send(prepared_request, timeout=self.timeout)
+        if self._LOG_REQUEST_METRICS:
+            extra_tags = {}
+            if self._LOG_REQUEST_METRIC_URLS:
+                extra_tags["url"] = prepared_request.path_url
+            self._write_request_duration_log(
+                endpoint=self.path,
+                response=response,
+                context=context,
+                extra_tags=extra_tags,
+            )
+        self.validate_response(response)
+        self.logger.debug("Response received successfully.")
+        return response
+
+    def _request(
+        self, prepared_request: requests.PreparedRequest, context: Optional[dict]
+    ) -> requests.Response:
+
+        authenticator = self.authenticator
+        if authenticator:
+            prepared_request.headers.update(authenticator.auth_headers or {})
+        
+        MAX_LEN_URL = 3000
+        if len(prepared_request.url) > MAX_LEN_URL:
+            responses = []
+            for req in self.split_request_generator(prepared_request, context):
+                responses.append(self._handle_request(req, context))
+            return merge_responses(responses)
+        return self._handle_request(prepared_request, context)
         
