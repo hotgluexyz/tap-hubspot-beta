@@ -1,25 +1,22 @@
 """REST client handling, including hubspotStream base class."""
 
-import time
-from typing import Any, Dict, Optional, List
 import copy
-
-import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
 import urllib
-
-from tap_hubspot_beta.client_base import hubspotStream
-from pendulum import parse
-from singer_sdk import typing as th
+import backoff
+import requests
 import singer
 
-
-from singer_sdk.exceptions import InvalidStreamSortException
+from pendulum import parse
+from singer_sdk.helpers.jsonpath import extract_jsonpath
+from singer_sdk import typing as th
+from singer_sdk.exceptions import InvalidStreamSortException, RetriableAPIError
 from singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
+from typing import Any, Dict, Optional, List
 
+from tap_hubspot_beta.client_base import hubspotStream
 from tap_hubspot_beta.utils import merge_responses
 
 
@@ -486,7 +483,6 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         fixed_params = self.get_params_from_url(prepared_request.url)
         fixed_params["propertiesWithHistory"] = self.primary_keys
         params = copy.deepcopy(fixed_params)
-        counter = 0
 
         for prop in self.selected_properties:
             if prop not in self.primary_keys:
@@ -496,14 +492,10 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
                     yield prepared_request
                     params = copy.deepcopy(fixed_params)
                 
-                # this is necessary to avoid ten_secondly_rolling limit
-                counter += 1
-                if counter == 10:
-                    time.sleep(1.5)
-                    counter = 0
         if params != fixed_params:
             yield prepared_request
     
+    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5, max_value=2)
     def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:
         response = self.requests_session.send(prepared_request, timeout=self.timeout)
         if self._LOG_REQUEST_METRICS:
