@@ -178,7 +178,9 @@ class hubspotStream(RESTStream):
                 curl_command = curlify.to_curl(response.request)
                 logging.error(f"Response code: {response.status_code}, info: {response.text}")
                 logging.error(f"CURL command for failed request: {curl_command}")
-            raise RetriableAPIError(msg)
+                logging.error("Sleeping for 60 seconds before retrying...")
+                time.sleep(60)
+                raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
             msg = (
