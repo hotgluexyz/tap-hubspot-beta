@@ -1,11 +1,12 @@
 """REST client handling, including hubspotStream base class."""
 import copy
+import json
 import logging
 
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List
+from typing import Any, Dict, Optional, Union, cast, List
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
@@ -84,6 +85,67 @@ class hubspotStream(RESTStream):
                 return parse(last_job.get("value"))
         return
 
+    def prepare_request(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Union[requests.PreparedRequest, List[requests.PreparedRequest]]:
+        http_method: str = self.rest_method
+        url: str = self.get_url(context)
+        params: Dict[str, Any] = self.get_url_params(context, next_page_token)
+        request_data: Optional[dict] = self.prepare_request_payload(context, next_page_token)
+        headers: Dict[str, str] = self.http_headers
+
+        authenticator = self.authenticator
+        if authenticator:
+            headers.update(authenticator.auth_headers or {})
+            params.update(authenticator.auth_params or {})
+
+        if "propertiesWithHistory" in params or "properties" in params:
+            properties_key: str = "propertiesWithHistory" if "propertiesWithHistory" in params else "properties"
+            if isinstance(params[properties_key], list):
+                requests_list: List[requests.PreparedRequest] = [
+                    self.requests_session.prepare_request(
+                        requests.Request(
+                            method=http_method,
+                            url=url,
+                            params={**params, properties_key: chunk},
+                            headers=headers,
+                            json=request_data,
+                        )
+                    )
+                    for chunk in params[properties_key]
+                ]
+                return requests_list
+        request: requests.PreparedRequest = cast(
+            requests.PreparedRequest,
+            self.requests_session.prepare_request(
+                requests.Request(
+                    method=http_method,
+                    url=url,
+                    params=params,
+                    headers=headers,
+                    json=request_data,
+                ),
+            ),
+        )
+        return request
+
+    def stitch_responses(self, responses: List[requests.Response]) -> requests.Response:
+        """Stitch together responses from a list of requests."""
+        # PARECE QUE NAO IMPORTA O HEADER, SEMPRE VAO VIR OS MESMOS DADOS
+        if not responses:
+            raise ValueError("No responses to stitch")
+
+        stitched_response = responses[0]
+        stitched_response_json = stitched_response.json()
+
+        for response in responses[1:]:
+            response_json = response.json()
+            for key in response_json.keys() & {"properties", "propertiesWithHistory"}:
+                stitched_response_json[key].update(response_json[key])
+
+        stitched_response._content = json.dumps(stitched_response_json).encode('utf-8')
+        return stitched_response
+
     def request_records(self, context):
         """Request records from REST endpoint(s), returning response records."""
         next_page_token = None
@@ -95,7 +157,17 @@ class hubspotStream(RESTStream):
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            resp = decorated_request(prepared_request, context)
+            resp = None
+            if prepared_request and isinstance(prepared_request, list):
+                responses_list: List[requests.Response] = [decorated_request(req, context) for req in prepared_request]
+                for r in responses_list:
+                    r.raise_for_status()
+                resp = self.stitch_responses(responses_list)
+            elif prepared_request:
+                resp: requests.Response = decorated_request(prepared_request, context)
+                resp.raise_for_status()
+            if resp is None:
+                raise RuntimeError(f"No response from {self.name} stream")
             for row in self.parse_response(resp):
                 yield row
             previous_token = copy.deepcopy(next_page_token)
