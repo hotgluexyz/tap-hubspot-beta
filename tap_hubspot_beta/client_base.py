@@ -131,7 +131,6 @@ class hubspotStream(RESTStream):
 
     def stitch_responses(self, responses: List[requests.Response]) -> requests.Response:
         """Stitch together responses from a list of requests."""
-        # PARECE QUE NAO IMPORTA O HEADER, SEMPRE VAO VIR OS MESMOS DADOS
         if not responses:
             raise ValueError("No responses to stitch")
 
