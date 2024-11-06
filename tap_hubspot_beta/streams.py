@@ -595,9 +595,16 @@ class OwnersStream(hubspotV3Stream):
         th.Property("archived", th.BooleanType),
         th.Property("userId", th.IntegerType),
         th.Property("updatedAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
     ).to_dict()
 
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        row = super().post_process(row, context)
+        row["_hg_archived"] = False
+        return row
 
 class ListsStream(hubspotV1Stream):
     """Lists Stream"""
@@ -1656,6 +1663,57 @@ class CurrenciesStream(hubspotV3Stream):
         th.Property("fromCurrencyCode", th.StringType),
         th.Property("updatedAt", th.DateTimeType),
     ).to_dict()
+
+
+class ArchivedOwnersStream(ArchivedStream):
+    """Archived Companies Stream"""
+
+    name = "owners_archived"
+    replication_key = "archivedAt"
+    path = "crm/v3/owners/?archived=true"
+    primary_keys = ["id"]
+
+    schema = OwnersStream.schema
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("owners_archived"):
+            return False
+        try:
+            # Make this stream auto-select if owners is selected
+            self._tap.catalog["owners_archived"] = self._tap.catalog["owners"]
+            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the owners stream
+            record_message.stream = "owners"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+    
+    def post_process(self, row, context):
+        # archivedAt is not in the response for static resources, using updatedAt
+        row["archivedAt"] = row["updatedAt"]
+        row = super().post_process(row, context)
+        return row
+    
 
 # Get associations for engagements streams in v3
 
