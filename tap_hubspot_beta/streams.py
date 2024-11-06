@@ -2537,17 +2537,26 @@ def get_url_params_properties_if_too_long(params, fields):
     def is_url_too_long(params):
         return len(urlencode(params)) > 3000
 
-    properties_key = next((key for key in ["propertiesWithHistory", "properties"] if key in params), None)
+    # Determine the key to use for properties
+    properties_key = None
+    for key in ["propertiesWithHistory", "properties"]:
+        if key in params:
+            properties_key = key
+            break
 
+    # If a properties key is found
     if properties_key:
+        # If the properties value is a list, check each chunk as if it was a separate request
         if isinstance(params[properties_key], list):
             for chunk in params[properties_key]:
                 params_chunk = {**params, properties_key: chunk}
                 if is_url_too_long(params_chunk):
                     params[properties_key] = fields
                     return params
+        # If the URL is too long, set the properties to the provided fields
         elif is_url_too_long(params):
             params[properties_key] = fields
+    # If no properties key is found and the URL is too long, set the properties to the provided fields
     elif is_url_too_long(params):
         params["properties"] = fields
 
