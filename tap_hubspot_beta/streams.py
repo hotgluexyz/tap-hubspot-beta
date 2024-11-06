@@ -906,9 +906,9 @@ class ArchivedCompaniesStream(hubspotV3Stream):
         return new_metadata
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archived,archivedAt"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     def post_process(self, row, context):
@@ -1001,9 +1001,9 @@ class ArchivedDealsStream(hubspotV3Stream):
     ]
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archivedAt,dealname,hubspot_owner_id,amount,hs_mrr,dealstage,pipeline,dealtype,hs_createdate,createdate,hs_lastmodifieddate,closedate,archived"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archivedAt,dealname,hubspot_owner_id,amount,hs_mrr,dealstage,pipeline,dealtype,hs_createdate,createdate,hs_lastmodifieddate,closedate,archived"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     @property
@@ -1184,9 +1184,9 @@ class ArchivedLineItemsStream(hubspotV3Stream):
             singer.write_message(record_message)
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archived,archivedAt"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     def post_process(self, row, context):
@@ -2531,4 +2531,24 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
-    ).to_dict() 
+    ).to_dict()
+    
+def get_url_params_properties_if_too_long(params, fields):
+    def is_url_too_long(params):
+        return len(urlencode(params)) > 3000
+
+    properties_key = next((key for key in ["propertiesWithHistory", "properties"] if key in params), None)
+
+    if properties_key:
+        if isinstance(params[properties_key], list):
+            for chunk in params[properties_key]:
+                params_chunk = {**params, properties_key: chunk}
+                if is_url_too_long(params_chunk):
+                    params[properties_key] = fields
+                    return params
+        elif is_url_too_long(params):
+            params[properties_key] = fields
+    elif is_url_too_long(params):
+        params["properties"] = fields
+
+    return params
