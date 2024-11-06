@@ -1666,7 +1666,7 @@ class CurrenciesStream(hubspotV3Stream):
 
 
 class ArchivedOwnersStream(ArchivedStream):
-    """Archived Companies Stream"""
+    """Archived Owners Stream"""
 
     name = "owners_archived"
     replication_key = "archivedAt"
