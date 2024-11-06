@@ -1687,7 +1687,7 @@ class ArchivedOwnersStream(ArchivedStream):
         try:
             # Make this stream auto-select if owners is selected
             self._tap.catalog["owners_archived"] = self._tap.catalog["owners"]
-            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+            return self.mask.get((), False) or self._tap.catalog["owners"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
 
