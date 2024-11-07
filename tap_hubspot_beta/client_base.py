@@ -141,6 +141,8 @@ class hubspotStream(RESTStream):
             response_json = response.json()
             for key in response_json.keys() & {"properties", "propertiesWithHistory"}:
                 stitched_response_json[key].update(response_json[key])
+            # Clear the response content to free memory
+            response._content = None
 
         stitched_response._content = json.dumps(stitched_response_json).encode('utf-8')
         return stitched_response
@@ -156,16 +158,13 @@ class hubspotStream(RESTStream):
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            resp = None
-            if prepared_request and isinstance(prepared_request, list):
-                responses_list: List[requests.Response] = [decorated_request(req, context) for req in prepared_request]
-                for r in responses_list:
-                    r.raise_for_status()
-                resp = self.stitch_responses(responses_list)
-            elif prepared_request:
-                resp: requests.Response = decorated_request(prepared_request, context)
-                resp.raise_for_status()
-            if resp is None:
+            if prepared_request:
+                if isinstance(prepared_request, list):
+                    resp = self.get_multiple_requests_by_parameter_splitting(context, decorated_request, prepared_request)
+                else:
+                    resp = decorated_request(prepared_request, context)
+                    resp.raise_for_status()
+            else:
                 raise RuntimeError(f"No response from {self.name} stream")
             for row in self.parse_response(resp):
                 yield row
@@ -179,6 +178,17 @@ class hubspotStream(RESTStream):
                     f"Pagination token {next_page_token} is identical to prior token."
                 )
             finished = not next_page_token
+
+    def get_multiple_requests_by_parameter_splitting(self, context, decorated_request, prepared_request):
+        responses_list: List[requests.Response] = []
+        for req in prepared_request:
+            response = decorated_request(req, context)
+            response.raise_for_status()
+            responses_list.append(response)
+        stitched_response = self.stitch_responses(responses_list)
+        # Clear the responses list to free memory
+        responses_list.clear()
+        return stitched_response
 
     @property
     def authenticator(self) -> OAuth2Authenticator:

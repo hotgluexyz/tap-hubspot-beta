@@ -1,6 +1,6 @@
 """hubspot tap class."""
 
-from typing import List
+from typing import Generator, List
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
@@ -222,9 +222,10 @@ class Taphubspot(Tap):
         th.Property("access_token", th.StringType),
     ).to_dict()
 
-    def discover_streams(self) -> List[Stream]:
+    def discover_streams(self) -> Generator[Stream, None, None]:
         """Return a list of discovered streams."""
-        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        for stream_class in STREAM_TYPES:
+            yield stream_class(tap=self)
 
     @property
     def catalog_dict(self) -> dict:
