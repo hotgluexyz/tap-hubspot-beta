@@ -554,6 +554,7 @@ class FormsStream(hubspotV3Stream):
         """Return a context dictionary for child streams."""
         return {
             "form_id": record["id"],
+            "formType": record["formType"],
         }
 
 
@@ -574,10 +575,19 @@ class FormSubmissionsStream(hubspotV1Stream):
         th.Property("submittedAt", th.DateTimeType),
     ).to_dict()
 
+    def request_records(self, context):
+        # https://developers.hubspot.com/beta-docs/reference/api/marketing/forms/v1
+        # this endpoint only works for the formType bellow
+        if context.get("formType", "").lower() in ["hubspot", "flow", "captured"]:
+            return super().request_records(context)
+        self.logger.warning(f"Skiping submissions for form_id={context.get('form_id')}. formType={context.get('formType')}. url={self.get_url(context)}")
+        yield None
+
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
-        row["form_id"] = context.get("form_id")
+        if row:
+            row["form_id"] = context.get("form_id")
         return row
 
 
