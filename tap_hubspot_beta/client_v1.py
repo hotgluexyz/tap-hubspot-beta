@@ -56,13 +56,13 @@ class hubspotV1Stream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
+        if self.properties_url and row:
             if row.get("properties"):
                 for name, value in row.get("properties", {}).items():
                     row[name] = value.get("value")
                 del row["properties"]
         for field in self.datetime_fields:
-            if row.get(field) is not None:
+            if row and row.get(field) is not None:
                 if row.get(field) in [0, ""]:
                     row[field] = None
                 else:

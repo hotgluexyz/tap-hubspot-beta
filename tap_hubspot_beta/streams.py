@@ -554,6 +554,7 @@ class FormsStream(hubspotV3Stream):
         """Return a context dictionary for child streams."""
         return {
             "form_id": record["id"],
+            "formType": record["formType"],
         }
 
 
@@ -574,10 +575,19 @@ class FormSubmissionsStream(hubspotV1Stream):
         th.Property("submittedAt", th.DateTimeType),
     ).to_dict()
 
+    def request_records(self, context):
+        # https://developers.hubspot.com/beta-docs/reference/api/marketing/forms/v1
+        # this endpoint only works for the formType bellow
+        if context.get("formType", "").lower() in ["hubspot", "flow", "captured"]:
+            return super().request_records(context)
+        self.logger.warning(f"Skiping submissions for form_id={context.get('form_id')}. formType={context.get('formType')}. url={self.get_url(context)}")
+        yield None
+
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
-        row["form_id"] = context.get("form_id")
+        if row:
+            row["form_id"] = context.get("form_id")
         return row
 
 
@@ -906,9 +916,9 @@ class ArchivedCompaniesStream(hubspotV3Stream):
         return new_metadata
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archived,archivedAt"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     def post_process(self, row, context):
@@ -1001,9 +1011,9 @@ class ArchivedDealsStream(hubspotV3Stream):
     ]
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archivedAt,dealname,hubspot_owner_id,amount,hs_mrr,dealstage,pipeline,dealtype,hs_createdate,createdate,hs_lastmodifieddate,closedate,archived"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archivedAt,dealname,hubspot_owner_id,amount,hs_mrr,dealstage,pipeline,dealtype,hs_createdate,createdate,hs_lastmodifieddate,closedate,archived"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     @property
@@ -1184,9 +1194,9 @@ class ArchivedLineItemsStream(hubspotV3Stream):
             singer.write_message(record_message)
 
     def get_url_params(self, context, next_page_token):
+        fields = "id,createdAt,updatedAt,archived,archivedAt"
         params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        params = get_url_params_properties_if_too_long(params, fields)
         return params
 
     def post_process(self, row, context):
@@ -2531,4 +2541,33 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("breakdowns", th.CustomType({"type": ["array", "string"]})),
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
-    ).to_dict() 
+    ).to_dict()
+    
+def get_url_params_properties_if_too_long(params, fields):
+    def is_url_too_long(params):
+        return len(urlencode(params)) > 3000
+
+    # Determine the key to use for properties
+    properties_key = None
+    for key in ["propertiesWithHistory", "properties"]:
+        if key in params:
+            properties_key = key
+            break
+
+    # If a properties key is found
+    if properties_key:
+        # If the properties value is a list, check each chunk as if it was a separate request
+        if isinstance(params[properties_key], list):
+            for chunk in params[properties_key]:
+                params_chunk = {**params, properties_key: chunk}
+                if is_url_too_long(params_chunk):
+                    params[properties_key] = fields
+                    return params
+        # If the URL is too long, set the properties to the provided fields
+        elif is_url_too_long(params):
+            params[properties_key] = fields
+    # If no properties key is found and the URL is too long, set the properties to the provided fields
+    elif is_url_too_long(params):
+        params["properties"] = fields
+
+    return params

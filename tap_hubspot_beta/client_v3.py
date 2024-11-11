@@ -310,10 +310,11 @@ class hubspotV3Stream(hubspotStream):
         if self.properties_url:
             # requesting either properties or properties with history
             # if we send both it returns an error saying the url is too long
-            if params.get("propertiesWithHistory"):
-                params["propertiesWithHistory"] = ",".join(self.selected_properties)
-            else:
-                params["properties"] = ",".join(self.selected_properties)
+            properties_key = "propertiesWithHistory" if params.get("propertiesWithHistory") else "properties"
+            params[properties_key] = [
+                ",".join(self.selected_properties[i:i + 100])
+                for i in range(0, len(self.selected_properties), 100)
+            ]
         if next_page_token:
             params["after"] = next_page_token
         if self.name == "forms":
