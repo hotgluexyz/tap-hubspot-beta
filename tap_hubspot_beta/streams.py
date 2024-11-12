@@ -579,9 +579,11 @@ class FormSubmissionsStream(hubspotV1Stream):
         # https://developers.hubspot.com/beta-docs/reference/api/marketing/forms/v1
         # this endpoint only works for the formType bellow
         if context.get("formType", "").lower() in ["hubspot", "flow", "captured"]:
-            return super().request_records(context)
-        self.logger.warning(f"Skiping submissions for form_id={context.get('form_id')}. formType={context.get('formType')}. url={self.get_url(context)}")
-        yield None
+            records = super().request_records(context)
+            yield from records
+        else:
+            self.logger.warning(f"Skiping submissions for form_id={context.get('form_id')}. formType={context.get('formType')}. url={self.get_url(context)}")
+            yield None
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
