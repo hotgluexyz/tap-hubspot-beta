@@ -805,14 +805,6 @@ class ContactsV3Stream(ObjectSearchV3):
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
 
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
-        return row
-
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
