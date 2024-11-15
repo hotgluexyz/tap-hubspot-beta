@@ -594,6 +594,7 @@ class OwnersStream(hubspotV3Stream):
         th.Property("teams", th.CustomType({"type": ["array", "string"]})),
         th.Property("archived", th.BooleanType),
         th.Property("userId", th.IntegerType),
+        th.Property("userIdIncludingInactive", th.IntegerType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("archivedAt", th.DateTimeType),
