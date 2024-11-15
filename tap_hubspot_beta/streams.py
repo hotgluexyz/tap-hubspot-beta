@@ -1670,7 +1670,7 @@ class ArchivedOwnersStream(ArchivedStream):
     """Archived Owners Stream"""
 
     name = "owners_archived"
-    replication_key = None
+    replication_key = "archivedAt"
     path = "crm/v3/owners/?archived=true"
     primary_keys = ["id"]
 
