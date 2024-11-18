@@ -843,12 +843,14 @@ class ArchivedStream(hubspotV3Stream):
 
         # add archived value to _hg_archived
         row["_hg_archived"] = True
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-        return None
+        rep_key = self.get_starting_timestamp(context)
+        if rep_key:
+            rep_key = rep_key.replace(tzinfo=pytz.utc)
+            archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+            if archived_at > rep_key:
+                return row
+            return None
+        return row
 
 
 class CompaniesStream(ObjectSearchV3):
@@ -1670,7 +1672,7 @@ class ArchivedOwnersStream(ArchivedStream):
     """Archived Owners Stream"""
 
     name = "owners_archived"
-    replication_key = "archivedAt"
+    replication_key = None
     path = "crm/v3/owners/?archived=true"
     primary_keys = ["id"]
 
