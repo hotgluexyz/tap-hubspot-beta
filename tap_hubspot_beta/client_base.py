@@ -13,7 +13,6 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
 import time
 
 from pendulum import parse
@@ -294,14 +293,15 @@ class hubspotStream(RESTStream):
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 ProtocolError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=8,
+            factor=3,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -368,11 +368,3 @@ class hubspotStreamSchema(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         return params
-
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
