@@ -1,10 +1,12 @@
 """hubspot tap class."""
 
-from typing import List
+from typing import Any, Dict, List
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
+from singer_sdk.exceptions import FatalAPIError
 
+from tap_hubspot_beta.client_v3 import hubspotV3Stream
 from tap_hubspot_beta.streams import (
     AccountStream,
     AssociationDealsCompaniesStream,
@@ -69,6 +71,7 @@ from tap_hubspot_beta.streams import (
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    DiscoverCustomObjectsStream,
 )
 
 STREAM_TYPES = [
@@ -137,6 +140,16 @@ STREAM_TYPES = [
     AssociationTasksDealsStream,
 ]
 
+TYPE_MAPPING = {
+    "string": th.StringType,
+    "enumeration": th.StringType,
+    "boolean": th.BooleanType,
+    "integer": th.IntegerType,
+    "number": th.IntegerType,
+    "datetime": th.DateTimeType,
+    "date": th.DateType,
+    "array": th.ArrayType(th.CustomType({"type": ["object", "string", "null"]})),
+}
 
 class Taphubspot(Tap):
     """hubspot tap class."""
@@ -166,7 +179,15 @@ class Taphubspot(Tap):
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        streams = [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        try:
+            discover_stream = DiscoverCustomObjectsStream(tap=self)
+            for record in discover_stream.get_records(context={}):
+                stream_class = self.generate_stream_class(record)
+                streams.append(stream_class(tap=self))
+        except FatalAPIError as exc:
+            self.logger.info(f"failed to discover custom objects. Error={exc}")
+        return streams
 
     @property
     def catalog_dict(self) -> dict:
@@ -186,6 +207,54 @@ class Taphubspot(Tap):
                     for field in stream["schema"]["properties"]:
                         stream["schema"]["properties"][field]["field_meta"] = stream_class.fields_metadata.get(field, {})
         return catalog
+
+    def generate_stream_class(self, custom_object: Dict[str, Any]) -> hubspotV3Stream:
+        # check for required fields to construct the custom objects class
+        _id = custom_object.get("id")
+        if not _id:
+            raise ValueError(f"Missing id in custom object. object={custom_object}.")
+        name = custom_object.get("name")
+        if not name:
+            raise ValueError(f"Missing name in custom object. id={_id}.")
+        object_type_id = custom_object.get("objectTypeId")
+        if not object_type_id:
+            raise ValueError(f"Missing objectTypeId in custom object. id={_id}. name={name}")
+        properties = custom_object.get("properties")
+        if not properties:
+            raise ValueError(f"Missing properties in custom object. id={_id}. name={name}. object_type_id={object_type_id}")
+        
+        if custom_object.get("archived", False):
+            name = "archived_" + name
+        class_name = name + "_Stream"
+        class_name = "".join(word.capitalize() for word in class_name.split("_"))
+
+        self.logger.info(f"Creating class {class_name}")
+
+        return type(
+            class_name,
+            (hubspotV3Stream,),
+            {
+                "name": name,
+                "path": f"crm/v3/objects/{object_type_id}/",
+                "records_jsonpath": "$.results[*]",
+                "primary_keys": [p.get("name") for p in properties if p.get("hasUniqueValue", False)],
+                "replication_key": None,
+                "page_size": 100,
+                "schema": self.generate_schema(properties),
+            },
+        )
+
+    def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
+        properties_list = []
+        for property in properties:
+            field_name = property.get("name")
+            field_type = property.get("type")
+            if not field_name:
+                self.logger.info(f"Skipping field without name.")
+                continue
+            th_type = TYPE_MAPPING.get(field_type, th.StringType)
+            properties_list.append(th.Property(field_name, th_type))
+        return th.PropertiesList(*properties_list).to_dict()
 
 
 if __name__ == "__main__":
