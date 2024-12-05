@@ -140,17 +140,6 @@ STREAM_TYPES = [
     AssociationTasksDealsStream,
 ]
 
-TYPE_MAPPING = {
-    "string": th.StringType,
-    "enumeration": th.StringType,
-    "boolean": th.BooleanType,
-    "integer": th.IntegerType,
-    "number": th.IntegerType,
-    "datetime": th.DateTimeType,
-    "date": th.DateType,
-    "array": th.ArrayType(th.CustomType({"type": ["object", "string", "null"]})),
-}
-
 class Taphubspot(Tap):
     """hubspot tap class."""
 
@@ -237,22 +226,21 @@ class Taphubspot(Tap):
                 "name": name,
                 "path": f"crm/v3/objects/{object_type_id}/",
                 "records_jsonpath": "$.results[*]",
-                "primary_keys": [p.get("name") for p in properties if p.get("hasUniqueValue", False)],
-                "replication_key": None,
+                "primary_keys": ["id"],
+                "replication_key": "updatedAt",
                 "page_size": 100,
                 "schema": self.generate_schema(properties),
             },
         )
 
     def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
-        properties_list = []
+        properties_list = [th.Property("id", th.StringType), th.Property("updatedAt", th.DateTimeType)]
         for property in properties:
             field_name = property.get("name")
-            field_type = property.get("type")
             if not field_name:
                 self.logger.info(f"Skipping field without name.")
                 continue
-            th_type = TYPE_MAPPING.get(field_type, th.StringType)
+            th_type = hubspotV3Stream.extract_type(property, self.config.get("type_booleancheckbox_as_boolean"))
             properties_list.append(th.Property(field_name, th_type))
         return th.PropertiesList(*properties_list).to_dict()
 
