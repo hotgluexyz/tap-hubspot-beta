@@ -172,11 +172,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            #We need logs for 500
             if response.status_code == 500:
                 req = response.request
-                logging.error(f"Response code: {response.status_code}, info: {response.text}")
-                logging.error(f"Failed request: url={req.url}, method={req.method}, body={req.body}")
+                logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
@@ -185,13 +183,11 @@ class hubspotStream(RESTStream):
                 f"{response.reason} for path: {self.path}"
             )
             req = response.request
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"Failed request: url={req.url}, method={req.method}, body={req.body}")
+            logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             if "FORM_TYPE_NOT_ALLOWED" in response.text:
                 #Skip this form and continue the sync
                 return
-            #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
-            if "invalid json input" in response.text.lower():
+            if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
                 raise RetriableAPIError(msg)
             raise FatalAPIError(msg)
 
