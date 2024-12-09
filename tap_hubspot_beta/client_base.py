@@ -386,6 +386,7 @@ class hubspotStream(RESTStream):
             ),
             max_tries=self.backoff_max_tries,
             on_backoff=self.backoff_handler,
+            jitter=backoff.random_jitter
         )(func)
         return decorator
     
