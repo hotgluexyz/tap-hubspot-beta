@@ -1763,4 +1763,11 @@ class DiscoverCustomObjectsStream(hubspotV3Stream):
             th.Property("updatedAt", th.StringType),
         ))),
         th.Property("name", th.StringType),
+        th.Property("showCurrencySymbol", th.BooleanType),
+        th.Property("hubspotDefined", th.BooleanType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("referencedObjectType", th.StringType),
+        th.Property("calculationFormula", th.StringType),
     ).to_dict()
