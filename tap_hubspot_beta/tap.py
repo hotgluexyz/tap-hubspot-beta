@@ -199,18 +199,19 @@ class Taphubspot(Tap):
 
     def generate_stream_class(self, custom_object: Dict[str, Any]) -> hubspotV3Stream:
         # check for required fields to construct the custom objects class
-        _id = custom_object.get("id")
-        if not _id:
-            raise ValueError(f"Missing id in custom object. object={custom_object}.")
+        required_fields = ["id", "name", "objectTypeId", "properties"]
+        errors = []
+        for field in required_fields:
+            if not custom_object.get(field):
+                errors.append(f"Missing {field} in custom object.")
+        if errors:
+            errors.append(f"Failed custom_object={custom_object}.")
+            error_msg = "\n".join(errors)
+            raise ValueError(error_msg)
+
         name = custom_object.get("name")
-        if not name:
-            raise ValueError(f"Missing name in custom object. id={_id}.")
         object_type_id = custom_object.get("objectTypeId")
-        if not object_type_id:
-            raise ValueError(f"Missing objectTypeId in custom object. id={_id}. name={name}")
         properties = custom_object.get("properties")
-        if not properties:
-            raise ValueError(f"Missing properties in custom object. id={_id}. name={name}. object_type_id={object_type_id}")
         
         if custom_object.get("archived", False):
             name = "archived_" + name
