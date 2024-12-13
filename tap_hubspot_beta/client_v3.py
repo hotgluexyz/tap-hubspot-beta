@@ -189,6 +189,7 @@ class hubspotV3Stream(hubspotStream):
 
     records_jsonpath = "$.results[*]"
     next_page_token_jsonpath = "$.paging.next.after"
+    marketing_streams = ["campaigns"]
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
@@ -206,13 +207,17 @@ class hubspotV3Stream(hubspotStream):
         params.update(self.additional_prarams)
         if self.properties_url:
             params["properties"] = ",".join(self.selected_properties)
+        if self.name in self.marketing_streams:
+            default_properties = ["id", "createdAt", "updatedAt"]
+            properties = [prop for prop in self.selected_properties if prop not in default_properties]
+            params["properties"] = ",".join(properties)
         if next_page_token:
             params["after"] = next_page_token
         return params
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
+        if self.properties_url or self.name in self.marketing_streams:
             for name, value in row["properties"].items():
                 row[name] = value
             del row["properties"]
