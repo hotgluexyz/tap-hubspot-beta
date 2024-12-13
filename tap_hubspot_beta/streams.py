@@ -2533,22 +2533,15 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("end_date", th.DateType),
     ).to_dict() 
 
-class LeadsStream(hubspotV3Stream):
+class LeadsStream(ObjectSearchV3):
     """Leads Stream"""
+
     name = "leads"
-    path = "crm/v3/objects/leads"
-    primary_keys = ["id"]
-    replication_key = None
+    path = "crm/v3/objects/leads/search"
     properties_url = "crm/v3/properties/leads"
-    
-    base_properties = [
-        th.Property("id", th.StringType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-    ]
-    
+
+    replication_key_filter = "hs_lastmodifieddate"
+
     @cached_property
     def schema(self):
         properties = copy.deepcopy(self.base_properties)
