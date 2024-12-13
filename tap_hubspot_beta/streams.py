@@ -2532,3 +2532,34 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
     ).to_dict() 
+
+class LeadsStream(hubspotV3Stream):
+    """Leads Stream"""
+    name = "leads"
+    path = "crm/v3/objects/leads"
+    primary_keys = ["id"]
+    replication_key = None
+    properties_url = "crm/v3/properties/leads"
+    
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+    ]
+    
+    @cached_property
+    def schema(self):
+        properties = copy.deepcopy(self.base_properties)
+        headers = self.http_headers
+        headers.update(self.authenticator.auth_headers or {})
+        url = self.url_base + self.properties_url
+        response = self.request_decorator(self.request_schema)(url, headers=headers)
+
+        fields = response.json().get("results",[])
+        for field in fields:
+            if not field.get("deleted"):
+                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
+                properties.append(property)
+        return th.PropertiesList(*properties).to_dict()

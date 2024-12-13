@@ -97,7 +97,8 @@ from tap_hubspot_beta.streams import (
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     DealsHistoryPropertiesStream,
-    ContactsHistoryPropertiesStream
+    ContactsHistoryPropertiesStream,
+    LeadsStream
 )
 
 STREAM_TYPES = [
@@ -192,7 +193,8 @@ STREAM_TYPES = [
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     DealsHistoryPropertiesStream,
-    ContactsHistoryPropertiesStream
+    ContactsHistoryPropertiesStream,
+    LeadsStream
 ]
 
 
