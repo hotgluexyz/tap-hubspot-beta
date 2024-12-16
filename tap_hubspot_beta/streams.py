@@ -1449,7 +1449,7 @@ class QuotesStream(ObjectSearchV3):
     properties_url = "properties/v2/quotes/properties"
 
 
-class CampaignssStream(hubspotV3Stream):
+class CampaignsStream(hubspotV3Stream):
     """Products Stream"""
 
     name = "campaigns"
