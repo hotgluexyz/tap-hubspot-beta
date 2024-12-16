@@ -1450,7 +1450,7 @@ class QuotesStream(ObjectSearchV3):
 
 
 class CampaignsStream(hubspotV3Stream):
-    """Products Stream"""
+    """Campaigns Stream"""
 
     name = "campaigns"
     path = "marketing/v3/campaigns"
