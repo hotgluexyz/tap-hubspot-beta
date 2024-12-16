@@ -1449,6 +1449,33 @@ class QuotesStream(ObjectSearchV3):
     properties_url = "properties/v2/quotes/properties"
 
 
+class CampaignsStream(hubspotV3Stream):
+    """Campaigns Stream"""
+
+    name = "campaigns"
+    path = "marketing/v3/campaigns"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("hs_name", th.StringType),
+        th.Property("hs_start_date", th.DateTimeType),
+        th.Property("hs_end_date", th.DateTimeType),
+        th.Property("hs_notes", th.StringType),
+        th.Property("hs_audience", th.StringType),
+        th.Property("hs_goal", th.StringType),
+        th.Property("hs_currency_code", th.StringType),
+        th.Property("hs_campaign_status", th.StringType),
+        th.Property("hs_owner", th.StringType),
+        th.Property("hs_color_hex", th.StringType),
+        th.Property("hs_created_by_user_id", th.StringType),
+        th.Property("hs_object_id", th.StringType),
+        th.Property("hs_budget_items_sum_amount", th.StringType),
+        th.Property("hs_spend_items_sum_amount", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
+
+
 class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""
 
