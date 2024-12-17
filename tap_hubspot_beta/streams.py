@@ -2541,18 +2541,3 @@ class LeadsStream(ObjectSearchV3):
     properties_url = "crm/v3/properties/leads"
 
     replication_key_filter = "hs_lastmodifieddate"
-
-    @cached_property
-    def schema(self):
-        properties = copy.deepcopy(self.base_properties)
-        headers = self.http_headers
-        headers.update(self.authenticator.auth_headers or {})
-        url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
-
-        fields = response.json().get("results",[])
-        for field in fields:
-            if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
-                properties.append(property)
-        return th.PropertiesList(*properties).to_dict()

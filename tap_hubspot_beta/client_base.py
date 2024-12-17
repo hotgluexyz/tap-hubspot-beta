@@ -219,7 +219,7 @@ class hubspotStream(RESTStream):
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
 
-        fields = response.json()
+        fields = response.json().get("results",[]) if response.json.get("results") else response.json()
         for field in fields:
             if not field.get("deleted"):
                 property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
