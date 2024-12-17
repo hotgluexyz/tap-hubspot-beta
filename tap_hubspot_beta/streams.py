@@ -2532,3 +2532,12 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
     ).to_dict() 
+
+class LeadsStream(ObjectSearchV3):
+    """Leads Stream"""
+
+    name = "leads"
+    path = "crm/v3/objects/leads/search"
+    properties_url = "crm/v3/properties/leads"
+
+    replication_key_filter = "hs_lastmodifieddate"
