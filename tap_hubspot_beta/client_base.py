@@ -453,10 +453,3 @@ class hubspotStreamSchema(hubspotStream):
             params.update(next_page_token)
         return params
 
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
