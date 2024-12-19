@@ -163,7 +163,7 @@ class hubspotStream(RESTStream):
                     resp = self.get_multiple_requests_by_parameter_splitting(context, decorated_request, prepared_request)
                 else:
                     resp = decorated_request(prepared_request, context)
-                    resp.raise_for_status()
+                    self.validate_response(resp)
             else:
                 raise RuntimeError(f"No response from {self.name} stream")
             for row in self.parse_response(resp):
@@ -183,7 +183,7 @@ class hubspotStream(RESTStream):
         responses_list: List[requests.Response] = []
         for req in prepared_request:
             response = decorated_request(req, context)
-            response.raise_for_status()
+            self.validate_response(response)
             responses_list.append(response)
         stitched_response = self.stitch_responses(responses_list)
         # Clear the responses list to free memory
@@ -380,7 +380,6 @@ class hubspotStream(RESTStream):
             backoff.expo,
             (
                 RetriableAPIError,
-                requests.exceptions.HTTPError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 ProtocolError
