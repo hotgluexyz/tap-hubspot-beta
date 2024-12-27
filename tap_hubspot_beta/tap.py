@@ -235,14 +235,27 @@ class Taphubspot(Tap):
         )
 
     def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
-        properties_list = [th.Property("id", th.StringType), th.Property("updatedAt", th.DateTimeType)]
+        inner_properties = []
+        properties_list = [
+            th.Property("id", th.StringType),
+            th.Property("updatedAt", th.DateTimeType), 
+            th.Property("createdAt", th.DateTimeType), 
+            th.Property("archived", th.BooleanType)
+        ]
+        main_properties = [p.name for p in properties_list]
+
         for property in properties:
             field_name = property.get("name")
+            if field_name in main_properties:
+                self.logger.info(f"Skipping field, it is a default field and already included.")
+                continue
             if not field_name:
                 self.logger.info(f"Skipping field without name.")
                 continue
             th_type = hubspotV3Stream.extract_type(property, self.config.get("type_booleancheckbox_as_boolean"))
-            properties_list.append(th.Property(field_name, th_type))
+            inner_properties.append(th.Property(field_name, th_type))
+        if inner_properties:
+            properties_list.append(th.Property("properties", th.ObjectType(*inner_properties)))
         return th.PropertiesList(*properties_list).to_dict()
 
 
