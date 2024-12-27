@@ -224,6 +224,15 @@ class hubspotV3Stream(hubspotStream):
         return row
 
 
+class DynamicDiscoveredHubspotV3Stream(hubspotV3Stream):
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        for name, value in row["properties"].items():
+            row[name] = value
+        del row["properties"]
+        return row
+
+
 class hubspotV3SingleSearchStream(hubspotStream):
     """hubspot stream class."""
 
