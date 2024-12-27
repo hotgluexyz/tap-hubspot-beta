@@ -6,7 +6,7 @@ from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError
 
-from tap_hubspot_beta.client_v3 import hubspotV3Stream
+from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
 from tap_hubspot_beta.streams import (
     AccountStream,
     AssociationDealsCompaniesStream,
@@ -224,7 +224,7 @@ class Taphubspot(Tap):
 
         return type(
             class_name,
-            (hubspotV3Stream,),
+            (DynamicDiscoveredHubspotV3Stream,),
             {
                 "name": name,
                 "path": f"crm/v3/objects/{object_type_id}/",
@@ -233,11 +233,11 @@ class Taphubspot(Tap):
                 "replication_key": "updatedAt",
                 "page_size": 100,
                 "schema": self.generate_schema(properties),
+                "is_custom_stream": True,
             },
         )
 
     def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
-        inner_properties = []
         properties_list = [
             th.Property("id", th.StringType),
             th.Property("updatedAt", th.DateTimeType), 
@@ -255,9 +255,7 @@ class Taphubspot(Tap):
                 self.logger.info(f"Skipping field without name.")
                 continue
             th_type = hubspotV3Stream.extract_type(property, self.config.get("type_booleancheckbox_as_boolean"))
-            inner_properties.append(th.Property(field_name, th_type))
-        if inner_properties:
-            properties_list.append(th.Property("properties", th.ObjectType(*inner_properties)))
+            properties_list.append(th.Property(field_name, th_type))
         return th.PropertiesList(*properties_list).to_dict()
 
 
