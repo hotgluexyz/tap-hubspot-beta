@@ -163,7 +163,7 @@ class hubspotStream(RESTStream):
                     resp = self.get_multiple_requests_by_parameter_splitting(context, decorated_request, prepared_request)
                 else:
                     resp = decorated_request(prepared_request, context)
-                    resp.raise_for_status()
+                    self.validate_response(resp)
             else:
                 raise RuntimeError(f"No response from {self.name} stream")
             for row in self.parse_response(resp):
@@ -183,7 +183,7 @@ class hubspotStream(RESTStream):
         responses_list: List[requests.Response] = []
         for req in prepared_request:
             response = decorated_request(req, context)
-            response.raise_for_status()
+            self.validate_response(response)
             responses_list.append(response)
         stitched_response = self.stitch_responses(responses_list)
         # Clear the responses list to free memory
@@ -377,14 +377,15 @@ class hubspotStream(RESTStream):
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 ProtocolError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=8,
+            factor=3,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -452,10 +453,3 @@ class hubspotStreamSchema(hubspotStream):
             params.update(next_page_token)
         return params
 
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
