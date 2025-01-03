@@ -683,8 +683,8 @@ class DealsPipelinesStream(hubspotV1Stream):
         # Sort data by stageId and by updatedAt (None values at the end)
         stages_.sort(
             key=lambda x: (
-                x["stageId"],
-                x["updatedAt"] if x["updatedAt"] is not None else float("-inf"),
+                x["stageId"] if x["stageId"] is not None else "z",  # Handle None the highest value for a string
+                x["updatedAt"] if x["updatedAt"] is not None else float("-inf")  # Handle None in updatedAt
             ),
             reverse=True,
         )
@@ -701,14 +701,15 @@ class DealsPipelinesStream(hubspotV1Stream):
             if best is None:
                 best = group[0]
             # change active value to false (to know it's a deleted stage) and add it to the row
+            created_at = next(iter([stage.get("createdAt") for stage in group if stage.get("createdAt")]), None)
             row["stages"].append(
                 {
-                    "label": best["label"],
-                    "displayOrder": best["displayOrder"],
-                    "metadata": best["metadata"],
-                    "stageId": best["stageId"],
-                    "createdAt": best["createdAt"],
-                    "updatedAt": best["updatedAt"],
+                    "label": best.get("label"),
+                    "displayOrder": best.get("displayOrder"),
+                    "metadata": best.get("metadata"),
+                    "stageId": best.get("stageId"),
+                    "createdAt": created_at,
+                    "updatedAt": best.get("updatedAt"),
                     "active": False,
                 }
             )
