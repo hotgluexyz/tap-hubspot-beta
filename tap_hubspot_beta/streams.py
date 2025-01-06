@@ -680,10 +680,13 @@ class DealsPipelinesStream(hubspotV1Stream):
             obj_stages = json.loads(obj.get("rawObject", "{}")).get("stages") or []
             stages_.extend(obj_stages)
 
+        # drop stages with stageId null
+        stages_ = [stage for stage in stages_ if stage.get("stageId")]
+
         # Sort data by stageId and by updatedAt (None values at the end)
         stages_.sort(
             key=lambda x: (
-                x["stageId"] if x["stageId"] is not None else "z",  # Handle None the highest value for a string
+                x["stageId"],
                 x["updatedAt"] if x["updatedAt"] is not None else float("-inf")  # Handle None in updatedAt
             ),
             reverse=True,
