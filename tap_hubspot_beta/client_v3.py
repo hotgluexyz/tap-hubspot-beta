@@ -65,6 +65,7 @@ class hubspotV3SearchStream(hubspotStream):
             if start_date:
                 start_date = parse(start_date)
                 self.starting_time = int(start_date.timestamp() * 1000)
+                self.logger.info(f"Reached pagination beyond 10000, moving start date to: {self.starting_time}")
             next_page_token = "0"
         return next_page_token
 
@@ -99,6 +100,7 @@ class hubspotV3SearchStream(hubspotStream):
                     payload["properties"] = self.selected_properties
             else:
                 payload["properties"] = []
+        self.logger.info(f"Stream: {self.name} - Path:{self.path} - Request payload: {payload}")
         return payload
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
