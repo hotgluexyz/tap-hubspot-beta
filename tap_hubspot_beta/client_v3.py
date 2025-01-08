@@ -81,8 +81,7 @@ class hubspotV3SearchStream(hubspotStream):
         if self.filter:
             payload["filters"].append(self.filter)
 
-        # DELETE LATER
-        next_page_token = next_page_token or "100"
+        next_page_token = next_page_token
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
