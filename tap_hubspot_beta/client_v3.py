@@ -40,6 +40,7 @@ class hubspotV3SearchStream(hubspotStream):
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
         if next_page_token == "10000":
+            self.logger.info(f"Pagination GT 10000 - PROGRESS MARKERS: {self.stream_state} - STREAM IDENTIFIER {self.identifier}")
             start_date = self.stream_state.get("progress_markers", {}).get(
                 "replication_key_value"
             )
@@ -79,6 +80,9 @@ class hubspotV3SearchStream(hubspotStream):
         starting_time = self.starting_time or self.get_starting_time(context)
         if self.filter:
             payload["filters"].append(self.filter)
+
+        # DELETE LATER
+        next_page_token = next_page_token or "100"
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:

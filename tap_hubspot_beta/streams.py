@@ -150,6 +150,7 @@ class ContactsStream(hubspotV1Stream):
     replication_key = None
     additional_prarams = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
+    identifier = 1
 
     base_properties = [
         th.Property("vid", th.IntegerType),
@@ -758,6 +759,7 @@ class ContactsV3Stream(ObjectSearchV3):
     name = "contacts_v3"
     path = "crm/v3/objects/contacts/search"
     properties_url = "properties/v1/contacts/properties"
+    identifier = 3
 
     @property
     def replication_key(self):
