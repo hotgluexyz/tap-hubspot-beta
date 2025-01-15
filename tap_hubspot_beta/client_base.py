@@ -159,11 +159,11 @@ class hubspotStream(RESTStream):
     @staticmethod
     def extract_type(field):
         field_type = field.get("type")
-        if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
+        if field_type in ["string", "enumeration", "phone_number", "json", "object_coordinates"]:
             return th.StringType
         if field_type == "number":
             return th.StringType
-        if field_type == "datetime":
+        if field_type in ["datetime", "date"]:
             return th.DateTimeType
         if field_type == "bool":
             return th.BooleanType
