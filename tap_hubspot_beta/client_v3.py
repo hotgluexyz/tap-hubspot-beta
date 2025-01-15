@@ -105,10 +105,7 @@ class hubspotV3SearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row)
         return row
 
     def _sync_records(  # noqa C901  # too complex
@@ -214,10 +211,7 @@ class hubspotV3Stream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row)
         return row
 
 
@@ -269,8 +263,5 @@ class hubspotV3SingleSearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row)
         return row
