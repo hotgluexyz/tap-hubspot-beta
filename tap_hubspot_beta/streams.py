@@ -215,7 +215,7 @@ class ContactsStream(hubspotV1SplitUrlStream):
     def _sync_children(self, child_context: dict) -> None:
         for child_stream in self.child_streams:
             # sync fullsync ontacts child stream normally
-            if child_stream.name == "fullsync_contacts_v3" and child_stream.selected or child_stream.has_selected_descendents:
+            if child_stream.name == "fullsync_contacts_v3" and (child_stream.selected or child_stream.has_selected_descendents):
                 child_stream._sync_records(context=child_context)
                 continue
             
@@ -899,11 +899,13 @@ class FullsyncContactsV3Stream(hubspotStream):
         if not self._tap.catalog.get("fullsync_contacts_v3"):
             return False
 
-        try:
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
             # Make this stream auto-select if companies is selected
             self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
+            self.is_first_sync = True
             return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
-        except:
+        else:
             return self.mask.get((), False)
     
     def _write_schema_message(self) -> None:
