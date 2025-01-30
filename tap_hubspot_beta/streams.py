@@ -936,6 +936,17 @@ class FullsyncContactsV3Stream(hubspotStream):
     def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
         return {}
     
+    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
+        if not self._metric_logging_function:
+            return None
+
+        if extra_tags:
+            metric["tags"].update(extra_tags)
+        
+        # clean records from metric logs
+        metric.get("tags", {}).pop("context", None)
+        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
+    
 class ContactsAssociationStream(AssociationsV3ParentStream):
     name = "contacts_association_parent"
     path = "crm/v3/objects/contacts"
