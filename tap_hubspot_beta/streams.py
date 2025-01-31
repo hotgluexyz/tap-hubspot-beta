@@ -1088,20 +1088,29 @@ class ListMembershipV3Stream(hubspotV3Stream):
     """
 
     name = "list_membership_v3"
-    path = "crm/v3/lists/{list_id}/memberships"
-    records_jsonpath = "$[*]"
+    path = "crm/v3/lists/{list_id}/memberships/join-order"
+    records_jsonpath = "$.results[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
+    replication_key = "membershipTimestamp"
 
     schema = th.PropertiesList(
-        th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.StringType),
+        th.Property("recordId", th.StringType),
+        th.Property("membershipTimestamp", th.DateTimeType),
+        th.Property("listId", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
-        row["list_id"] = context["list_id"]
-        return row
+        row["listId"] = context["list_id"]
+
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        ts = parse(row['membershipTimestamp']).replace(tzinfo=pytz.utc)
+
+        if ts > rep_key:
+            return row
+
+        return None
 
 
 class AssociationDealsStream(hubspotV4Stream):
