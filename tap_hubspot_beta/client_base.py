@@ -91,6 +91,24 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
+            
+            # only use companies stream for incremental syncs
+            if self.name == "companies":
+                fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
+                fullsync_on = False
+                try:
+                    # Check if the fullsync stream is selected or not
+                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
+                except:
+                    pass
+                if fullsync_on and not fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_companies_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -189,11 +207,23 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
-
         fields = response.json()
+
+        deduplicate_columns = self.config.get("deduplicate_columns", True)
+        base_properties = []
+        if isinstance(self.base_properties, list):
+            base_properties = [property.name.lower() for property in self.base_properties]
+
         for field in fields:
+            field_name = field.get("name")
+            # filter duplicated columns (case insensitive)
+            if deduplicate_columns:
+                if field_name.lower() in base_properties:
+                    self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                    continue
+
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -307,6 +337,37 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+
+    def process_row_types(self,row) -> Dict[str, Any]:
+        schema = self.schema['properties']
+        # If the row is null we ignore
+        if row is None:
+            return row
+
+        for field, value in row.items():
+            if field not in schema:
+                # Skip fields not found in the schema
+                continue
+
+            field_info = schema[field]
+            field_type = field_info.get("type", ["null"])[0]
+
+            if field_type == "boolean":
+                if value is None:
+                    row[field] = False
+                elif isinstance(value, str):
+                    # Attempt to cast to boolean
+                    if value.lower() == "true":
+                        row[field] = True
+                    elif value == "" or value.lower() == "false":
+                        row[field] = False
+
+        return row
+
+    def is_first_sync(self):
+        if self.stream_state.get("replication_key"):
+            return False
+        return True
 
 
 class hubspotStreamSchema(hubspotStream):
