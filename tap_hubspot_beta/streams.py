@@ -1092,7 +1092,8 @@ class ListMembershipV3Stream(hubspotV3Stream):
     records_jsonpath = "$.results[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
-    replication_key = "membershipTimestamp"
+    # NOTE: we have disabled rep key on this stream to properly detect removals
+    # replication_key = "membershipTimestamp"
 
     schema = th.PropertiesList(
         th.Property("recordId", th.StringType),
@@ -1104,11 +1105,11 @@ class ListMembershipV3Stream(hubspotV3Stream):
         row = super().post_process(row, context)
         row["listId"] = context["list_id"]
 
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        ts = parse(row['membershipTimestamp']).replace(tzinfo=pytz.utc)
+        # rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        # ts = parse(row['membershipTimestamp']).replace(tzinfo=pytz.utc)
 
-        if ts > rep_key:
-            return row
+        # if ts > rep_key:
+        #     return row
 
         return None
 
