@@ -1111,7 +1111,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
         # if ts > rep_key:
         #     return row
 
-        return None
+        return row
 
 
 class AssociationDealsStream(hubspotV4Stream):
