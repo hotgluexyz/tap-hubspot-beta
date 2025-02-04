@@ -1717,3 +1717,12 @@ class AssociationTasksDealsStream(AssociationTasksStream):
 
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
+
+
+class UsersStream(ObjectSearchV3):
+    """Users Stream"""
+
+    name = "users"
+    path = "crm/v3/objects/users/search"
+    properties_url = "properties/v2/users/properties"
+    replication_key_filter = "hs_lastmodifieddate"
