@@ -72,7 +72,8 @@ from tap_hubspot_beta.streams import (
     AssociationTasksDealsStream,
     DealsHistoryPropertiesStream,
     ContactsHistoryPropertiesStream,
-    ArchivedOwnersStream
+    ArchivedOwnersStream,
+    UsersStream
 )
 
 STREAM_TYPES = [
@@ -142,7 +143,8 @@ STREAM_TYPES = [
     AssociationTasksDealsStream,
     DealsHistoryPropertiesStream,
     ContactsHistoryPropertiesStream,
-    ArchivedOwnersStream
+    ArchivedOwnersStream,
+    UsersStream
 ]
 
 
