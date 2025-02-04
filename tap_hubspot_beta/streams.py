@@ -2002,6 +2002,6 @@ class UsersStream(ObjectSearchV3):
     """Users Stream"""
 
     name = "users"
-    path = "crm/v3/objects/users"
-    properties_url = "crm/v3/properties/user"
+    path = "crm/v3/objects/users/search"
+    properties_url = "properties/v2/users/properties"
     replication_key_filter = "hs_lastmodifieddate"
