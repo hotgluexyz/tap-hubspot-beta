@@ -1050,7 +1050,7 @@ class ArchivedCompaniesStream(ArchivedStream):
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
         return params
 
-class ArchivedProductsStream(hubspotV3Stream):
+class ArchivedProductsStream(ArchivedStream):
     """Archived Products Stream"""
 
     name = "products_archived"
@@ -1107,17 +1107,6 @@ class ArchivedProductsStream(hubspotV3Stream):
         if len(urlencode(params)) > 3000:
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
         return params
-
-    def post_process(self, row, context):
-        row = super().post_process(row, context)
-
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-
-        return None
 
 class TicketsStream(ObjectSearchV3):
     """Companies Stream"""
