@@ -1042,7 +1042,7 @@ class ArchivedLineItemsStream(hubspotV3Stream):
 class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     name = "lists_v3"
-    primary_keys = ["id"]
+    primary_keys = ["listId"]
     path = "crm/v3/lists/search"
     records_jsonpath = "$.lists[*]"
 
