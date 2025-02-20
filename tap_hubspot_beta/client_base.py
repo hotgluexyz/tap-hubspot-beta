@@ -196,7 +196,7 @@ class hubspotStream(RESTStream):
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
         if field_type == "number":
-            return th.StringType
+            return th.NumberType
         if field_type == "datetime":
             return th.DateTimeType
 
@@ -340,6 +340,16 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+    
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        schema = self.schema
+        for key, value in row.get("properties", {}).items():
+            if "number" in schema["properties"][key]["type"]:
+                try:
+                    row["properties"][key] = float(value)
+                except:
+                    row["properties"][key] = None
+        return row
 
 
 class hubspotStreamSchema(hubspotStream):
