@@ -5,7 +5,8 @@ import logging
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List
+from typing import Any, Dict, Optional, cast, List, Callable, Generator
+
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
@@ -13,7 +14,6 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
 
 from pendulum import parse
 
@@ -157,6 +157,22 @@ class hubspotStream(RESTStream):
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
                 selected_properties.append(key[-1])
         return selected_properties
+    
+    def curlify_request(self, request):
+        command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
+        method = request.method
+        uri = request.url
+        data = request.body
+
+        headers = []
+        for k, v in request.headers.items():
+            # Mask the Authorization header
+            if k.lower() == "authorization":
+                v = "__MASKED__"
+            headers.append('"{0}: {1}"'.format(k, v))
+
+        headers = " -H ".join(headers)
+        return command.format(method=method, headers=headers, data=data, uri=uri)
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
@@ -165,9 +181,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
+            curl_command = self.curlify_request(response.request)
+            logging.info(f"Response code: {response.status_code}, info: {response.text}")
+            logging.info(f"CURL command for failed request: {curl_command}")
             raise RetriableAPIError(f"Msg {msg}, response {response.text}")
 
         elif 400 <= response.status_code < 500:
@@ -175,9 +191,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
+            curl_command = self.curlify_request(response.request)
+            logging.info(f"Response code: {response.status_code}, info: {response.text}")
+            logging.info(f"CURL command for failed request: {curl_command}")
             raise FatalAPIError(f"Msg {msg}, response {response.text}")
 
     @staticmethod
@@ -301,7 +317,22 @@ class hubspotStream(RESTStream):
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
-    
+
+    def backoff_wait_generator(self) -> Callable[..., Generator[int, Any, None]]:
+        """
+        Example:
+            - 1st retry: 10 seconds
+            - 2nd retry: 20 seconds
+            - 3rd retry: 40 seconds
+            - 4th retry: 80 seconds
+            - 5th retry: 160 seconds
+            - 6th retry: 320 seconds (capped at 5 minutes)
+        """
+        return backoff.expo(base=2, factor=10, max_value=320)
+
+    def backoff_max_tries(self) -> int:
+        return 7
+
     @property
     def stream_maps(self) -> List[StreamMap]:
         """Get stream transformation maps.
