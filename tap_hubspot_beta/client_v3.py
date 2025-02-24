@@ -30,7 +30,6 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
-    bulk_child_size = 1000
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)

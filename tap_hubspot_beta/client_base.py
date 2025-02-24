@@ -35,6 +35,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
 
     def load_fields_metadata(self):
         if not self.properties_url:
