@@ -27,6 +27,7 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
+    bulk_child_size = 1000
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -146,7 +147,7 @@ class hubspotV3SearchStream(hubspotStream):
                 # Sync children, except when primary mapper filters out the record
                 if self.stream_maps[0].get_filter_result(record):
                     child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=5000:
+                if len(child_context_bulk["ids"])>=self.bulk_child_size:
                     self._sync_children(child_context_bulk)
                     child_context_bulk = {"ids": []}
                 self._check_max_record_limit(record_count)
