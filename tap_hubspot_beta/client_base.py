@@ -121,7 +121,6 @@ class hubspotStream(RESTStream):
             )
             if next_page_token and next_page_token == previous_token:
                 self.logger.info(f"Loop detected in pagination. Pagination token {next_page_token} is identical to prior token.")
-                self.logger.info(f"Request URL: {self.get_url(context=context)}.")
                 self.logger.info(f"Request Params: {self.get_url_params(context=context, next_page_token=next_page_token)}.")
                 finished = True
 
