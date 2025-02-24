@@ -23,6 +23,8 @@ import time
 import pytz
 from pendulum import parse
 from urllib.parse import urlencode
+import json
+from itertools import groupby
 
 from singer_sdk.helpers._state import (
     finalize_state_progress_markers,
@@ -594,6 +596,7 @@ class OwnersStream(hubspotV3Stream):
         th.Property("teams", th.CustomType({"type": ["array", "string"]})),
         th.Property("archived", th.BooleanType),
         th.Property("userId", th.IntegerType),
+        th.Property("userIdIncludingInactive", th.IntegerType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("archivedAt", th.DateTimeType),
@@ -659,6 +662,67 @@ class DealsPipelinesStream(hubspotV1Stream):
             th.Property("active", th.BooleanType),
         ))),
     ).to_dict()
+
+    def get_deleted_stages(self, row):
+        if not "stages" in row:
+            row["stages"] = []
+
+        # get stages ids to not send dups
+        row_stages = [stage["stageId"] for stage in row.get("stages")]
+        # get audit history of each pipeline
+        stages_history = requests.get(
+            f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit",
+            headers=self.authenticator.auth_headers or {},
+        )
+        # join all stages from history
+        stages_ = []
+        for obj in stages_history.json().get("results", []):
+            obj_stages = json.loads(obj.get("rawObject", "{}")).get("stages") or []
+            stages_.extend(obj_stages)
+
+        # drop stages with stageId null
+        stages_ = [stage for stage in stages_ if stage.get("stageId")]
+
+        # Sort data by stageId and by updatedAt (None values at the end)
+        stages_.sort(
+            key=lambda x: (
+                x["stageId"],
+                x["updatedAt"] if x["updatedAt"] is not None else float("-inf")  # Handle None in updatedAt
+            ),
+            reverse=True,
+        )
+
+        # Group by stageId and pick the first entry per group
+        for stage_id, group in groupby(stages_, key=lambda x: x["stageId"]):
+            # only add stages that are not in the response
+            if stage_id in row_stages:
+                continue
+            # get stage with highest updatedAt value, if no updatedAt values it means the
+            # stage was never updated after creation so we chose the one with updatedAt value null
+            group = list(group)
+            best = next((item for item in group if item["updatedAt"] is not None), None)
+            if best is None:
+                best = group[0]
+            # change active value to false (to know it's a deleted stage) and add it to the row
+            created_at = next(iter([stage.get("createdAt") for stage in group if stage.get("createdAt")]), None)
+            row["stages"].append(
+                {
+                    "label": best.get("label"),
+                    "displayOrder": best.get("displayOrder"),
+                    "metadata": best.get("metadata"),
+                    "stageId": best.get("stageId"),
+                    "createdAt": created_at,
+                    "updatedAt": best.get("updatedAt"),
+                    "active": False,
+                }
+            )
+
+        return row
+
+    def post_process(self, row, context) -> dict:
+        row = super().post_process(row, context)
+        row = self.get_deleted_stages(row)
+        return row
 
 
 class ContactListsStream(hubspotStreamSchema):
@@ -842,12 +906,14 @@ class ArchivedStream(hubspotV3Stream):
 
         # add archived value to _hg_archived
         row["_hg_archived"] = True
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
-        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-
-        if archived_at > rep_key:
-            return row
-        return None
+        rep_key = self.get_starting_timestamp(context)
+        if rep_key:
+            rep_key = rep_key.replace(tzinfo=pytz.utc)
+            archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+            if archived_at > rep_key:
+                return row
+            return None
+        return row
 
 
 class CompaniesStream(ObjectSearchV3):
@@ -984,6 +1050,63 @@ class ArchivedCompaniesStream(ArchivedStream):
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
         return params
 
+class ArchivedProductsStream(ArchivedStream):
+    """Archived Products Stream"""
+
+    name = "products_archived"
+    path = "crm/v3/objects/products?archived=true"
+    replication_key = "archivedAt"
+    properties_url = "properties/v2/products/properties"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType)
+    ]
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("products_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if products is selected
+            self._tap.catalog["products_archived"] = self._tap.catalog["products"]
+            return self.mask.get((), False) or self._tap.catalog["products"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the products stream
+            record_message.stream = "products"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
 
 class TicketsStream(ObjectSearchV3):
     """Companies Stream"""
@@ -1669,7 +1792,7 @@ class ArchivedOwnersStream(ArchivedStream):
     """Archived Owners Stream"""
 
     name = "owners_archived"
-    replication_key = "archivedAt"
+    replication_key = None
     path = "crm/v3/owners/?archived=true"
     primary_keys = ["id"]
 
