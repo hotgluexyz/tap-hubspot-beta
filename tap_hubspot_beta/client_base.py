@@ -91,7 +91,7 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
-            
+
             # only use companies stream for incremental syncs
             if self.name == "companies":
                 fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
@@ -120,10 +120,11 @@ class hubspotStream(RESTStream):
                 response=resp, previous_token=previous_token
             )
             if next_page_token and next_page_token == previous_token:
-                raise RuntimeError(
-                    f"Loop detected in pagination. "
-                    f"Pagination token {next_page_token} is identical to prior token."
-                )
+                self.logger.info(f"Loop detected in pagination. Pagination token {next_page_token} is identical to prior token.")
+                self.logger.info(f"Request URL: {self.get_url(context=context)}.")
+                self.logger.info(f"Request Params: {self.get_url_params(context=context, next_page_token=next_page_token)}.")
+                finished = True
+
             finished = not next_page_token
 
     @property
