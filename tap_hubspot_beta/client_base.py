@@ -13,7 +13,6 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
 import time
 
 from pendulum import parse
@@ -28,7 +27,7 @@ class hubspotStream(RESTStream):
 
     url_base = "https://api.hubapi.com/"
     base_properties = []
-    additional_prarams = {}
+    additional_params = {}
     properties_url = None
     page_size = 100
 
@@ -36,6 +35,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -173,11 +173,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            #We need logs for 500
             if response.status_code == 500:
-                curl_command = curlify.to_curl(response.request)
-                logging.error(f"Response code: {response.status_code}, info: {response.text}")
-                logging.error(f"CURL command for failed request: {curl_command}")
+                req = response.request
+                logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
@@ -185,14 +183,12 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
+            req = response.request
+            logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             if "FORM_TYPE_NOT_ALLOWED" in response.text:
                 #Skip this form and continue the sync
                 return
-            #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
-            if "invalid json input" in response.text.lower():
+            if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
                 raise RetriableAPIError(msg)
             raise FatalAPIError(msg)
 
@@ -223,8 +219,9 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
+        schema_res = response.json()
 
-        fields = response.json()
+        fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
         for field in fields:
             if not field.get("deleted"):
                 property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
@@ -294,14 +291,15 @@ class hubspotStream(RESTStream):
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 ProtocolError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=8,
+            factor=3,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -368,11 +366,3 @@ class hubspotStreamSchema(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         return params
-
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
