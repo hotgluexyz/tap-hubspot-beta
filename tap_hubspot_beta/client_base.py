@@ -339,6 +339,20 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+    
+    def parse_value(self, field, value):
+        if "boolean" == self.schema["properties"].get(field, {}).get("type", [""])[0] and value in ["true", "false", "True", "False"]:
+            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        return value
+
+    def parse_properties(self, row, should_map_id=True):
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                if not should_map_id and name == "id":
+                    continue
+                row[name] = self.parse_value(name, value)
+            del row["properties"]
+        return row
 
 
 class hubspotStreamSchema(hubspotStream):
