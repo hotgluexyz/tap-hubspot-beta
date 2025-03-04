@@ -1127,6 +1127,87 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
     
+
+class FullsyncDealsStream(hubspotV1Stream):
+    """Deals Stream"""
+
+    name = "fullsync_deals"
+    path = "deals/v1/deal/paged"
+    replication_key = "updatedAt"
+    properties_url = "properties/v1/deals/properties"
+    records_jsonpath = "$.deals[*]"
+
+    # def get_child_context(self, record: dict, context) -> dict:
+    #     return {"id": record["id"]}
+    
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
+    ]
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+        # add archived value to _hg_archived
+        row["_hg_archived"] = row.get("archived")
+        row["updatedAt"] = row.get("hs_lastmodifieddate")
+        return row
+
+    @cached_property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_deals"):
+            return False
+
+        try:
+            # Make this stream auto-select if deals is selected
+            self._tap.catalog["fullsync_deals"] = self._tap.catalog["deals"]
+            params = self.get_url_params(dict(), None)
+            if len(urlencode(params)) > 15000:
+                self.logger.warn("Too many properties to use fullsync deals. Defaulting back to normal deals stream.")
+                # TODO: in this case we can fall back and split the requests
+                return False
+            return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the deals stream
+            record_message.stream = "deals"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
+        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
+        return new_metadata
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        params["count"] = self.page_size
+        if next_page_token:
+            params.update(next_page_token)
+        params.update(self.additional_prarams)
+        params["properties"] = self.selected_properties
+        return params
+
+
 class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Deals Stream"""
 
