@@ -312,6 +312,10 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
     properties_param = "propertiesWithHistory"
     merge_pk = "id"
 
+    # the response validation happens in _handle_request, having backoff in _request as well hides errors
+    def backoff_max_tries(self) -> int:
+        return 1
+
     def post_process(self, row: dict, context) -> dict:
         row = super().post_process(row, context)
         props = row.get("propertiesWithHistory") or dict()
@@ -349,7 +353,7 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         if params != fixed_params:
             yield prepared_request
 
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5, max_value=2)
+    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=7, max_value=320, base=2, factor=10)
     def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:
         response = self.requests_session.send(prepared_request, timeout=self.timeout)
         if self._LOG_REQUEST_METRICS:
