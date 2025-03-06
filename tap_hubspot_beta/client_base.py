@@ -186,7 +186,8 @@ class hubspotStream(RESTStream):
             logging.error(f"CURL command for failed request: {curl_command}")
             raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
 
-    def extract_type(self, field, type_booleancheckbox_as_boolean=False):
+    @staticmethod
+    def extract_type(field, type_booleancheckbox_as_boolean=False, cast_numbers_as_float=False):
         field_type = field.get("type")
         if field_type == "bool":
             return th.BooleanType
@@ -195,8 +196,7 @@ class hubspotStream(RESTStream):
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
         if field_type == "number":
-            cast_to_float = self._tap._config.get('cast_numbers_as_float')
-            return th.NumberType if cast_to_float else th.StringType
+            return th.NumberType if cast_numbers_as_float else th.StringType
         if field_type == "datetime":
             return th.DateTimeType
 
@@ -219,7 +219,7 @@ class hubspotStream(RESTStream):
         fields = response.json()
         for field in fields:
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
+                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean"), self._tap._config.get("cast_numbers_as_float")))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -342,6 +342,9 @@ class hubspotStream(RESTStream):
         return self._stream_maps
     
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        if self._tap._config.get('cast_numbers_as_float'):
+            return row
+
         schema = self.schema
         for key, value in row.get("properties", {}).items():
             if "number" in schema["properties"][key]["type"]:
