@@ -186,8 +186,7 @@ class hubspotStream(RESTStream):
             logging.error(f"CURL command for failed request: {curl_command}")
             raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
 
-    @staticmethod
-    def extract_type(field, type_booleancheckbox_as_boolean=False):
+    def extract_type(self, field, type_booleancheckbox_as_boolean=False):
         field_type = field.get("type")
         if field_type == "bool":
             return th.BooleanType
@@ -196,7 +195,8 @@ class hubspotStream(RESTStream):
         if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
             return th.StringType
         if field_type == "number":
-            return th.NumberType
+            cast_to_float = self._tap._config.get('cast_numbers_as_float')
+            return th.NumberType if cast_to_float else th.StringType
         if field_type == "datetime":
             return th.DateTimeType
 
