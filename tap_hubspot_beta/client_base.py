@@ -342,7 +342,7 @@ class hubspotStream(RESTStream):
         return self._stream_maps
     
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        if self._tap._config.get('cast_numbers_as_float'):
+        if not self._tap._config.get('cast_numbers_as_float'):
             return row
 
         schema = self.schema
