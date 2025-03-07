@@ -1172,8 +1172,8 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         # modify fields to have the same schema as contacts_v3
         row["id"] = str(row.get("dealId", ""))
         row["_hg_archived"] = row.get("archived")
-        row["updatedAt"] = row.get("hs_lastmodifieddate")
-        row["createdAt"] = row.get("addedAt")
+        row["createdAt"] = row.get("hs_createdate")
+        row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
         return row
         
     @cached_property
