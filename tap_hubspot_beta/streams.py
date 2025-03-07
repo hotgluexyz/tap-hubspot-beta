@@ -1254,7 +1254,7 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
         fullsync_deals = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
         if not deals_state.get("replication_key_value") and not fullsync_deals.get("replication_key_value"):
             return "fullsync_deals"
-        return "deals_association_parent"
+        return "deals"
 
     base_properties = [
         th.Property("id", th.StringType),
