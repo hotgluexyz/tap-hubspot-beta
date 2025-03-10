@@ -177,25 +177,28 @@ class hubspotStream(RESTStream):
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
-        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
-            msg = (
-                f"{response.status_code} Server Error: "
-                f"{response.reason} for path: {self.path}"
-            )
+        try:
+            json_response = response.json()
+        except ValueError:
+            json_response = {}
+            
+        def _log_and_raise(exception_class, message):
             curl_command = self.curlify_request(response.request)
             logging.info(f"Response code: {response.status_code}, info: {response.text}")
             logging.info(f"CURL command for failed request: {curl_command}")
-            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
+            raise exception_class(f"Msg {message}, response {response.text}")
+
+        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
+            msg = f"{status_code} Server Error: {reason} for path: {path}"
+            _log_and_raise(RetriableAPIError, msg)
+        
+        elif response.status_code == 400 and "Invalid JSON input" in json_response.get('message'):
+            msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
+            _log_and_raise(RetriableAPIError, msg)
 
         elif 400 <= response.status_code < 500:
-            msg = (
-                f"{response.status_code} Client Error: "
-                f"{response.reason} for path: {self.path}"
-            )
-            curl_command = self.curlify_request(response.request)
-            logging.info(f"Response code: {response.status_code}, info: {response.text}")
-            logging.info(f"CURL command for failed request: {curl_command}")
-            raise FatalAPIError(f"Msg {msg}, response {response.text}")
+            msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
+            _log_and_raise(FatalAPIError, msg)
 
     @staticmethod
     def extract_type(field):
