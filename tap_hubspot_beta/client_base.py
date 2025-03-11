@@ -219,7 +219,7 @@ class hubspotStream(RESTStream):
         fields = response.json()
         for field in fields:
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean"), self._tap._config.get("cast_numbers_as_float")))
+                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean"), self.config.get("cast_numbers_as_float")))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -342,7 +342,7 @@ class hubspotStream(RESTStream):
         return self._stream_maps
     
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        if not self._tap._config.get('cast_numbers_as_float'):
+        if not self.config.get('cast_numbers_as_float'):
             return row
 
         schema = self.schema
