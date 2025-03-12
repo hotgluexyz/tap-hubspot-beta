@@ -302,6 +302,8 @@ class hubspotV3SingleSearchStream(hubspotStream):
         return row
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
+    rest_method = "POST"
+    bulk_child = True
     schema_written = False
 
     def post_process(self, row: dict, context) -> dict:
@@ -318,3 +320,17 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
                 schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
                 singer.write_message(schema_message)
                 self.schema_written = True
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        return {}
+
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        """Prepare the data payload for the REST API request."""
+        payload = {}
+        payload["propertiesWithHistory"] = self.selected_properties
+        payload["inputs"] = context["ids"]
+        return payload
