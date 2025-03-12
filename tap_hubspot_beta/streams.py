@@ -15,7 +15,7 @@ from singer_sdk import typing as th
 from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
-from tap_hubspot_beta.client_v1 import hubspotV1Stream
+from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, hubspotHistoryV3Stream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
@@ -1127,6 +1127,115 @@ class DealsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
     
+
+class FullsyncDealsStream(hubspotV1SplitUrlStream):
+    """Fullsync Deals Stream"""
+
+    # # def get_child_context(self, record: dict, context) -> dict:
+    # #     return {"id": record["id"]}
+    
+    # this is a stream created to run fullsyncs when deals is selected and there's no state
+    # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
+    # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice # TODO: NOT YET
+
+    path = "deals/v1/deal/paged"
+    records_jsonpath = "$.deals[*]"
+    replication_key = "updatedAt"
+    primary_keys = ["id"]
+    additional_params = dict(showListMemberships=True)
+    properties_url = "properties/v1/deals/properties"
+    # parent_stream_type = ContactsStream
+    name = "fullsync_deals"
+    stream_alias = "deals"
+    properties_param = "properties"
+    merge_pk = "dealId"
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
+    ]
+
+    def apply_catalog(self, catalog) -> None:
+        self._tap_input_catalog = catalog
+        catalog_entry = catalog.get_stream(self.name)
+        if catalog_entry:
+            self.primary_keys = catalog_entry.key_properties
+            if catalog_entry.replication_method:
+                self.forced_replication_method = catalog_entry.replication_method
+
+    def post_process(self, row, context) -> dict:
+        row = super().post_process(row, context)
+        # modify fields to have the same schema as contacts_v3
+        row["id"] = str(row.get("dealId", ""))
+        row["_hg_archived"] = row.get("archived")
+        row["createdAt"] = row.get("hs_createdate")
+        row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
+        return row
+        
+    @cached_property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_deals"):
+            return False
+
+        try:
+            # Make this stream auto-select if deals is selected
+            self._tap.catalog["fullsync_deals"] = self._tap.catalog["deals"]
+            deals_state = self.tap_state.get("bookmarks", {}).get("deals", {})
+            if not deals_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.stream = self.stream_alias
+            schema_message.schema = self.schema
+            singer.write_message(schema_message)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = self.stream_alias
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
+        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
+        return new_metadata
+
+    def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
+        return {}
+
+    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
+        if not self._metric_logging_function:
+            return None
+
+        if extra_tags:
+            metric["tags"].update(extra_tags)
+
+        # clean records from metric logs
+        metric.get("tags", {}).pop("context", None)
+        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Deals Stream"""
 
@@ -1137,6 +1246,16 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     parent_stream_type = DealsStream
     bulk_child = False
     records_jsonpath = "$[*]"
+
+    @property
+    def parent(self):
+        # if it's deals fullsync use fullsync_deals as parent else use deals
+        deals_state = self.tap_state.get("bookmarks", {}).get("deals", {})
+        fullsync_deals = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
+        if not deals_state.get("replication_key_value") and not fullsync_deals.get("replication_key_value"):
+            return "fullsync_deals"
+        return "deals"
+
     base_properties = [
         th.Property("id", th.StringType),
         th.Property("createdAt", th.DateTimeType),
@@ -1152,7 +1271,6 @@ class DealsAssociationParent(hubspotV1Stream):
     path = "deals/v1/deal/paged"
     replication_key = None
     primary_keys = ["id"]
-
     records_jsonpath = "$.deals[*]"
 
     schema = th.PropertiesList(
