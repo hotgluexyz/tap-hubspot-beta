@@ -302,6 +302,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
         return row
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
+    schema_written = False
 
     def post_process(self, row: dict, context) -> dict:
         row = super().post_process(row, context)
@@ -312,7 +313,8 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
     
     def _write_schema_message(self) -> None:
         """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
-            singer.write_message(schema_message)
-        
+        if not self.schema_written:
+            for schema_message in self._generate_schema_messages():
+                schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+                singer.write_message(schema_message)
+                self.schema_written = True

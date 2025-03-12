@@ -893,11 +893,6 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
-    def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
-            singer.write_message(schema_message)
 
 class ArchivedStream(hubspotV3Stream):
 
