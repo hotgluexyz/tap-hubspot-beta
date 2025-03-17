@@ -30,7 +30,7 @@ class hubspotV2Stream(hubspotStreamSchema):
         """As needed, append or transform raw data to match expected structure."""
         if self.properties_url:
             for name, value in row.get("properties").items():
-                row[name] = value.get("value")
+                row[name] = self.parse_value(name, value.get("value"))
             row["id"] = str(row["companyId"])
             del row["properties"]
         for field in self.datetime_fields:

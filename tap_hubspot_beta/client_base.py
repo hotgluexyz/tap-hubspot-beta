@@ -13,6 +13,8 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+import curlify
+import time
 
 from pendulum import parse
 
@@ -34,6 +36,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -152,12 +155,42 @@ class hubspotStream(RESTStream):
         return selected_properties
 
     def validate_response(self, response: requests.Response) -> None:
+        #Rate limit logic
+        #@TODO enable this if 429 handling fails. 
+        # not using because if it is daily limit it could cause job to be stuck for a day
+        # headers = response.headers
+        # #Prevent rate limit from being triggered
+        # if (
+        #     "X-HubSpot-RateLimit-Remaining" in headers
+        #     and int(headers["X-HubSpot-RateLimit-Remaining"]) <= 10
+        # ):
+        #     #Default sleep time
+        #     sleep_time = 10
+        #     if "X-HubSpot-RateLimit-Interval-Milliseconds" in headers:
+        #         # Sleep based on milliseconds limit of the API
+        #         sleep_time = int(headers["X-HubSpot-RateLimit-Interval-Milliseconds"]) / 1000
+        #         if sleep_time < 0:
+        #             sleep_time = 10
+        #     self.logger.warn(f"Rate limit reached. Sleeping for {sleep_time} seconds.")        
+        #     time.sleep(sleep_time)
+        
+        # if 429 is triggered log the response code and retry    
+        if response.status_code == 429:
+            self.logger.warn(f"Rate limit reached. Response code: {response.status_code}, info: {response.text}, headers: {response.headers}")
+            time.sleep(30)
+            raise RetriableAPIError(f"Response code: {response.status_code}, info: {response.text}")    
+            
         """Validate HTTP response."""
         if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = (
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            #We need logs for 500
+            if response.status_code == 500:
+                curl_command = curlify.to_curl(response.request)
+                logging.error(f"Response code: {response.status_code}, info: {response.text}")
+                logging.error(f"CURL command for failed request: {curl_command}")
             raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
@@ -165,10 +198,19 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
+            curl_command = curlify.to_curl(response.request)
+            logging.error(f"Response code: {response.status_code}, info: {response.text}")
+            logging.error(f"CURL command for failed request: {curl_command}")
+            if "FORM_TYPE_NOT_ALLOWED" in response.text:
+                #Skip this form and continue the sync
+                return
+            #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
+            if "invalid json input" in response.text.lower():
+                raise RetriableAPIError(msg)
             raise FatalAPIError(msg)
 
     @staticmethod
-    def extract_type(field):
+    def extract_type(field, type_booleancheckbox_as_boolean=False):
         field_type = field.get("type")
         if field_type == "bool" or field.get("fieldType") == "booleancheckbox":
             return th.BooleanType
@@ -198,7 +240,7 @@ class hubspotStream(RESTStream):
         fields = response.json()
         for field in fields:
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -317,6 +359,18 @@ class hubspotStream(RESTStream):
         if self.stream_state.get("replication_key"):
             return False
         return True
+    
+    def parse_value(self, field, value):
+        if "boolean" == self.schema["properties"].get(field, {}).get("type", [""])[0] and value in ["true", "false", "True", "False"]:
+            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        return value
+    
+    def parse_properties(self, row):
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                row[name] = self.parse_value(name, value)
+            del row["properties"]
+        return row
 
 
 class hubspotStreamSchema(hubspotStream):
