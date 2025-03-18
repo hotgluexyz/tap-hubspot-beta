@@ -847,6 +847,7 @@ class ContactsV3Stream(ObjectSearchV3):
     name = "contacts_v3"
     path = "crm/v3/objects/contacts/search"
     properties_url = "properties/v1/contacts/properties"
+    bulk_child_size = 50 # max allowed in the API
 
     @property
     def replication_key(self):
@@ -876,12 +877,9 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
     name = "contacts_history_properties"
-    path = "crm/v3/objects/contacts/{id}"
+    path = "crm/v3/objects/contacts/batch/read"
     properties_url = "properties/v1/contacts/properties"
-    additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = ContactsV3Stream
-    bulk_child = False
-    records_jsonpath = "$[*]"
     primary_keys = ["id"]
 
     base_properties = [
@@ -893,11 +891,6 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
-    def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
-            singer.write_message(schema_message)
 
 class ArchivedStream(hubspotV3Stream):
 
@@ -1123,6 +1116,7 @@ class DealsStream(ObjectSearchV3):
     path = "crm/v3/objects/deals/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v1/deals/properties"
+    bulk_child_size = 50 # max allowed in the API
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
@@ -1131,12 +1125,9 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Deals Stream"""
 
     name = "deals_history_properties"
-    path = "crm/v3/objects/deals/{id}"
+    path = "crm/v3/objects/deals/batch/read"
     properties_url = "properties/v1/deals/properties"
-    additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = DealsStream
-    bulk_child = False
-    records_jsonpath = "$[*]"
     base_properties = [
         th.Property("id", th.StringType),
         th.Property("createdAt", th.DateTimeType),
