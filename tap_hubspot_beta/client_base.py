@@ -2,6 +2,7 @@
 import copy
 import logging
 import curlify
+import urllib3
 
 import requests
 import backoff
@@ -11,7 +12,6 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
-from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
 
@@ -296,9 +296,8 @@ class hubspotStream(RESTStream):
             self.backoff_wait_generator,
             (
                 RetriableAPIError,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError,
-                ProtocolError
+                requests.exceptions.RequestException,
+                urllib3.exceptions.HTTPError
             ),
             max_tries=self.backoff_max_tries,
             on_backoff=self.backoff_handler,
