@@ -2,6 +2,7 @@
 import copy
 import logging
 import curlify
+import urllib3
 
 import requests
 import backoff
@@ -296,9 +297,8 @@ class hubspotStream(RESTStream):
             self.backoff_wait_generator,
             (
                 RetriableAPIError,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError,
-                ProtocolError
+                requests.exceptions.RequestException,
+                urllib3.exceptions.HTTPError
             ),
             max_tries=self.backoff_max_tries,
             on_backoff=self.backoff_handler,
