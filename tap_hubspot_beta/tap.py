@@ -1,6 +1,8 @@
 """hubspot tap class."""
 
+import os
 from typing import List
+import logging
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
@@ -47,6 +49,7 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -69,9 +72,30 @@ from tap_hubspot_beta.streams import (
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    ArchivedOwnersStream,
+    ArchivedProductsStream,
 )
 
-STREAM_TYPES = [
+ #When a new stream is added to the tap, it would break existing test suites.
+# By allowing caller to ignore the stream we are able ensure existing tests continue to pass.
+# 1. Get the environment variable IGNORE_STREAMS and split by commas
+ignore_streams = os.environ.get('IGNORE_STREAMS', '').split(',')
+logging.info(f"IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
+
+# Function to add multiple streams to STREAM_TYPES if not in ignore_streams
+def add_streams(stream_classes):
+
+    stream_types = []
+    for stream_class in stream_classes:
+        if stream_class.__name__ not in ignore_streams:
+            stream_types.append(stream_class)
+        else:
+            logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
+    return stream_types
+
+STREAM_TYPES = add_streams([
     ContactsStream,
     ListsStream,
     CompaniesStream,
@@ -113,6 +137,7 @@ STREAM_TYPES = [
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -135,7 +160,11 @@ STREAM_TYPES = [
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
-]
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    ArchivedOwnersStream,
+    ArchivedProductsStream
+])
 
 
 class Taphubspot(Tap):
