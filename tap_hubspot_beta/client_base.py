@@ -354,8 +354,17 @@ class hubspotStream(RESTStream):
         return row
 
     def parse_value(self, field, value):
-        if "boolean" == self.schema["properties"].get(field, {}).get("type", [""])[0] and value in ["true", "false", "True", "False"]:
-            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        field_schema = self.schema["properties"].get(field, {})
+        field_type = field_schema.get("type", [""])[0]
+
+        # Handle empty string datetime values
+        if field_type == "string" and field_schema.get("format") == "date-time" and value == "":
+            return None
+
+        # Handle boolean string values
+        if field_type == "boolean" and isinstance(value, str) and value.lower() in ["true", "false"]:
+            return value.lower() == "true"
+
         return value
 
     def parse_properties(self, row):
