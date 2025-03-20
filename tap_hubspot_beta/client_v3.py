@@ -27,6 +27,7 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
+    bulk_child_size = 1000
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -103,6 +104,7 @@ class hubspotV3SearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
         row = self.parse_properties(row)
         return row
 
@@ -143,7 +145,7 @@ class hubspotV3SearchStream(hubspotStream):
                 # Sync children, except when primary mapper filters out the record
                 if self.stream_maps[0].get_filter_result(record):
                     child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=5000:
+                if len(child_context_bulk["ids"])>=self.bulk_child_size:
                     self._sync_children(child_context_bulk)
                     child_context_bulk = {"ids": []}
                 self._check_max_record_limit(record_count)
@@ -186,6 +188,7 @@ class hubspotV3Stream(hubspotStream):
 
     records_jsonpath = "$.results[*]"
     next_page_token_jsonpath = "$.paging.next.after"
+    marketing_streams = ["campaigns"]
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
@@ -203,12 +206,17 @@ class hubspotV3Stream(hubspotStream):
         params.update(self.additional_prarams)
         if self.properties_url:
             params["properties"] = ",".join(self.selected_properties)
+        if self.name in self.marketing_streams:
+            default_properties = ["id", "createdAt", "updatedAt"]
+            properties = [prop for prop in self.selected_properties if prop not in default_properties]
+            params["properties"] = ",".join(properties)
         if next_page_token:
             params["after"] = next_page_token
         return params
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
         row = self.parse_properties(row)
         return row
 
@@ -219,7 +227,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
     rest_method = "POST"
 
     records_jsonpath = "$.results[*]"
-    next_page_token_jsonpath = "$.paging.next.after"
+    next_page_token_jsonpath = "$.offset"
     filter = None
     starting_time = None
     page_size = 100
@@ -235,6 +243,10 @@ class hubspotV3SingleSearchStream(hubspotStream):
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
+
+        if not response.json().get("hasMore"):
+            return None
+        
         if next_page_token == "10000":
 
             start_date = self.stream_state.get("progress_markers", {}).get("replication_key_value")
@@ -256,10 +268,11 @@ class hubspotV3SingleSearchStream(hubspotStream):
         if self.filter:
             payload["filters"].append(self.filter)
         if next_page_token and next_page_token!="0":
-            payload["after"] = next_page_token
+            payload["offset"] = next_page_token
         return payload
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
         row = self.parse_properties(row)
         return row

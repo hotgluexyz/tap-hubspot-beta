@@ -1135,29 +1135,23 @@ class ArchivedLineItemsStream(hubspotV3Stream):
 class ListSearchV3Stream(hubspotV3SingleSearchStream):
 
     name = "lists_v3"
-    primary_keys = ["id"]
+    primary_keys = ["listId"]
     path = "crm/v3/lists/search"
-    replication_key = "updatedAt"
-    replication_key_filter = "hs_last_record_added_at"
     records_jsonpath = "$.lists[*]"
 
 
-    @property
-    def replication_key(self):
-        return "updatedAt"
-
     schema = th.PropertiesList(
-        th.Property("listId", th.NumberType()),
-        th.Property("listVersion", th.NumberType()),
-        th.Property("createdAt", th.DateTimeType()),
-        th.Property("updatedAt", th.DateTimeType()),
-        th.Property("filtersUpdateAt", th.DateTimeType()),
-        th.Property("processingStatus", th.StringType()),
-        th.Property("createdById", th.NumberType()),
-        th.Property("updatedById", th.NumberType()),
-        th.Property("processingType", th.StringType()),
-        th.Property("objectTypeId", th.StringType()),
-        th.Property("name", th.StringType()),
+        th.Property("listId", th.StringType),
+        th.Property("listVersion", th.NumberType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("filtersUpdateAt", th.DateTimeType),
+        th.Property("processingStatus", th.StringType),
+        th.Property("createdById", th.StringType),
+        th.Property("updatedById", th.StringType),
+        th.Property("processingType", th.StringType),
+        th.Property("objectTypeId", th.StringType),
+        th.Property("name", th.StringType),
         th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -1181,19 +1175,29 @@ class ListMembershipV3Stream(hubspotV3Stream):
     """
 
     name = "list_membership_v3"
-    path = "crm/v3/lists/{list_id}/memberships"
-    records_jsonpath = "$[*]"
+    path = "crm/v3/lists/{list_id}/memberships/join-order"
+    records_jsonpath = "$.results[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
+    # NOTE: we have disabled rep key on this stream to properly detect removals
+    # replication_key = "membershipTimestamp"
 
     schema = th.PropertiesList(
-        th.Property("results", th.CustomType({"type": ["array", "string"]})),
-        th.Property("list_id", th.IntegerType),
+        th.Property("recordId", th.StringType),
+        th.Property("membershipTimestamp", th.DateTimeType),
+        th.Property("listId", th.StringType),
     ).to_dict()
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
-        row["list_id"] = context["list_id"]
+        row["listId"] = context["list_id"]
+
+        # rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        # ts = parse(row['membershipTimestamp']).replace(tzinfo=pytz.utc)
+
+        # if ts > rep_key:
+        #     return row
+
         return row
 
 
@@ -1291,14 +1295,13 @@ class MarketingEmailsStream(hubspotV1Stream):
     schema = th.PropertiesList(
         th.Property("ab", th.BooleanType),
         th.Property("abHoursToWait", th.IntegerType),
-        th.Property("abSampleSizeDefault", th.CustomType({"type": ["number", "string"]})),
-        th.Property("abSamplingDefault", th.CustomType({"type": ["number", "string"]})),
-        th.Property("abSuccessMetric", th.CustomType({"type": ["number", "string"]})),
+        th.Property("abSampleSizeDefault", th.StringType),
+        th.Property("abSamplingDefault", th.StringType),
+        th.Property("abSuccessMetric", th.StringType),
         th.Property("abTestPercentage", th.IntegerType),
         th.Property("abVariation", th.BooleanType),
         th.Property("absoluteUrl", th.StringType),
         th.Property("allEmailCampaignIds", th.CustomType({"type": ["array", "string"]})),
-        th.Property("abSuccessMetric", th.CustomType({"type": ["number", "string"]})),
         th.Property("analyticsPageType", th.StringType),
         th.Property("archived", th.BooleanType),
         th.Property("author", th.StringType),
@@ -1447,6 +1450,33 @@ class QuotesStream(ObjectSearchV3):
     path = "crm/v3/objects/quotes/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
+
+
+class CampaignsStream(hubspotV3Stream):
+    """Campaigns Stream"""
+
+    name = "campaigns"
+    path = "marketing/v3/campaigns"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("hs_name", th.StringType),
+        th.Property("hs_start_date", th.DateTimeType),
+        th.Property("hs_end_date", th.DateTimeType),
+        th.Property("hs_notes", th.StringType),
+        th.Property("hs_audience", th.StringType),
+        th.Property("hs_goal", th.StringType),
+        th.Property("hs_currency_code", th.StringType),
+        th.Property("hs_campaign_status", th.StringType),
+        th.Property("hs_owner", th.StringType),
+        th.Property("hs_color_hex", th.StringType),
+        th.Property("hs_created_by_user_id", th.StringType),
+        th.Property("hs_object_id", th.StringType),
+        th.Property("hs_budget_items_sum_amount", th.StringType),
+        th.Property("hs_spend_items_sum_amount", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
 
 
 class AssociationQuotesDealsStream(AssociationDealsStream):
@@ -1690,3 +1720,12 @@ class AssociationTasksDealsStream(AssociationTasksStream):
 
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
+
+
+class UsersStream(ObjectSearchV3):
+    """Users Stream"""
+
+    name = "users"
+    path = "crm/v3/objects/users/search"
+    properties_url = "properties/v2/users/properties"
+    replication_key_filter = "hs_lastmodifieddate"
