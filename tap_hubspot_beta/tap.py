@@ -212,4 +212,5 @@ class Taphubspot(Tap):
 
 
 if __name__ == "__main__":
+    # Smoke test change
     Taphubspot.cli()
