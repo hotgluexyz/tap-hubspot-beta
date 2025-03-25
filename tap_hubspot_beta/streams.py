@@ -847,6 +847,7 @@ class ContactsV3Stream(ObjectSearchV3):
     name = "contacts_v3"
     path = "crm/v3/objects/contacts/search"
     properties_url = "properties/v1/contacts/properties"
+    bulk_child_size = 50 # max allowed in the API
 
     @property
     def replication_key(self):
@@ -876,12 +877,9 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
     name = "contacts_history_properties"
-    path = "crm/v3/objects/contacts/{id}"
+    path = "crm/v3/objects/contacts/batch/read"
     properties_url = "properties/v1/contacts/properties"
-    additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = ContactsV3Stream
-    bulk_child = False
-    records_jsonpath = "$[*]"
     primary_keys = ["id"]
 
     base_properties = [
@@ -893,11 +891,6 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
-    def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
-            singer.write_message(schema_message)
 
 class ArchivedStream(hubspotV3Stream):
 
@@ -1123,6 +1116,7 @@ class DealsStream(ObjectSearchV3):
     path = "crm/v3/objects/deals/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v1/deals/properties"
+    bulk_child_size = 50 # max allowed in the API
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
@@ -1149,6 +1143,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
     stream_alias = "deals"
     properties_param = "properties"
     merge_pk = "dealId"
+    bulk_child_size = 50 # max allowed in the API
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1158,6 +1153,81 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         th.Property("archivedAt", th.DateTimeType),
         th.Property("_hg_archived", th.BooleanType),
     ]
+
+    def _sync_records(  # noqa C901  # too complex
+        self, context: Optional[dict] = None
+    ) -> None:
+        """Sync records, emitting RECORD and STATE messages. """
+        record_count = 0
+        current_context: Optional[dict]
+        context_list: Optional[List[dict]]
+        context_list = [context] if context is not None else self.partitions
+        selected = self.selected
+
+        for current_context in context_list or [{}]:
+            partition_record_count = 0
+            current_context = current_context or None
+            state = self.get_context_state(current_context)
+            state_partition_context = self._get_state_partition_context(current_context)
+            self._write_starting_replication_value(current_context)
+            child_context: Optional[dict] = (
+                None if current_context is None else copy.copy(current_context)
+            )
+            child_context_bulk = {"ids": []}
+            for record_result in self.get_records(current_context):
+                if isinstance(record_result, tuple):
+                    # Tuple items should be the record and the child context
+                    record, child_context = record_result
+                else:
+                    record = record_result
+                child_context = copy.copy(
+                    self.get_child_context(record=record, context=child_context)
+                )
+                for key, val in (state_partition_context or {}).items():
+                    # Add state context to records if not already present
+                    if key not in record:
+                        record[key] = val
+
+                # Sync children, except when primary mapper filters out the record
+                if self.stream_maps[0].get_filter_result(record):
+                    child_context_bulk["ids"].append(child_context)
+                if len(child_context_bulk["ids"])>=self.bulk_child_size:
+                    self._sync_children(child_context_bulk)
+                    child_context_bulk = {"ids": []}
+                self._check_max_record_limit(record_count)
+                if selected:
+                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
+                        self._write_state_message()
+                    self._write_record_message(record)
+                    try:
+                        self._increment_stream_state(record, context=current_context)
+                    except InvalidStreamSortException as ex:
+                        log_sort_error(
+                            log_fn=self.logger.error,
+                            ex=ex,
+                            record_count=record_count + 1,
+                            partition_record_count=partition_record_count + 1,
+                            current_context=current_context,
+                            state_partition_context=state_partition_context,
+                            stream_name=self.name,
+                        )
+                        raise ex
+
+                record_count += 1
+                partition_record_count += 1
+            if len(child_context_bulk):
+                self._sync_children(child_context_bulk)
+            if current_context == state_partition_context:
+                # Finalize per-partition state only if 1:1 with context
+                finalize_state_progress_markers(state)
+        if not context:
+            # Finalize total stream only if we have the full full context.
+            # Otherwise will be finalized by tap at end of sync.
+            finalize_state_progress_markers(self.stream_state)
+        self._write_record_count_log(record_count=record_count, context=context)
+        # Reset interim bookmarks before emitting final STATE message:
+        self._write_state_message()
+
 
     def apply_catalog(self, catalog) -> None:
         self._tap_input_catalog = catalog
@@ -1240,12 +1310,9 @@ class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Deals Stream"""
 
     name = "deals_history_properties"
-    path = "crm/v3/objects/deals/{id}"
+    path = "crm/v3/objects/deals/batch/read"
     properties_url = "properties/v1/deals/properties"
-    additional_prarams = {"propertiesWithHistory": True}
     parent_stream_type = DealsStream
-    bulk_child = False
-    records_jsonpath = "$[*]"
 
     @property
     def parent(self):

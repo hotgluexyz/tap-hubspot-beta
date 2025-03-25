@@ -308,6 +308,9 @@ class hubspotV3SingleSearchStream(hubspotStream):
         return row
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
+    rest_method = "POST"
+    bulk_child = True
+    schema_written = False
 
     properties_param = "propertiesWithHistory"
     merge_pk = "id"
@@ -325,64 +328,22 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
     
     def _write_schema_message(self) -> None:
         """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
-            singer.write_message(schema_message)
+        if not self.schema_written:
+            for schema_message in self._generate_schema_messages():
+                schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+                singer.write_message(schema_message)
+                self.schema_written = True
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        return {}
 
-    def get_params_from_url(self, url):
-        parsed_url = urllib.parse.urlparse(url)
-        return urllib.parse.parse_qs(parsed_url.query)
-
-    def split_request_generator(self, prepared_request: requests.PreparedRequest, context: Optional[dict]):
-        MAX_LEN_URL = 9500 - max(len(prop) for prop in self.selected_properties)
-        url = self.get_url(context)
-        fixed_params = self.get_params_from_url(prepared_request.url)
-        params = copy.deepcopy(fixed_params)
-
-        params_properties = params.pop(self.properties_param, None)
-        params_properties = params_properties[0].split(",") if params_properties else params_properties
-        params[self.properties_param] = []
-        for prop in params_properties:
-            params[self.properties_param].append(prop)
-            prepared_request.prepare_url(url, params)
-            if len(prepared_request.url) >= MAX_LEN_URL:
-                yield prepared_request
-                params = copy.deepcopy(fixed_params)
-                params[self.properties_param] = []
-
-        if params != fixed_params:
-            yield prepared_request
-
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=7, max_value=320, base=2, factor=10)
-    def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:
-        response = self.requests_session.send(prepared_request, timeout=self.timeout)
-        if self._LOG_REQUEST_METRICS:
-            extra_tags = {}
-            if self._LOG_REQUEST_METRIC_URLS:
-                extra_tags["url"] = prepared_request.path_url
-            self._write_request_duration_log(
-                endpoint=self.path,
-                response=response,
-                context=context,
-                extra_tags=extra_tags,
-            )
-        self.validate_response(response)
-        self.logger.debug("Response received successfully.")
-        return response
-
-    def _request(
-        self, prepared_request: requests.PreparedRequest, context: Optional[dict]
-    ) -> requests.Response:
-
-        authenticator = self.authenticator
-        if authenticator:
-            prepared_request.headers.update(authenticator.auth_headers or {})
-
-        MAX_LEN_URL = 3000
-        if len(prepared_request.url) > MAX_LEN_URL:
-            responses = []
-            for req in self.split_request_generator(prepared_request, context):
-                responses.append(self._handle_request(req, context))
-            return merge_responses(responses, self.merge_pk)
-        return self._handle_request(prepared_request, context)
-
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        """Prepare the data payload for the REST API request."""
+        payload = {}
+        payload["propertiesWithHistory"] = self.selected_properties
+        payload["inputs"] = context["ids"]
+        return payload

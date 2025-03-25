@@ -194,11 +194,23 @@ class Taphubspot(Tap):
         th.Property("expires_in", th.IntegerType),
         th.Property("start_date", th.DateTimeType),
         th.Property("access_token", th.StringType),
+        th.Property("enable_list_selection", th.BooleanType, default=False),
+
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        stream_types = list(STREAM_TYPES)
+
+        # If enable_list_selection is false, remove ContactListsStream and ContactListData from the list
+        if not self.config.get("enable_list_selection"):
+            stream_types = [
+                st for st in stream_types
+                if st.__name__ != "ContactListsStream" and st.__name__ != "ContactListData"
+            ]
+
+        # Instantiate them
+        return [stream_class(tap=self) for stream_class in stream_types]
 
     @property
     def catalog_dict(self) -> dict:
