@@ -18,6 +18,8 @@ from singer_sdk.helpers._flattening import get_flattening_options
 from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+import singer
+from singer import StateMessage
 
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
@@ -108,6 +110,23 @@ class hubspotStream(RESTStream):
                     break
                 elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
                     self.stream_state.update(fullsync_companies_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+            
+            # only use deals stream for incremental syncs
+            if self.name == "deals":
+                fullsync_deals_state = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
+                fullsync_on = False
+                try:
+                    # Check if the fullsync stream is selected or not
+                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_deals"][0][1].selected
+                except:
+                    pass
+                if fullsync_on and not fullsync_deals_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_deals_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_deals_state)
                     self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
 
             prepared_request = self.prepare_request(
@@ -402,6 +421,17 @@ class hubspotStream(RESTStream):
         if self.stream_state.get("replication_key"):
             return False
         return True
+    
+    def _write_state_message(self) -> None:
+        """Write out a STATE message with the latest state."""
+        tap_state = self.tap_state
+
+        if tap_state and tap_state.get("bookmarks"):
+            for stream_name in tap_state.get("bookmarks").keys():
+                if tap_state["bookmarks"][stream_name].get("partitions"):
+                    tap_state["bookmarks"][stream_name]["partitions"] = []
+
+        singer.write_message(StateMessage(value=tap_state))
 
 
 class hubspotStreamSchema(hubspotStream):

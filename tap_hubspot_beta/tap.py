@@ -1,8 +1,9 @@
 """hubspot tap class."""
 
 import os
-from typing import List
+from typing import List, Dict, Type 
 import logging
+from singer_sdk.helpers._compat import final
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
@@ -76,7 +77,8 @@ from tap_hubspot_beta.streams import (
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    TeamsStream
+    FullsyncDealsStream,
+    TeamsStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -165,7 +167,8 @@ STREAM_TYPES = add_streams([
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    TeamsStream
+    FullsyncDealsStream,
+    TeamsStream,
 ])
 
 
@@ -228,6 +231,51 @@ class Taphubspot(Tap):
                 for field in stream["schema"]["properties"]:
                     stream["schema"]["properties"][field]["field_meta"] = stream_class.fields_metadata.get(field, {})
         return catalog
+
+    @final
+    def load_streams(self) -> List[Stream]:
+        """Load streams from discovery and initialize DAG.
+
+        Return the output of `self.discover_streams()` to enumerate
+        discovered streams.
+
+        Returns:
+            A list of discovered streams, ordered by name.
+        """
+        # Build the parent-child dependency DAG
+
+        # Index streams by type
+        streams_by_type: Dict[Type[Stream], List[Stream]] = {}
+        for stream in self.discover_streams():
+            stream_type = type(stream)
+            if stream_type not in streams_by_type:
+                streams_by_type[stream_type] = []
+            streams_by_type[stream_type].append(stream)
+
+        # Initialize child streams list for parents
+        for stream_type, streams in streams_by_type.items():
+            if stream_type.parent_stream_type:
+                parents = streams_by_type[stream_type.parent_stream_type]
+
+                # assign parent stream dynamically, if stream has parent attribute
+                if hasattr(stream_type, "parent"):
+                    new_parent = [streams_by_type[stream][0] for stream in streams_by_type if stream.name == streams[0].parent]
+                    if new_parent and new_parent != parents:
+                        parents = new_parent
+
+                for parent in parents:
+                    for stream in streams:
+                        parent.child_streams.append(stream)
+                        self.logger.info(
+                            f"Added '{stream.name}' as child stream to '{parent.name}'"
+                        )
+
+        streams = [stream for streams in streams_by_type.values() for stream in streams]
+        return sorted(
+            streams,
+            key=lambda x: x.name,
+            reverse=False,
+        )
 
 
 if __name__ == "__main__":

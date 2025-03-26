@@ -10,6 +10,12 @@ from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
 from singer_sdk import typing as th
 import singer
+from tap_hubspot_beta.utils import merge_responses
+import copy
+import urllib
+import backoff
+from singer_sdk.exceptions import RetriableAPIError
+import copy
 
 
 from singer_sdk.exceptions import InvalidStreamSortException
@@ -305,6 +311,13 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
     rest_method = "POST"
     bulk_child = True
     schema_written = False
+
+    properties_param = "propertiesWithHistory"
+    merge_pk = "id"
+
+    # the response validation happens in _handle_request, having backoff in _request as well hides errors
+    def backoff_max_tries(self) -> int:
+        return 1
 
     def post_process(self, row: dict, context) -> dict:
         row = super().post_process(row, context)
