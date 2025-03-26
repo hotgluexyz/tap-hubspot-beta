@@ -1973,6 +1973,22 @@ class CurrenciesStream(hubspotV3Stream):
     ).to_dict()
 
 
+class TeamsStream(hubspotV3Stream):
+    """Teams Stream"""
+
+    name = "teams"
+    path = "settings/v3/users/teams"
+    primary_keys = ["id"]
+    replication_key = None
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("userIds", th.ArrayType(th.StringType)),
+        th.Property("secondaryUserIds", th.ArrayType(th.StringType)),
+    ).to_dict()
+
+
 class ArchivedOwnersStream(ArchivedStream):
     """Archived Owners Stream"""
 
@@ -2239,3 +2255,5 @@ class AssociationTasksDealsStream(AssociationTasksStream):
 
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
+
+
