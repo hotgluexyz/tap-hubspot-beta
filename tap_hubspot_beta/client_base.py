@@ -19,7 +19,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
 
-logging.getLogger("backoff").setLevel(logging.CRITICAL)
+logging.getLogger("backoff").setLevel(logging.WARNING)
 
 
 class hubspotStream(RESTStream):
@@ -300,6 +300,14 @@ class hubspotStream(RESTStream):
                 finalize_state_progress_markers(state)
             return
         finalize_state_progress_markers(state)
+
+    def backoff_handler(self, details):
+        """Log backoff retry details."""
+        self.logger.warning(
+            f"Backing off {details['wait']} seconds after {details['tries']} tries "
+            f"calling function {details['target']} with args {details['args']} "
+            f"and kwargs {details['kwargs']}"
+        )
 
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
