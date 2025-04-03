@@ -134,7 +134,7 @@ class hubspotStream(RESTStream):
             # only use contacts stream for incremental syncs
             if self.name == "contacts_v3":
                 fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
-                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync:
+                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
                     finished = True
                     yield from []
                     break

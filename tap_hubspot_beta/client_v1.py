@@ -152,8 +152,9 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
                 params = copy.deepcopy(fixed_params)
                 params[self.properties_param] = []
 
-        if params != fixed_params:
-            yield prepared_request
+        # yield last split request, or the normal request if it's less than the MAX_LEN_URL
+        yield prepared_request
+        
 
     @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=7, max_value=320, base=2, factor=10)
     def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:

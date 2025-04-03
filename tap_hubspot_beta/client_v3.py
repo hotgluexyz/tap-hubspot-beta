@@ -262,7 +262,7 @@ class hubspotV3Stream(hubspotStream):
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         params["limit"] = self.page_size
-        params.update(self.additional_prarams)
+        params.update(self.additional_params)
         if self.properties_url:
             # requesting either properties or properties with history
             # if we send both it returns an error saying the url is too long

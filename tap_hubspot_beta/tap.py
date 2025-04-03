@@ -78,7 +78,6 @@ from tap_hubspot_beta.streams import (
     ArchivedOwnersStream,
     ArchivedProductsStream,
     FullsyncDealsStream,
-    TeamsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -105,8 +104,6 @@ from tap_hubspot_beta.streams import (
     LandingPagesStream,
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
-    DealsHistoryPropertiesStream,
-    ContactsHistoryPropertiesStream,
     LeadsStream,
     FullsyncContactsV3Stream
 )
@@ -198,7 +195,6 @@ STREAM_TYPES = add_streams([
     ArchivedOwnersStream,
     ArchivedProductsStream,
     FullsyncDealsStream,
-    TeamsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -225,8 +221,6 @@ STREAM_TYPES = add_streams([
     LandingPagesStream,
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
-    DealsHistoryPropertiesStream,
-    ContactsHistoryPropertiesStream,
     LeadsStream,
     FullsyncContactsV3Stream
 ])
