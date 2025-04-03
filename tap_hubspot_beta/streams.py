@@ -873,6 +873,64 @@ class ArchivedCompaniesStream(hubspotV3Stream):
 
         return None
 
+class ArchivedContactsStream(hubspotV3Stream):
+    """Archived Contacts Stream"""
+
+    name = "contacts_archived"
+    replication_key = "archivedAt"
+    path = "crm/v3/objects/contacts?archived=true"
+    properties_url = "properties/v1/contacts/properties"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType)
+    ]
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("contacts_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if contacts is selected
+            self._tap.catalog["contacts_archived"] = self._tap.catalog["contacts"]
+            return self.mask.get((), False) or self._tap.catalog["contacts"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the contacts stream
+            record_message.stream = "contacts"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
+    
 
 class TicketsStream(ObjectSearchV3):
     """Companies Stream"""
