@@ -8,6 +8,9 @@ from singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
+from singer_sdk import typing as th
+import singer
+
 
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers._state import (
@@ -30,6 +33,7 @@ class hubspotV3SearchStream(hubspotStream):
     previous_starting_time = None
     max_dates = []
     starting_times = []
+    bulk_child = True
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -43,7 +47,7 @@ class hubspotV3SearchStream(hubspotStream):
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
         # next_page_token = "10000"
-        if next_page_token == "10000":
+        if next_page_token is not None and float(next_page_token) + self.page_size >= 10000:
             start_date = self.stream_state.get("progress_markers", {}).get(
                 "replication_key_value"
             )
@@ -134,89 +138,148 @@ class hubspotV3SearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                #Skip id property
-                if name == "id":
-                    continue
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row, should_map_id=False)
         return row
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
     ) -> None:
         """Sync records, emitting RECORD and STATE messages. """
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-        selected = self.selected
 
-        for current_context in context_list or [{}]:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            child_context_bulk = {"ids": []}
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
+        if not self.bulk_child:
+            record_count = 0
+            current_context: Optional[dict]
+            context_list: Optional[List[dict]]
+            context_list = [context] if context is not None else self.partitions
+            selected = self.selected
+
+            for current_context in context_list or [{}]:
+                partition_record_count = 0
+                current_context = current_context or None
+                state = self.get_context_state(current_context)
+                state_partition_context = self._get_state_partition_context(current_context)
+                self._write_starting_replication_value(current_context)
+                child_context: Optional[dict] = (
+                    None if current_context is None else copy.copy(current_context)
                 )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
+                child_context_bulk = {"ids": []}
+                for record_result in self.get_records(current_context):
+                    if isinstance(record_result, tuple):
+                        # Tuple items should be the record and the child context
+                        record, child_context = record_result
+                    else:
+                        record = record_result
+                    child_context = copy.copy(
+                        self.get_child_context(record=record, context=child_context)
+                    )
+                    for key, val in (state_partition_context or {}).items():
+                        # Add state context to records if not already present
+                        if key not in record:
+                            record[key] = val
 
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=5000:
+                    # Sync children, except when primary mapper filters out the record
+                    if self.stream_maps[0].get_filter_result(record):
+                        child_context_bulk["ids"].append(child_context)
+                    if len(child_context_bulk["ids"])>=self.bulk_child_size:
+                        self._sync_children(child_context_bulk)
+                        child_context_bulk = {"ids": []}
+                    self._check_max_record_limit(record_count)
+                    if selected:
+                        if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
+                            self._write_state_message()
+                        self._write_record_message(record)
+                        try:
+                            self._increment_stream_state(record, context=current_context)
+                        except InvalidStreamSortException as ex:
+                            log_sort_error(
+                                log_fn=self.logger.error,
+                                ex=ex,
+                                record_count=record_count + 1,
+                                partition_record_count=partition_record_count + 1,
+                                current_context=current_context,
+                                state_partition_context=state_partition_context,
+                                stream_name=self.name,
+                            )
+                            raise ex
+
+                    record_count += 1
+                    partition_record_count += 1
+                if len(child_context_bulk):
                     self._sync_children(child_context_bulk)
-                    child_context_bulk = {"ids": []}
-                self._check_max_record_limit(record_count)
-                if selected:
-                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
-                        self._write_state_message()
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
+                if current_context == state_partition_context:
+                    # Finalize per-partition state only if 1:1 with context
+                    finalize_state_progress_markers(state)
+            if not context:
+                # Finalize total stream only if we have the full full context.
+                # Otherwise will be finalized by tap at end of sync.
+                finalize_state_progress_markers(self.stream_state)
+            self._write_record_count_log(record_count=record_count, context=context)
+            # Reset interim bookmarks before emitting final STATE message:
+            self._write_state_message()
+        else:
+            record_count = 0
+            current_context: Optional[dict]
+            context_list: Optional[List[dict]]
+            context_list = [context] if context is not None else self.partitions
+            selected = self.selected
 
-                record_count += 1
-                partition_record_count += 1
-            if len(child_context_bulk):
-                self._sync_children(child_context_bulk)
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-        # Reset interim bookmarks before emitting final STATE message:
-        self._write_state_message()
+            for current_context in context_list or [{}]:
+                partition_record_count = 0
+                current_context = current_context or None
+                state = self.get_context_state(current_context)
+                state_partition_context = self._get_state_partition_context(current_context)
+                self._write_starting_replication_value(current_context)
+                child_context: Optional[dict] = (
+                    None if current_context is None else copy.copy(current_context)
+                )
+                for record_result in self.get_records(current_context):
+                    if isinstance(record_result, tuple):
+                        # Tuple items should be the record and the child context
+                        record, child_context = record_result
+                    else:
+                        record = record_result
+                    child_context = copy.copy(
+                        self.get_child_context(record=record, context=child_context)
+                    )
+                    for key, val in (state_partition_context or {}).items():
+                        # Add state context to records if not already present
+                        if key not in record:
+                            record[key] = val
 
+                    # Sync children, except when primary mapper filters out the record
+                    if self.stream_maps[0].get_filter_result(record):
+                        self._sync_children(child_context)
+                    self._check_max_record_limit(record_count)
+                    if selected:
+                        if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
+                            self._write_state_message()
+                        self._write_record_message(record)
+                        try:
+                            self._increment_stream_state(record, context=current_context)
+                        except InvalidStreamSortException as ex:
+                            log_sort_error(
+                                log_fn=self.logger.error,
+                                ex=ex,
+                                record_count=record_count + 1,
+                                partition_record_count=partition_record_count + 1,
+                                current_context=current_context,
+                                state_partition_context=state_partition_context,
+                                stream_name=self.name,
+                            )
+                            raise ex
+
+                    record_count += 1
+                    partition_record_count += 1
+                if current_context == state_partition_context:
+                    # Finalize per-partition state only if 1:1 with context
+                    finalize_state_progress_markers(state)
+            if not context:
+                # Finalize total stream only if we have the full full context.
+                # Otherwise will be finalized by tap at end of sync.
+                finalize_state_progress_markers(self.stream_state)
+            self._write_record_count_log(record_count=record_count, context=context)
+            # Reset interim bookmarks before emitting final STATE message:
+            self._write_state_message()
 
 class hubspotV3Stream(hubspotStream):
     """hubspot stream class."""
@@ -237,9 +300,14 @@ class hubspotV3Stream(hubspotStream):
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         params["limit"] = self.page_size
-        params.update(self.additional_prarams)
+        params.update(self.additional_params)
         if self.properties_url:
-            params["properties"] = ",".join(self.selected_properties)
+            # requesting either properties or properties with history
+            # if we send both it returns an error saying the url is too long
+            if params.get("propertiesWithHistory"):
+                params["propertiesWithHistory"] = ",".join(self.selected_properties)
+            else:
+                params["properties"] = ",".join(self.selected_properties)
         if next_page_token:
             params["after"] = next_page_token
         if self.name == "forms":
@@ -248,10 +316,7 @@ class hubspotV3Stream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row)
         return row
 
 
@@ -275,18 +340,11 @@ class hubspotV3SingleSearchStream(hubspotStream):
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
-        all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
-        next_page_token = next(iter(all_matches), None)
-        if next_page_token == "10000":
-
-            start_date = self.stream_state.get("progress_markers", {}).get("replication_key_value")
-
-            if start_date:
-                start_date = parse(start_date)
-                self.starting_time = int(start_date.timestamp() * 1000)
-
-            next_page_token = "0"
-        return next_page_token
+        response_json = response.json()
+        if response_json.get("hasMore"):
+            offset = response_json.get("offset")
+            if offset:
+                return offset
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -298,15 +356,12 @@ class hubspotV3SingleSearchStream(hubspotStream):
         if self.filter:
             payload["filters"].append(self.filter)
         if next_page_token and next_page_token!="0":
-            payload["after"] = next_page_token
+            payload["offset"] = next_page_token
         return payload
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
+        row = self.parse_properties(row)
         return row
 
 class AssociationsV3ParentStream(hubspotV3Stream):
@@ -353,7 +408,7 @@ class AssociationsV3ParentStream(hubspotV3Stream):
                 # Sync children, except when primary mapper filters out the record
                 if self.stream_maps[0].get_filter_result(record):
                     child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=5000:
+                if len(child_context_bulk["ids"])>=self.bulk_child_size:
                     self._sync_children(child_context_bulk)
                     child_context_bulk = {"ids": []}
                 self._check_max_record_limit(record_count)
@@ -389,3 +444,19 @@ class AssociationsV3ParentStream(hubspotV3Stream):
         self._write_record_count_log(record_count=record_count, context=context)
         # Reset interim bookmarks before emitting final STATE message:
         self._write_state_message()
+    
+class hubspotHistoryV3Stream(hubspotV3Stream):
+
+    def post_process(self, row: dict, context) -> dict:
+        row = super().post_process(row, context)
+        props = row.get("propertiesWithHistory") or dict()
+        row["propertiesWithHistory"] = {k:v for (k,v) in props.items() if v}
+        row = {k:v for k,v in row.items() if k in ["id", "propertiesWithHistory", "createdAt", "updatedAt", "archived", "archivedAt"]}
+        return row
+    
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+            singer.write_message(schema_message)
+        

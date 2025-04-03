@@ -69,6 +69,16 @@ from tap_hubspot_beta.streams import (
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    SessionAnalyticsDailyReportsStream,
+    SessionAnalyticsWeeklyReportsStream,
+    SessionAnalyticsMonthlyReportsStream,
+    SessionAnalyticsTotalReportStream,
+    BreakdownsAnalyticsReportsGeolocationMonthlyStream,
+    BreakdownsAnalyticsReportsGeolocationTotalStream,
+    BreakdownsAnalyticsReportsSourcesMonthlyStream,
+    BreakdownsAnalyticsReportsSourcesTotalStream,
+    BreakdownsAnalyticsReportsUtmCampaignsMonthlyStream,
+    BreakdownsAnalyticsReportsUtmCampaignsTotalStream,
     FormsSummaryMonthlyStream,
     TeamsStream,
     MeetingsAssociationStream,
@@ -86,6 +96,10 @@ from tap_hubspot_beta.streams import (
     LandingPagesStream,
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    LeadsStream,
+    FullsyncContactsV3Stream
 )
 
 STREAM_TYPES = [
@@ -152,6 +166,16 @@ STREAM_TYPES = [
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    SessionAnalyticsDailyReportsStream,
+    SessionAnalyticsWeeklyReportsStream,
+    SessionAnalyticsMonthlyReportsStream,
+    SessionAnalyticsTotalReportStream,
+    BreakdownsAnalyticsReportsGeolocationMonthlyStream,
+    BreakdownsAnalyticsReportsGeolocationTotalStream,
+    BreakdownsAnalyticsReportsSourcesMonthlyStream,
+    BreakdownsAnalyticsReportsSourcesTotalStream,
+    BreakdownsAnalyticsReportsUtmCampaignsMonthlyStream,
+    BreakdownsAnalyticsReportsUtmCampaignsTotalStream,
     FormsSummaryMonthlyStream,
     TeamsStream,
     MeetingsAssociationStream,
@@ -169,6 +193,10 @@ STREAM_TYPES = [
     LandingPagesStream,
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    LeadsStream,
+    FullsyncContactsV3Stream
 ]
 
 

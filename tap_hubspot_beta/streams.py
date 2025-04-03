@@ -1,4 +1,6 @@
 """Stream type classes for tap-hubspot."""
+from abc import ABC
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
@@ -14,11 +16,11 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
 
-from tap_hubspot_beta.client_base import hubspotStreamSchema
-from tap_hubspot_beta.client_v1 import hubspotV1Stream
-from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
+from tap_hubspot_beta.client_base import hubspotStreamSchema, hubspotStream
+from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
+from tap_hubspot_beta.client_v2 import hubspotV2Stream
+from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
-import time
 import pytz
 from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
@@ -33,6 +35,7 @@ association_schema = th.PropertiesList(
         th.Property("label", th.StringType),
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
+
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -153,7 +156,7 @@ class EngagementStream(hubspotV1Stream):
         return row
 
 
-class ContactsStream(hubspotV1Stream):
+class ContactsStream(hubspotV1SplitUrlStream):
     """Contacts Stream"""
 
     name = "contacts"
@@ -161,8 +164,10 @@ class ContactsStream(hubspotV1Stream):
     records_jsonpath = "$.contacts[*]"
     primary_keys = ["vid"]
     replication_key = None
-    additional_prarams = dict(showListMemberships=True)
+    additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
+    merge_pk = "vid"
+    write_as_contacts_v3 = False
 
     base_properties = [
         th.Property("vid", th.IntegerType),
@@ -186,7 +191,8 @@ class ContactsStream(hubspotV1Stream):
         return {
             "contact_id": record["vid"],
             "contact_date": record.get("lastmodifieddate"),
-            "subscriber_email": record.get("subscriber_email")
+            "subscriber_email": record.get("subscriber_email"),
+            "row": record
         }
 
     def get_child_bookmark(self, child_stream, child_context):
@@ -208,6 +214,12 @@ class ContactsStream(hubspotV1Stream):
 
     def _sync_children(self, child_context: dict) -> None:
         for child_stream in self.child_streams:
+            # sync fullsync ontacts child stream normally
+            if child_stream.name == "fullsync_contacts_v3" and (child_stream.selected or child_stream.has_selected_descendents):
+                child_stream._sync_records(context=child_context)
+                continue
+            
+            # keep custom logic for other child streams
             if child_stream.selected or child_stream.has_selected_descendents:
                 last_job = self.last_job
                 if child_stream.get_replication_key_signpost(child_context):
@@ -246,7 +258,20 @@ class ContactsStream(hubspotV1Stream):
                             if child_part and ("replication_key" not in child_part):
                                 child_part["replication_key"] = child_stream.replication_key
                                 child_part["replication_key_value"] = child_context["contact_date"]
-
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        params["count"] = self.page_size
+        if next_page_token:
+            params.update(next_page_token)
+        params.update(self.additional_params)
+        if self._tap.streams["contacts_v3"].selected:
+            self.selected_properties = self._tap.streams["contacts_v3"].selected_properties
+        params["property"] = self.selected_properties
+        return params
 
 class ContactSubscriptionStatusStream(hubspotV3Stream):
     name = 'contact_subscription_status'
@@ -781,6 +806,10 @@ class ContactsV3Stream(ObjectSearchV3):
     name = "contacts_v3"
     path = "crm/v3/objects/contacts/search"
     properties_url = "properties/v1/contacts/properties"
+    @property
+    def use_contacts_stream(self):
+        if not self.stream_state.get("replication_key_value"):
+            return True
 
     @property
     def replication_key(self):
@@ -806,12 +835,151 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
+class FullsyncContactsV3Stream(hubspotStream):
+    """Fullsync Contacts v3 Stream"""
+    # this is a stream created to run fullsyncs when contacts_v3 is selected and there's no state
+    # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
+    # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice
+
+    path = "contacts/v1/lists/all/contacts/all"
+    records_jsonpath = "$.[*]"
+    primary_keys = ["id"]
+    additional_params = dict(showListMemberships=True)
+    properties_url = "properties/v1/contacts/properties"
+    parent_stream_type = ContactsStream
+    name = "fullsync_contacts_v3"
+    stream_alias = "contacts_v3"
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+    ]
+
+    # to match contactsv3 rep key    
+    @property
+    def replication_key(self):
+        if self.config.get("filter_contacts_created_at"):
+            return "createdAt"
+        return "updatedAt"
+
+    def apply_catalog(self, catalog) -> None:
+        self._tap_input_catalog = catalog
+        catalog_entry = catalog.get_stream(self.name)
+        if catalog_entry:
+            self.primary_keys = catalog_entry.key_properties
+            if catalog_entry.replication_method:
+                self.forced_replication_method = catalog_entry.replication_method
+
+    def request_records(self, context):
+        self._write_schema_message()
+        if context.get("row"):
+            return [context["row"]]
+
+    def parse_response(self, response) -> Iterable[dict]:
+        yield from extract_jsonpath(self.records_jsonpath, input=response)
+    
+    def post_process(self, row, context) -> dict:
+        row = super().post_process(row, context)
+        # modify fields to have the same schema as contacts_v3
+        row["id"] = str(row.pop("vid", ""))
+        row["updatedAt"] = row.pop("lastmodifieddate")
+        row["createdAt"] = row.pop("addedAt")
+        return row
+    
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_contacts_v3"):
+            return False
+
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+            # Make this stream auto-select if companies is selected
+            self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
+            self.is_first_sync = True
+            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
+        else:
+            return self.mask.get((), False)
+    
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.stream = self.stream_alias
+            schema_message.schema = self.schema
+            singer.write_message(schema_message)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = self.stream_alias
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        # Itera sobre todas las propiedades en el metadata
+        for field in new_metadata.get('properties', {}).keys():
+            new_metadata[("properties", field)].selected = True        
+        return new_metadata
+    
+    def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
+        return {}
+    
+    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
+        if not self._metric_logging_function:
+            return None
+
+        if extra_tags:
+            metric["tags"].update(extra_tags)
+        
+        # clean records from metric logs
+        metric.get("tags", {}).pop("context", None)
+        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
+    
 class ContactsAssociationStream(AssociationsV3ParentStream):
     name = "contacts_association_parent"
     path = "crm/v3/objects/contacts"
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
+
+class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
+    """Contacts History Properties Stream"""
+
+    name = "contacts_history_properties"
+    path = "crm/v3/objects/contacts/{id}"
+    properties_url = "properties/v1/contacts/properties"
+    additional_params = {"propertiesWithHistory": True}
+    parent_stream_type = ContactsV3Stream
+    bulk_child = False
+    records_jsonpath = "$[*]"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
+    ]
+
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.schema = th.PropertiesList(*self.base_properties).to_dict()
+            singer.write_message(schema_message)
 
 
 class CompaniesStream(ObjectSearchV3):
@@ -912,10 +1080,31 @@ class DealsStream(ObjectSearchV3):
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
+    
+class DealsHistoryPropertiesStream(hubspotHistoryV3Stream):
+    """Deals Stream"""
+
+    name = "deals_history_properties"
+    path = "crm/v3/objects/deals/{id}"
+    properties_url = "properties/v1/deals/properties"
+    additional_params = {"propertiesWithHistory": True}
+    parent_stream_type = DealsStream
+    bulk_child = False
+    records_jsonpath = "$[*]"
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
+    ]
 
 class DealsAssociationParent(AssociationsV3ParentStream):
-    name = "deals_association_parent"
+    name = "deals_association_parent"    
     path = "crm/v3/objects/deals"
+    replication_key = None
+    primary_keys = ["id"]
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
     ).to_dict()
@@ -1155,14 +1344,8 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     name = "lists_v3"
     primary_keys = ["listId"]
     path = "crm/v3/lists/search"
-    replication_key = "updatedAt"
-    replication_key_filter = "hs_last_record_added_at"
     records_jsonpath = "$.lists[*]"
 
-
-    @property
-    def replication_key(self):
-        return "updatedAt"
 
     schema = th.PropertiesList(
         th.Property("listId", th.StringType),
@@ -1749,6 +1932,335 @@ class AssociationTasksDealsStream(AssociationTasksStream):
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
 
+
+breakdown_properties_list = [
+    th.Property("breakdown", th.StringType),
+    th.Property("others", th.IntegerType),
+    th.Property("otherCampaigns", th.IntegerType),
+    th.Property("mobile", th.IntegerType),
+    th.Property("desktop", th.IntegerType),
+    th.Property("organicSearch", th.IntegerType),
+    th.Property("paidSearch", th.IntegerType),
+    th.Property("paidSocial", th.IntegerType),
+    th.Property("socialMedia", th.IntegerType),
+    th.Property("directTraffic", th.IntegerType),
+    th.Property("referrals", th.IntegerType),
+    th.Property("rawViews", th.IntegerType),
+    th.Property("visits", th.IntegerType),
+    th.Property("visitors", th.IntegerType),
+    th.Property("leads", th.IntegerType),
+    th.Property("contacts", th.IntegerType),
+    th.Property("subscribers", th.IntegerType),
+    th.Property("opportunities", th.IntegerType),
+    th.Property("customers", th.IntegerType),
+    th.Property("pageviewsPerSession", th.NumberType),
+    th.Property("bounceRate", th.NumberType),
+    th.Property("timePerSession", th.NumberType),
+    th.Property("newVisitorSessionRate", th.NumberType),
+    th.Property("sessionToContactRate", th.NumberType),
+    th.Property("contactToCustomerRate", th.NumberType),
+]
+
+
+class SessionAnalyticsReportsBaseStream(hubspotV3Stream):
+
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("date", th.DateType),
+    ).to_dict()
+    
+    def parse_response(self, response: requests.Response):
+        res_json = response.json()
+        for date_str, list_data_obj in res_json.items():
+            for data_obj in list_data_obj:
+                data_obj["date"] = date_str
+                yield data_obj
+
+
+class SessionAnalyticsDailyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_daily_reports"
+    path = "analytics/v2/reports/sessions/daily"
+
+
+class SessionAnalyticsWeeklyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_weekly_reports"
+    path = "analytics/v2/reports/sessions/weekly"
+
+
+class SessionAnalyticsMonthlyReportsStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_monthly_reports"
+    path = "analytics/v2/reports/sessions/monthly"
+
+
+class SessionAnalyticsTotalReportStream(SessionAnalyticsReportsBaseStream):
+    name = "session_analytics_total_report"
+    path = "analytics/v2/reports/sessions/total"
+    offset = 0
+
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        yield from (row for row in response.json().get('breakdowns', [{}]))
+    
+    @property
+    def additional_params(self):
+        return dict(offset=self.offset)
+    
+    def get_next_page_token(self, response: requests.Response, previous_token):
+        offset = response.json().get('offset', 0)
+        if not offset:
+            return None
+        
+        total = response.json().get('total')
+        if not total or offset >= total:
+            return None
+        
+        if not self.page_size:
+            self.page_size = offset
+        
+        self.offset += self.page_size
+        return self.additional_params
+
+
+class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
+    page_size = None
+    offset = 0
+    d1_options = defaultdict(list)  # will be a dictionary where the keys are d1 breakdowns and the values are lists of d2 breakdowns
+    d2_options = []
+    current_d1 = None
+    current_d2 = None
+    time_period = None
+    breakdown_by = None
+    
+    schema = th.PropertiesList(
+        *breakdown_properties_list,
+        th.Property("d1", th.StringType),
+        th.Property("date", th.StringType),
+    ).to_dict()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        TIME_PERIOD_OPTIONS = ["total", "monthly", "weekly", "daily"]
+        BREAKDOWN_BY_OPTIONS = ["totals", "sessions", "sources", "geolocation", "utm-campaigns", "utm-contents", "utm-mediums", "utm-sources", "utm-terms"]
+        if self.time_period not in TIME_PERIOD_OPTIONS:
+            raise Exception(f"Invalid time_period. Selected ({self.time_period}) not in the options ({TIME_PERIOD_OPTIONS})")
+        if self.breakdown_by not in BREAKDOWN_BY_OPTIONS:
+            raise Exception(f"Invalid breakdown_by. Selected ({self.breakdown_by}) not in the options ({BREAKDOWN_BY_OPTIONS})")
+        
+        self.is_d2_stream = self.time_period == "total"
+        
+        # on monthly/weekly/daily endpoints, filter works as d2 
+        if self.is_d2_stream:
+            self.schema.get("properties").update(th.Property("d2", th.StringType).to_dict())
+        else:
+            # it may be confusing, but for monthly/weekly/daily, d2 will be used as filters f and passed through url params
+            self.schema.get("properties").update(th.Property("filter", th.StringType).to_dict())
+    
+    @property
+    def path(self):
+        return f"analytics/v2/reports/{self.breakdown_by}/{self.time_period}"
+    
+    @property
+    def additional_params(self):
+        additional_params = dict(offset=self.offset)
+        start_date = self._tap.config.get("start_date")
+        end_date = self._tap.config.get("end_date")
+        if start_date:
+            additional_params["start"] = parse(start_date).strftime("%Y%m%d")
+        if end_date:
+            additional_params["end"] = parse(end_date).strftime("%Y%m%d")
+        self.update_additional_params(additional_params)  # include filters (f), d1, d2
+        return additional_params
+    
+    def reset_offset(self):
+        self.offset = 0
+
+    def get_next_page_token(self, response: requests.Response, previous_token):
+        offset = response.json().get('offset', 0)
+        if not offset:
+            return self.next_token()
+        
+        total = response.json().get('total')
+        if not total or offset >= total:
+            return self.next_token()
+        
+        if not self.page_size:
+            self.page_size = offset
+        
+        self.offset += self.page_size
+        return self.additional_params
+
+    @property
+    def d1(self):
+        if not self.d1_options:
+            return None
+        if not self.current_d1:
+            self.update_d1()
+        return self.current_d1
+    
+    def update_d1(self):
+        if len(self.d1_options):
+            current_d1 = self.current_d1
+            self.current_d1 = next(iter(self.d1_options), None)
+            if current_d1 and self.current_d1 and self.current_d1 == current_d1:
+                self.d1_options.pop(self.current_d1)
+                self.current_d1 = next(iter(self.d1_options), None)
+    
+    @property
+    def d2(self):
+        if not self.d1_options:
+            return None
+        if not self.current_d2:
+            self.update_d2()
+        return self.current_d2
+
+    def update_d2(self):
+        if self.is_d2_stream and len(self.d1_options):
+            d1 = self.d1
+            self.d2_options = self.d1_options.get(d1) or []
+            if self.d2_options:
+                self.current_d2 = self.d2_options.pop()
+                self.d1_options[d1] = self.d2_options
+
+    def update_additional_params(self, additional_params):
+        d1 = self.d1
+        if d1:
+            additional_params["d1"] = d1
+            d2 = self.d2
+            if self.is_d2_stream and d2:
+                additional_params["d2"] = d2
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if context and context.get("populate_d2_breakdowns"):
+            params["d1"] = context.get("d1_breakdown")
+            if params.get("d2"):
+                del params["d2"]
+        return params
+    
+    def add_drilldowns_to_row(self, row):
+        d1 = self.d1
+        if d1:
+            row["d1"] = d1
+            d2 = self.d2
+            if self.is_d2_stream and d2:
+                row["d2"] = d2
+        return row
+
+    def parse_response(self, response: requests.Response) -> Iterable[Dict]:
+        res_json = response.json()
+        if self.is_d2_stream:
+            breakdowns = res_json.get('breakdowns')
+            if breakdowns is not None:
+                for row in breakdowns:
+                    row = self.add_drilldowns_to_row(row)
+                    yield row
+        else:
+            res_json = response.json()
+            for date_str, list_data_obj in res_json.items():
+                for row in list_data_obj:
+                    row = self.add_drilldowns_to_row(row)
+                    row["date"] = date_str
+                    yield row
+
+    def next_token(self):
+        if self.is_d2_stream:
+            if len(self.d2_options) == 0:
+                self.update_d1()
+            self.update_d2()
+        else:
+            self.update_d1()
+            self.reset_offset()
+        
+        if len(self.d1_options) == 0:
+            return None
+        
+        return self.additional_params
+    
+    def get_response_populate_breakdowns_request(self, context):
+        decorated_request = self.request_decorator(self._request)
+        prepared_request = self.prepare_request(
+            context, next_page_token=None
+        )
+        if not self.is_d2_stream:
+            period = prepared_request.url.split('/')[-1].split('?')[0]
+            prepared_request.url = prepared_request.url.replace(period, "total")
+        return decorated_request(prepared_request, context)
+
+    def populate_d1_breakdowns(self, context):
+        # dynamically update d1 options
+        resp = self.get_response_populate_breakdowns_request(context)
+        for d1_breakdown in resp.json().get("breakdowns") or [{}]:
+            d1_breakdown_name = d1_breakdown.get("breakdown")
+            if d1_breakdown_name:
+                self.d1_options[d1_breakdown_name] = []
+                self.populate_d2_breakdowns(context, d1_breakdown_name)
+
+    def populate_d2_breakdowns(self, context, d1_breakdown):
+        # will be used either on properly d2 or f filters
+        if not context:
+            context = {}
+        context["populate_d2_breakdowns"] = True
+        context["d1_breakdown"] = d1_breakdown
+        resp = self.get_response_populate_breakdowns_request(context)
+        self.d1_options[d1_breakdown] = [
+            d2_breakdown.get("breakdown")
+            for d2_breakdown in resp.json().get("breakdowns")
+            if d2_breakdown.get("breakdown") is not None
+        ]
+
+    def populate_params(self, context):
+        self.populate_d1_breakdowns(context)
+
+    def prepare_request(self, context, next_page_token):
+        prepared_request = super().prepare_request(context, next_page_token)
+        context = context or {}
+        if not self.is_d2_stream and len(self.d1_options) and not context.get('populate_d2_breakdowns'):
+            f_filters = self.d1_options.get(self.d1)
+            joined_filters = "&f=".join([curr_filter for curr_filter in f_filters])
+            first_symbol = "&" if "&" in prepared_request.url else "?"
+            if joined_filters:
+                prepared_request.url = prepared_request.url + first_symbol + "f=" + joined_filters
+            else:
+                # there are edge cases where d1 doesn't have inner drilldowns. in monthly request it breaks the stream
+                # so, in this case, f will work as d1
+                prepared_request.url = prepared_request.url.replace(f"{first_symbol}d1=", f"{first_symbol}f=")
+        return prepared_request
+
+
+class BreakdownsAnalyticsReportsSourcesTotalStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_sources"
+    time_period = "total"
+    breakdown_by = "sources"
+
+class BreakdownsAnalyticsReportsSourcesMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_sources_monthly"
+    time_period = "monthly"
+    breakdown_by = "sources"
+
+
+class BreakdownsAnalyticsReportsGeolocationTotalStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_geolocation"
+    time_period = "total"
+    breakdown_by = "geolocation"
+
+
+class BreakdownsAnalyticsReportsGeolocationMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_geolocation_monthly"
+    time_period = "monthly"
+    breakdown_by = "geolocation"
+
+
+class BreakdownsAnalyticsReportsUtmCampaignsTotalStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_utm_campaigns"
+    time_period = "total"
+    breakdown_by = "utm-campaigns"
+
+
+class BreakdownsAnalyticsReportsUtmCampaignsMonthlyStream(BreakdownsAnalyticsReportsBaseStream):
+    name = "analytics_reports_utm_campaigns_monthly"
+    time_period = "monthly"
+    breakdown_by = "utm-campaigns"
+
+
 class FormsSummaryMonthlyStream(hubspotV1Stream):
     """Association Base Stream"""
     #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-by-object
@@ -2158,3 +2670,12 @@ class GeolocationSummaryMonthlyStream(FormsSummaryMonthlyStream):
         th.Property("start_date", th.DateType),
         th.Property("end_date", th.DateType),
     ).to_dict() 
+
+class LeadsStream(ObjectSearchV3):
+    """Leads Stream"""
+
+    name = "leads"
+    path = "crm/v3/objects/leads/search"
+    properties_url = "crm/v3/properties/leads"
+
+    replication_key_filter = "hs_lastmodifieddate"

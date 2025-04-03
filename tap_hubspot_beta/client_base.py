@@ -13,14 +13,13 @@ from singer_sdk.streams import RESTStream
 from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
 import time
 
 from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
 
-logging.getLogger("backoff").setLevel(logging.CRITICAL)
+logging.getLogger("backoff").setLevel(logging.WARNING)
 
 
 class hubspotStream(RESTStream):
@@ -28,7 +27,7 @@ class hubspotStream(RESTStream):
 
     url_base = "https://api.hubapi.com/"
     base_properties = []
-    additional_prarams = {}
+    additional_params = {}
     properties_url = None
     page_size = 100
 
@@ -36,6 +35,9 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
+
+    is_first_sync = False
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -92,6 +94,18 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
+
+            # only use companies stream for incremental syncs
+            if self.name == "contacts_v3":
+                fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
+                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync:
+                    finished = True
+                    yield from []
+                    break
+                if not self.stream_state.get("replication_key_value") and fullsync_contacts_v3_state.get("replication_key"):
+                    self.stream_state.update(fullsync_contacts_v3_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]  
+
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -173,11 +187,9 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            #We need logs for 500
             if response.status_code == 500:
-                curl_command = curlify.to_curl(response.request)
-                logging.error(f"Response code: {response.status_code}, info: {response.text}")
-                logging.error(f"CURL command for failed request: {curl_command}")
+                req = response.request
+                logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             raise RetriableAPIError(msg)
 
         elif 400 <= response.status_code < 500:
@@ -185,14 +197,12 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
+            req = response.request
+            logging.error(f"Status code: {response.status_code}, info: {response.text}, reason: {response.reason} | Failed request: url={req.url}, method={req.method}, body={req.body}")
             if "FORM_TYPE_NOT_ALLOWED" in response.text:
                 #Skip this form and continue the sync
                 return
-            #On rare occasion Hubspot API is unable to parse JSON in the request. Retry previous request.
-            if "invalid json input" in response.text.lower():
+            if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
                 raise RetriableAPIError(msg)
             raise FatalAPIError(msg)
 
@@ -223,8 +233,9 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
+        schema_res = response.json()
 
-        fields = response.json()
+        fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
         for field in fields:
             if not field.get("deleted"):
                 property = th.Property(field.get("name"), self.extract_type(field, self.config.get("type_booleancheckbox_as_boolean")))
@@ -291,17 +302,26 @@ class hubspotStream(RESTStream):
             return
         finalize_state_progress_markers(state)
 
+    def backoff_handler(self, details):
+        """Log backoff retry details."""
+        self.logger.warning(
+            f"Backing off {details['wait']} seconds after {details['tries']} tries "
+            f"calling function {details['target']} with args {details['args']} "
+            f"and kwargs {details['kwargs']}"
+        )
+
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 ProtocolError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=8,
+            factor=3,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -341,6 +361,20 @@ class hubspotStream(RESTStream):
                 )
             ]
         return self._stream_maps
+    
+    def parse_value(self, field, value):
+        if "boolean" == self.schema["properties"].get(field, {}).get("type", [""])[0] and value in ["true", "false", "True", "False"]:
+            value = True if value.lower() == "true" else False if value.lower() == "false" else value
+        return value
+
+    def parse_properties(self, row, should_map_id=True):
+        if self.properties_url:
+            for name, value in row["properties"].items():
+                if not should_map_id and name == "id":
+                    continue
+                row[name] = self.parse_value(name, value)
+            del row["properties"]
+        return row
 
 
 class hubspotStreamSchema(hubspotStream):
@@ -368,11 +402,3 @@ class hubspotStreamSchema(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         return params
-
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
