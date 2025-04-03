@@ -2562,6 +2562,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
     current_d2 = None
     time_period = None
     breakdown_by = None
+    records_jsonpath = "$.results[*]"
     
     schema = th.PropertiesList(
         *breakdown_properties_list,

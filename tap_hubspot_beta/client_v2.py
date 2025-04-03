@@ -10,8 +10,6 @@ import copy
 class hubspotV2Stream(hubspotStreamSchema):
     """hubspot stream class."""
 
-    records_jsonpath = "$.results[*]"
-
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
