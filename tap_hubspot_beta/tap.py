@@ -92,7 +92,6 @@ from tap_hubspot_beta.streams import (
     FormsSummaryMonthlyStream,
     TeamsStream,
     MeetingsAssociationStream,
-    ContactsAssociationStream,
     CallsAssociationStream,
     CommunicationsAssociationStream,
     EmailsAssociationStream,
@@ -108,7 +107,8 @@ from tap_hubspot_beta.streams import (
     GeolocationSummaryMonthlyStream,
     DealsHistoryPropertiesStream,
     ContactsHistoryPropertiesStream,
-    LeadsStream
+    LeadsStream,
+    FullsyncContactsV3Stream
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -212,7 +212,6 @@ STREAM_TYPES = add_streams([
     FormsSummaryMonthlyStream,
     TeamsStream,
     MeetingsAssociationStream,
-    ContactsAssociationStream,
     CallsAssociationStream,
     CommunicationsAssociationStream,
     EmailsAssociationStream,
@@ -228,7 +227,8 @@ STREAM_TYPES = add_streams([
     GeolocationSummaryMonthlyStream,
     DealsHistoryPropertiesStream,
     ContactsHistoryPropertiesStream,
-    LeadsStream
+    LeadsStream,
+    FullsyncContactsV3Stream
 ])
 
 

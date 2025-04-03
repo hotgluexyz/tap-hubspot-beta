@@ -16,7 +16,7 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
 
-from tap_hubspot_beta.client_base import hubspotStreamSchema
+from tap_hubspot_beta.client_base import hubspotStreamSchema, hubspotStream
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
@@ -162,7 +162,7 @@ class EngagementStream(hubspotV1Stream):
         return row
 
 
-class ContactsStream(hubspotV1Stream):
+class ContactsStream(hubspotV1SplitUrlStream):
     """Contacts Stream"""
 
     name = "contacts"
@@ -172,6 +172,8 @@ class ContactsStream(hubspotV1Stream):
     replication_key = None
     additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
+    merge_pk = "vid"
+    write_as_contacts_v3 = False
 
     base_properties = [
         th.Property("vid", th.IntegerType),
@@ -195,7 +197,9 @@ class ContactsStream(hubspotV1Stream):
         return {
             "contact_id": record["vid"],
             "contact_date": record.get("lastmodifieddate"),
-            "subscriber_email": record.get("subscriber_email")
+            "subscriber_email": record.get("subscriber_email"),
+            "subscriber_email": record.get("subscriber_email"),
+            "row": record
         }
 
     def get_child_bookmark(self, child_stream, child_context):
@@ -217,6 +221,12 @@ class ContactsStream(hubspotV1Stream):
 
     def _sync_children(self, child_context: dict) -> None:
         for child_stream in self.child_streams:
+            # sync fullsync contacts child stream normally
+            if child_stream.name == "fullsync_contacts_v3" and (child_stream.selected or child_stream.has_selected_descendents):
+                child_stream._sync_records(context=child_context)
+                continue
+
+            # keep custom logic for other child streams
             if child_stream.selected or child_stream.has_selected_descendents:
                 last_job = self.last_job
                 if child_stream.get_replication_key_signpost(child_context):
@@ -256,6 +266,19 @@ class ContactsStream(hubspotV1Stream):
                                 child_part["replication_key"] = child_stream.replication_key
                                 child_part["replication_key_value"] = child_context["contact_date"]
 
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        params["count"] = self.page_size
+        if next_page_token:
+            params.update(next_page_token)
+        params.update(self.additional_params)
+        if self._tap.streams["contacts_v3"].selected:
+            self.selected_properties = self._tap.streams["contacts_v3"].selected_properties
+        params["property"] = self.selected_properties
+        return params
 
 class ContactSubscriptionStatusStream(hubspotV3Stream):
     name = 'contact_subscription_status'
@@ -863,6 +886,11 @@ class ContactsV3Stream(ObjectSearchV3):
     bulk_child_size = 50 # max allowed in the API
 
     @property
+    def use_contacts_stream(self):
+        if not self.stream_state.get("replication_key_value"):
+            return True
+
+    @property
     def replication_key(self):
         if self.config.get("filter_contacts_created_at"):
             return "createdAt"
@@ -886,6 +914,120 @@ class ContactsV3Stream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
+
+class FullsyncContactsV3Stream(hubspotStream):
+    """Fullsync Contacts v3 Stream"""
+    # this is a stream created to run fullsyncs when contacts_v3 is selected and there's no state
+    # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
+    # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice
+
+    path = "contacts/v1/lists/all/contacts/all"
+    records_jsonpath = "$.[*]"
+    primary_keys = ["id"]
+    additional_params = dict(showListMemberships=True)
+    properties_url = "properties/v1/contacts/properties"
+    parent_stream_type = ContactsStream
+    name = "fullsync_contacts_v3"
+    stream_alias = "contacts_v3"
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+    ]
+
+    # to match contactsv3 rep key    
+    @property
+    def replication_key(self):
+        if self.config.get("filter_contacts_created_at"):
+            return "createdAt"
+        return "updatedAt"
+
+    def apply_catalog(self, catalog) -> None:
+        self._tap_input_catalog = catalog
+        catalog_entry = catalog.get_stream(self.name)
+        if catalog_entry:
+            self.primary_keys = catalog_entry.key_properties
+            if catalog_entry.replication_method:
+                self.forced_replication_method = catalog_entry.replication_method
+
+    def request_records(self, context):
+        self._write_schema_message()
+        if context.get("row"):
+            return [context["row"]]
+
+    def parse_response(self, response) -> Iterable[dict]:
+        yield from extract_jsonpath(self.records_jsonpath, input=response)
+
+    def post_process(self, row, context) -> dict:
+        row = super().post_process(row, context)
+        # modify fields to have the same schema as contacts_v3
+        row["id"] = str(row.pop("vid", ""))
+        row["updatedAt"] = row.pop("lastmodifieddate")
+        row["createdAt"] = row.pop("addedAt")
+        return row
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_contacts_v3"):
+            return False
+
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+            # Make this stream auto-select if companies is selected
+            self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
+            self.is_first_sync = True
+            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
+        else:
+            return self.mask.get((), False)
+
+    def _write_schema_message(self) -> None:
+        """Write out a SCHEMA message with the stream schema."""
+        for schema_message in self._generate_schema_messages():
+            schema_message.stream = self.stream_alias
+            schema_message.schema = self.schema
+            singer.write_message(schema_message)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = self.stream_alias
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        # Itera sobre todas las propiedades en el metadata
+        for field in new_metadata.get('properties', {}).keys():
+            new_metadata[("properties", field)].selected = True        
+        return new_metadata
+
+    def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
+        return {}
+
+    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
+        if not self._metric_logging_function:
+            return None
+
+        if extra_tags:
+            metric["tags"].update(extra_tags)
+
+        # clean records from metric logs
+        metric.get("tags", {}).pop("context", None)
+        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
+
+
 class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
@@ -894,6 +1036,15 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     properties_url = "properties/v1/contacts/properties"
     parent_stream_type = ContactsV3Stream
     primary_keys = ["id"]
+
+    @property
+    def parent(self):
+        # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        fullsync_contacts_v3 = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})
+        if not contacts_v3_state.get("replication_key_value") and not fullsync_contacts_v3.get("replication_key_value"):
+            return "fullsync_contacts_v3"
+        return "contacts_v3"
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1733,6 +1884,15 @@ class AssociationContactsStream(hubspotV4Stream):
     primary_keys = ["from_id", "to_id"]
     parent_stream_type = ContactsV3Stream
 
+    @property
+    def parent(self):
+        # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        fullsync_contacts_v3 = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})
+        if not contacts_v3_state.get("replication_key_value") and not fullsync_contacts_v3.get("replication_key_value"):
+            return "fullsync_contacts_v3"
+        return "contacts_v3"
+
     schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
         th.Property("to_id", th.StringType),
@@ -1741,7 +1901,6 @@ class AssociationContactsStream(hubspotV4Stream):
         th.Property("label", th.StringType),
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
-
 
 class AssociationDealsCompaniesStream(AssociationDealsStream):
     """Association Deals -> Companies Stream"""
@@ -1768,22 +1927,6 @@ class AssociationContactsTicketsStream(AssociationContactsStream):
 
     name = "associations_contacts_tickets"
     path = "crm/v4/associations/contacts/tickets/batch/read"
-
-class AssociationContactsStream(hubspotV4Stream):
-    """Association Base Stream"""
-
-    primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
-
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
-
 
 class AssociationContactsCompaniesStream(AssociationContactsStream):
     """Association Contacts -> Companies Stream"""

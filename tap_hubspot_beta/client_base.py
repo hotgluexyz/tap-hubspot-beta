@@ -39,6 +39,7 @@ class hubspotStream(RESTStream):
     object_type = None
     fields_metadata = {}
     bulk_child_size = 1000
+    is_first_sync = False
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -129,6 +130,17 @@ class hubspotStream(RESTStream):
                 elif fullsync_deals_state.get("replication_key") and self.is_first_sync():
                     self.stream_state.update(fullsync_deals_state)
                     self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+            
+            # only use contacts stream for incremental syncs
+            if self.name == "contacts_v3":
+                fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
+                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync:
+                    finished = True
+                    yield from []
+                    break
+                if not self.stream_state.get("replication_key_value") and fullsync_contacts_v3_state.get("replication_key"):
+                    self.stream_state.update(fullsync_contacts_v3_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]  
 
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
@@ -467,6 +479,13 @@ class hubspotStream(RESTStream):
 
         singer.write_message(StateMessage(value=tap_state))
 
+    def backoff_handler(self, details):
+        """Log backoff retry details."""
+        self.logger.warning(
+            f"Backing off {details['wait']} seconds after {details['tries']} tries "
+            f"calling function {details['target']} with args {details['args']} "
+            f"and kwargs {details['kwargs']}"
+        )
 
 class hubspotStreamSchema(hubspotStream):
 
