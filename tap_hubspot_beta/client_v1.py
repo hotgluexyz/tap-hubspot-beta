@@ -57,7 +57,7 @@ class hubspotV1Stream(hubspotStream):
         params["count"] = self.page_size
         if next_page_token:
             params.update(next_page_token)
-        params.update(self.additional_prarams)
+        params.update(self.additional_params)
         params[self.properties_param] = self.selected_properties
         return params
 

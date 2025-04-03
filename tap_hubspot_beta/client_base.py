@@ -14,6 +14,7 @@ from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+import time
 
 from pendulum import parse
 
@@ -29,7 +30,7 @@ class hubspotStream(RESTStream):
 
     url_base = "https://api.hubapi.com/"
     base_properties = []
-    additional_prarams = {}
+    additional_params = {}
     properties_url = None
     page_size = 100
 
@@ -195,6 +196,31 @@ class hubspotStream(RESTStream):
         return command.format(method=method, headers=headers, data=data, uri=uri)
 
     def validate_response(self, response: requests.Response) -> None:
+        #Rate limit logic
+        #@TODO enable this if 429 handling fails. 
+        # not using because if it is daily limit it could cause job to be stuck for a day
+        # headers = response.headers
+        # #Prevent rate limit from being triggered
+        # if (
+        #     "X-HubSpot-RateLimit-Remaining" in headers
+        #     and int(headers["X-HubSpot-RateLimit-Remaining"]) <= 10
+        # ):
+        #     #Default sleep time
+        #     sleep_time = 10
+        #     if "X-HubSpot-RateLimit-Interval-Milliseconds" in headers:
+        #         # Sleep based on milliseconds limit of the API
+        #         sleep_time = int(headers["X-HubSpot-RateLimit-Interval-Milliseconds"]) / 1000
+        #         if sleep_time < 0:
+        #             sleep_time = 10
+        #     self.logger.warn(f"Rate limit reached. Sleeping for {sleep_time} seconds.")        
+        #     time.sleep(sleep_time)
+        
+        # if 429 is triggered log the response code and retry    
+        if response.status_code == 429:
+            self.logger.warn(f"Rate limit reached. Response code: {response.status_code}, info: {response.text}, headers: {response.headers}")
+            time.sleep(30)
+            raise RetriableAPIError(f"Response code: {response.status_code}, info: {response.text}")    
+            
         """Validate HTTP response."""
         try:
             json_response = response.json()
@@ -217,7 +243,13 @@ class hubspotStream(RESTStream):
 
         elif 400 <= response.status_code < 500:
             msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
+            if "FORM_TYPE_NOT_ALLOWED" in response.text:
+                #Skip this form and continue the sync
+                return
+            if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
+                raise RetriableAPIError(msg)
             _log_and_raise(FatalAPIError, msg)
+
 
     @staticmethod
     def extract_type(field):
@@ -246,13 +278,14 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
-        fields = response.json()
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []
         if isinstance(self.base_properties, list):
             base_properties = [property.name.lower() for property in self.base_properties]
 
+        schema_res = response.json()
+        fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
         for field in fields:
             field_name = field.get("name")
             # filter duplicated columns (case insensitive)
@@ -329,13 +362,14 @@ class hubspotStream(RESTStream):
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.RequestException,
                 urllib3.exceptions.HTTPError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=8,
+            factor=3,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator

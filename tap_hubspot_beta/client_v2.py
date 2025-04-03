@@ -3,9 +3,6 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional, Iterable
 
-import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
-
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 import copy
 
@@ -13,13 +10,15 @@ import copy
 class hubspotV2Stream(hubspotStreamSchema):
     """hubspot stream class."""
 
+    records_jsonpath = "$.results[*]"
+
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         params["limit"] = self.page_size
-        params.update(self.additional_prarams)
+        params.update(self.additional_params)
         if self.properties_url:
             params["properties"] = self.selected_properties
         if next_page_token:
@@ -47,10 +46,16 @@ class hubspotV2Stream(hubspotStreamSchema):
         row = self.process_row_types(row)
         return row
 
+    def populate_params(self, context):
+        """Should be implemented to populate helpers params like d1, d2 and f (filters)"""
+        pass
+
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:
         next_page_token: Any = None
         finished = False
         decorated_request = self.request_decorator(self._request)
+
+        self.populate_params(context)
 
         while not finished:
             prepared_request = self.prepare_request(
