@@ -691,7 +691,7 @@ class ContactListsStream(hubspotStreamSchema):
         name = "name"
         property_names.add(name)
         properties.append(th.Property(name, th.StringType))
-        # Loop through all records – some objects have different keys
+        # Loop through all records – some objects have different keys
         for record in records:
             # Add the new property to our list
             name = f"{record['listId']}"
@@ -873,10 +873,10 @@ class ArchivedCompaniesStream(hubspotV3Stream):
 
         return None
 
-class ArchivedContactsStream(hubspotV3Stream):
-    """Archived Contacts Stream"""
+class ArchivedContactsV3Stream(hubspotV3Stream):
+    """Archived Contacts V3 Stream"""
 
-    name = "contacts_archived"
+    name = "contacts_v3_archived"
     replication_key = "archivedAt"
     path = "crm/v3/objects/contacts?archived=true"
     properties_url = "properties/v1/contacts/properties"
@@ -888,8 +888,27 @@ class ArchivedContactsStream(hubspotV3Stream):
         th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType)
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("email", th.StringType),
+        th.Property("firstname", th.StringType),
+        th.Property("lastname", th.StringType),
+        th.Property("hs_createdate", th.DateTimeType),
+        th.Property("createdate", th.DateTimeType),
+        th.Property("hs_lastmodifieddate", th.DateTimeType),
     ]
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email,firstname,lastname,hs_createdate,createdate,hs_lastmodifieddate"
+        return params
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
 
     @property
     def selected(self) -> bool:
@@ -898,13 +917,13 @@ class ArchivedContactsStream(hubspotV3Stream):
             True if the stream is selected.
         """
         # It has to be in the catalog or it will cause issues
-        if not self._tap.catalog.get("contacts_archived"):
+        if not self._tap.catalog.get("contacts_v3_archived"):
             return False
 
         try:
-            # Make this stream auto-select if contacts is selected
-            self._tap.catalog["contacts_archived"] = self._tap.catalog["contacts"]
-            return self.mask.get((), False) or self._tap.catalog["contacts"].metadata.get(()).selected
+            # Make this stream auto-select if contacts_v3 is selected
+            self._tap.catalog["contacts_v3_archived"] = self._tap.catalog["contacts_v3"]
+            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
 
@@ -914,23 +933,21 @@ class ArchivedContactsStream(hubspotV3Stream):
             record: A single stream record.
         """
         for record_message in self._generate_record_messages(record):
-            # force this to think it's the contacts stream
-            record_message.stream = "contacts"
+            # force this to think it's the contacts_v3 stream
+            record_message.stream = "contacts_v3"
             singer.write_message(record_message)
 
-    @property
-    def metadata(self):
-        new_metadata = super().metadata
-        new_metadata[("properties", "archivedAt")].selected = True
-        new_metadata[("properties", "archivedAt")].selected_by_default = True
-        return new_metadata
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
 
-    def get_url_params(self, context, next_page_token):
-        params = super().get_url_params(context, next_page_token)
-        if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
-        return params
-    
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
+
+        if archived_at > rep_key:
+            return row
+
+        return None
+
 
 class TicketsStream(ObjectSearchV3):
     """Companies Stream"""
