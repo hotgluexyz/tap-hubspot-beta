@@ -56,21 +56,28 @@ jobs:
           
           python -m venv .venv
           source .venv/bin/activate
+
+          echo "Installing requirements.txt"
+
           pip install -r requirements.txt
+
+          echo "Setting REPO_NAME, TIMESTAMP, OUTPUT_FILE"
+
           REPO_NAME=$(echo "${{ github.event.repository.name }}" | sed -e 's/^tap-//' -e 's/^target-//')
-          
-          # Create timestamp and output file
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           OUTPUT_FILE="smoke_test_output.log"
           
-          # Run the test and capture both stdout and stderr
+          echo "Running the smoke test"
+
           ./bin/smoke_test.sh "$REPO_NAME" '*' --tap-directory ${{ github.workspace }} > "$OUTPUT_FILE" 2>&1
           
-          # Configure AWS credentials
+          echo "Configuring AWS credentials"
+
           aws configure set aws_access_key_id ${{ secrets.SMOKETEST_AWS_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.SMOKETEST_AWS_SECRET_ACCESS_KEY }}
           aws configure set region us-east-1
           
-          # Upload to S3
+          echo "Uploading to S3"
+
           S3_KEY="${{ secrets.SMOKETEST_S3_KEY_PREFIX }}/${{ github.event.repository.name }}/${BRANCH_NAME//\//_}/${TIMESTAMP}.${{ github.sha }}.log"
           aws s3 cp "$OUTPUT_FILE" "s3://${{ secrets.SMOKETEST_S3_BUCKET }}/${S3_KEY}"
