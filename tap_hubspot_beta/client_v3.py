@@ -221,6 +221,23 @@ class hubspotV3Stream(hubspotStream):
         return row
 
 
+class DynamicDiscoveredHubspotV3Stream(hubspotV3Stream):
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        for name, value in row["properties"].items():
+            row[name] = value
+        del row["properties"]
+        return row
+    
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params = super().get_url_params(context, next_page_token)
+        params["properties"] = ",".join(self.selected_properties)
+        return params
+
 class hubspotV3SingleSearchStream(hubspotStream):
     """hubspot stream class."""
 
