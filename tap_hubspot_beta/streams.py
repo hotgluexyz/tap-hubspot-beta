@@ -16,7 +16,7 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
 
-from tap_hubspot_beta.client_base import hubspotStreamSchema, hubspotStream
+from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
@@ -915,7 +915,7 @@ class ContactsV3Stream(ObjectSearchV3):
 
 
 
-class FullsyncContactsV3Stream(hubspotStream):
+class FullsyncContactsV3Stream(hubspotStreamSchema):
     """Fullsync Contacts v3 Stream"""
     # this is a stream created to run fullsyncs when contacts_v3 is selected and there's no state
     # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
