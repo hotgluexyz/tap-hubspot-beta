@@ -1,4 +1,5 @@
 """hubspot tap class."""
+# Smoke test change
 
 from typing import Any, Dict, List
 import os
