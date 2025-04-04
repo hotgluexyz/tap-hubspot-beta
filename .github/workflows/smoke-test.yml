@@ -1,0 +1,76 @@
+name: Smoke Test
+
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+
+      - name: Checkout test-framework repository
+        uses: actions/checkout@v4
+        with:
+          repository: hotgluexyz/test-framework
+          path: test-framework
+          token: ${{ secrets.TEST_GITHUB_ACCESS_TOKEN }}
+
+
+      - name: Set REPO_ROOT environment variable
+        run: |
+          echo "REPO_ROOT=$(pwd)" >> $GITHUB_ENV
+
+
+      - name: Setup current repository dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install .
+          pip install requests==2.31.0
+          deactivate
+
+
+      - name: Setup and run tests
+        run: |
+          cd test-framework
+          # Try to switch to the same branch as the current PR
+          BRANCH_NAME=${{ github.head_ref }}
+          if git show-ref --verify --quiet refs/heads/$BRANCH_NAME; then
+            git checkout $BRANCH_NAME
+          else
+            git checkout main
+          fi
+          
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | sed -e 's/^tap-//' -e 's/^target-//')
+          
+          # Create timestamp and output file
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          OUTPUT_FILE="smoke_test_output.log"
+          
+          # Run the test and capture both stdout and stderr
+          ./bin/smoke_test.sh "$REPO_NAME" '*' --tap-directory ${{ github.workspace }} > "$OUTPUT_FILE" 2>&1
+          
+          # Configure AWS credentials
+          aws configure set aws_access_key_id ${{ secrets.SMOKETEST_AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.SMOKETEST_AWS_SECRET_ACCESS_KEY }}
+          aws configure set region us-east-1
+          
+          # Upload to S3
+          S3_KEY="${{ secrets.SMOKETEST_S3_KEY_PREFIX }}/${{ github.event.repository.name }}/${BRANCH_NAME//\//_}/${TIMESTAMP}.${{ github.sha }}.log"
+          aws s3 cp "$OUTPUT_FILE" "s3://${{ secrets.SMOKETEST_S3_BUCKET }}/${S3_KEY}"
