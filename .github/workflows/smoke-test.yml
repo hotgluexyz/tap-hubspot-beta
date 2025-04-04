@@ -67,9 +67,12 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           OUTPUT_FILE="smoke_test_output.log"
           
+          # Initialize test status flag
+          TEST_FAILED=0
+
           echo "Running the smoke test"
 
-          ./bin/smoke_test.sh "$REPO_NAME" '*' --tap-directory ${{ github.workspace }} > "$OUTPUT_FILE" 2>&1
+          ./bin/smoke_test.sh "$REPO_NAME" '*' --tap-directory ${{ github.workspace }} > "$OUTPUT_FILE" 2>&1 || TEST_FAILED=1
           
           echo "Configuring AWS credentials"
 
@@ -81,3 +84,10 @@ jobs:
 
           S3_KEY="${{ secrets.SMOKETEST_S3_KEY_PREFIX }}/${{ github.event.repository.name }}/${BRANCH_NAME//\//_}/${TIMESTAMP}.${{ github.sha }}.log"
           aws s3 cp "$OUTPUT_FILE" "s3://${{ secrets.SMOKETEST_S3_BUCKET }}/${S3_KEY}"
+
+          # Exit based on test status
+          if [ $TEST_FAILED -eq 1 ]; then
+            exit 1
+          else
+            exit 0
+          fi
