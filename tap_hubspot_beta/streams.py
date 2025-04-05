@@ -963,7 +963,9 @@ class FullsyncCompaniesStream(hubspotV2Stream):
                 self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
                 # TODO: in this case we can fall back and split the requests
                 return False
-            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+            companies_state = self.tap_state.get("bookmarks", {}).get("companies", {})
+            if not companies_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
 
