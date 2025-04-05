@@ -995,10 +995,10 @@ class FullsyncContactsV3Stream(hubspotStreamSchema):
             return False
 
         contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        # if contacts_v3 and fullsync_contacts_v3 have no state select this stream if contacts_v3 is selected
         if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
-            # Make this stream auto-select if companies is selected
+            # Make this stream auto-select if contacts is selected
             self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
-            self.is_first_sync = True
             return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
         else:
             return self.mask.get((), False)
@@ -1220,7 +1220,10 @@ class FullsyncCompaniesStream(hubspotV2Stream):
                 self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
                 # TODO: in this case we can fall back and split the requests
                 return False
-            return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+            # if fullsync_companies or companies doesn't have a state, select this stream if companies is selected
+            companies_state = self.tap_state.get("bookmarks", {}).get("companies", {})
+            if not companies_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
 
