@@ -309,6 +309,10 @@ class hubspotStream(RESTStream):
             if not field.get("deleted"):
                 property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
+            
+            if field.get("type") == "date" and hasattr(self, "date_fields"):
+                self.date_fields.append(field_name)
+
         return th.PropertiesList(*properties).to_dict()
 
     def finalize_state_progress_markers(self, state: Optional[dict] = None) -> None:

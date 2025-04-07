@@ -1402,6 +1402,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
     properties_param = "properties"
     merge_pk = "dealId"
     bulk_child_size = 50 # max allowed in the API
+    date_fields = []
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1502,6 +1503,13 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         row["_hg_archived"] = row.get("archived")
         row["createdAt"] = row.get("hs_createdate")
         row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
+        # deals v1 endpoint returns date fields as timestamps, while search v3 endpoint returns them as date (YYYY-MM-DD)
+        # parse all date fields as (YYYY-MM-DD) strings to match deals stream
+        for field in row:
+            if field in self.date_fields and row[field]:
+                date_value = row[field]
+                date_value = int(date_value) if isinstance(date_value, str) else date_value
+                row[field] = datetime.fromtimestamp(date_value / 1000).strftime('%Y-%m-%d')
         return row
         
     @cached_property
