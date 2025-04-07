@@ -268,11 +268,11 @@ class hubspotStream(RESTStream):
         field_type = field.get("type")
         if field_type == "bool" or field.get("fieldType") == "booleancheckbox":
             return th.BooleanType
-        if field_type in ["string", "enumeration", "phone_number", "date", "json", "object_coordinates"]:
+        if field_type in ["string", "enumeration", "phone_number", "json", "object_coordinates"]:
             return th.StringType
         if field_type == "number":
             return th.StringType
-        if field_type == "datetime":
+        if field_type in ["datetime", "date"]:
             return th.DateTimeType
 
         # TODO: Changed default because tap errors if type is None
@@ -309,6 +309,7 @@ class hubspotStream(RESTStream):
             if not field.get("deleted"):
                 property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
+
         return th.PropertiesList(*properties).to_dict()
 
     def finalize_state_progress_markers(self, state: Optional[dict] = None) -> None:
