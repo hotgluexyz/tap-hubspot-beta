@@ -929,6 +929,7 @@ class FullsyncContactsV3Stream(hubspotStreamSchema):
     name = "fullsync_contacts_v3"
     stream_alias = "contacts_v3"
     records_jsonpath = "$.contacts[*]"
+    bulk_child_size = 50 # max allowed in the API
 
     base_properties = [
         th.Property("id", th.StringType),
