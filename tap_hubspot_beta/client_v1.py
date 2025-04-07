@@ -74,12 +74,10 @@ class hubspotV1Stream(hubspotStream):
                     row[field] = None
                 else:
                     try:
-                        dt_field = pendulum.parse(row[field])
-                        row[field] = dt_field.isoformat()
+                        row[field] = pendulum.parse(row[field])
                     except Exception:
                         dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                        dt_field = dt_field.replace(tzinfo=None)
-                        row[field] = dt_field.isoformat()
+                        row[field] = dt_field.replace(tzinfo=None)
         row = self.process_row_types(row)
         return row
 

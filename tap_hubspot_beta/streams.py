@@ -974,12 +974,10 @@ class FullsyncContactsV3Stream(hubspotStreamSchema):
                     row[field] = None
                 else:
                     try:
-                        dt_field = parse(row[field])
-                        row[field] = dt_field.isoformat()
+                        row[field] = parse(row[field])
                     except Exception:
                         dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                        dt_field = dt_field.replace(tzinfo=None)
-                        row[field] = dt_field.isoformat()
+                        row[field] = dt_field.replace(tzinfo=None)
         row = self.process_row_types(row)
         # modify fields to have the same schema as contacts_v3
         return row
@@ -3115,8 +3113,7 @@ class FormsAllStream(hubspotV3Stream):
         for field in ["createdAt", "updatedAt"]:
             if field in row:
                 #This endpoint seems to be sending time in milliseconds
-                dt_field = datetime.fromtimestamp((int(row[field]))/1000)
-                row[field] = dt_field.isoformat()
+                row[field] = datetime.fromtimestamp((int(row[field]))/1000)
         return row
 
 class SourcesSummaryMonthlyStream(FormsSummaryMonthlyStream):
