@@ -8,6 +8,7 @@ from singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
+from datetime import datetime
 from singer_sdk import typing as th
 import singer
 from tap_hubspot_beta.utils import merge_responses
@@ -145,7 +146,6 @@ class hubspotV3SearchStream(hubspotStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context, skip_id=True)
-
         # store archived value in _hg_archived
         row["_hg_archived"] = False
         return row
