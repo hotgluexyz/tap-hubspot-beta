@@ -114,15 +114,24 @@ from tap_hubspot_beta.streams import (
 ignore_streams = os.environ.get('IGNORE_STREAMS', '').split(',')
 logging.info(f"IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
 
-# Function to add multiple streams to STREAM_TYPES if not in ignore_streams
-def add_streams(stream_classes):
+# 2. Get the environment variable INCLUDE_STREAMS and split by commas
+include_streams = os.environ.get('INCLUDE_STREAMS', "").split(',') if os.environ.get('INCLUDE_STREAMS', "") else []
+logging.info(f"INCLUDE_STREAMS: "+ os.environ.get('INCLUDE_STREAMS', ''))
 
+# Function to add streams to STREAM_TYPES if INCLUDE_STREAMS is set, otherwise add streams to STREAM_TYPES if not in IGNORE_STREAMS
+def add_streams(stream_classes):
     stream_types = []
     for stream_class in stream_classes:
-        if stream_class.__name__ not in ignore_streams:
+        if include_streams:
+            if stream_class.__name__ not in include_streams:
+                logging.info(f"Ignored stream {stream_class.__name__} as it's not in INCLUDE_STREAMS.")
+                continue
             stream_types.append(stream_class)
         else:
-            logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
+            if stream_class.__name__ not in ignore_streams:
+                stream_types.append(stream_class)
+            else:
+                logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
     return stream_types
 
 STREAM_TYPES = add_streams([

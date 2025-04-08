@@ -61,25 +61,6 @@ class hubspotV1Stream(hubspotStream):
         params[self.properties_param] = self.selected_properties
         return params
 
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            if row.get("properties"):
-                for name, value in row.get("properties", {}).items():
-                    row[name] = value.get("value")
-                del row["properties"]
-        for field in self.datetime_fields:
-            if row.get(field) is not None:
-                if row.get(field) in [0, ""]:
-                    row[field] = None
-                else:
-                    try:
-                        row[field] = pendulum.parse(row[field])
-                    except Exception:
-                        dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                        row[field] = dt_field.replace(tzinfo=None)
-        row = self.process_row_types(row)
-        return row
 
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:
         """Request records from REST endpoint(s), returning response records.

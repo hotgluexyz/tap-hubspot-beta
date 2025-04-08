@@ -144,16 +144,10 @@ class hubspotV3SearchStream(hubspotStream):
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                #Skip id property
-                if name == "id":
-                    continue
-                row[name] = value
-            del row["properties"]
+        row = super().post_process(row, context, skip_id=True)
+
         # store archived value in _hg_archived
         row["_hg_archived"] = False
-        row = self.process_row_types(row)
         return row
 
     def _sync_records(  # noqa C901  # too complex
@@ -277,14 +271,6 @@ class hubspotV3Stream(hubspotStream):
             params["formTypes"] = "all"  
         return params
 
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
-        row = self.process_row_types(row)
-        return row
 
 
 class AssociationsV3ParentStream(hubspotV3Stream):
@@ -408,14 +394,6 @@ class hubspotV3SingleSearchStream(hubspotStream):
             payload["offset"] = next_page_token
         return payload
 
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
-        row = self.process_row_types(row)
-        return row
 
     
 class hubspotHistoryV3Stream(hubspotV3Stream):
