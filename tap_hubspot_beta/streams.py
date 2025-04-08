@@ -959,10 +959,10 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
 
     def post_process(self, row, context) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        row = super().post_process(row, context)
         row["id"] = str(row.pop("vid", ""))
-        row["updatedAt"] = row.get("lastmodifieddate")
         row["createdAt"] = row.pop("addedAt")
+        row = super().post_process(row, context)
+        row["updatedAt"] = row.get("lastmodifieddate")
         return row
 
     @property
@@ -1179,6 +1179,7 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
     ]
 
     def post_process(self, row, context):
+        row["id"] = str(row["companyId"])
         row = super().post_process(row, context)
         # add archived value to _hg_archived
         row["_hg_archived"] = row["archived"]
