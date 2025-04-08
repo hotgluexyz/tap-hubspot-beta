@@ -915,14 +915,13 @@ class ContactsV3Stream(ObjectSearchV3):
 
 
 
-class FullsyncContactsV3Stream(hubspotStreamSchema):
+class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
     """Fullsync Contacts v3 Stream"""
     # this is a stream created to run fullsyncs when contacts_v3 is selected and there's no state
     # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
     # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice
 
     path = "contacts/v1/lists/all/contacts/all"
-    records_jsonpath = "$.[*]"
     primary_keys = ["id"]
     additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
@@ -930,6 +929,7 @@ class FullsyncContactsV3Stream(hubspotStreamSchema):
     stream_alias = "contacts_v3"
     records_jsonpath = "$.contacts[*]"
     bulk_child_size = 50 # max allowed in the API
+    merge_pk = "vid"
 
     base_properties = [
         th.Property("id", th.StringType),
