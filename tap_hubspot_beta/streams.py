@@ -937,6 +937,7 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
     ]
 
     # to match contactsv3 rep key    
@@ -961,6 +962,7 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         """As needed, append or transform raw data to match expected structure."""
         row["id"] = str(row.pop("vid", ""))
         row["createdAt"] = row.pop("addedAt")
+        row["_hg_archived"] = row.get("archived", False)
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
         return row
@@ -1182,7 +1184,7 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         row["id"] = str(row["companyId"])
         row = super().post_process(row, context)
         # add archived value to _hg_archived
-        row["_hg_archived"] = row["archived"]
+        row["_hg_archived"] = row.get("archived", False)
         return row
 
     @cached_property
