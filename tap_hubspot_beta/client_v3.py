@@ -8,6 +8,7 @@ from singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
+from datetime import datetime
 from singer_sdk import typing as th
 import singer
 from tap_hubspot_beta.utils import merge_responses
@@ -151,6 +152,18 @@ class hubspotV3SearchStream(hubspotStream):
                     continue
                 row[name] = value
             del row["properties"]
+
+        for field in self.datetime_fields:
+            if row.get(field) is not None:
+                if row.get(field) in [0, ""]:
+                    row[field] = None
+                else:
+                    try:
+                        row[field] = parse(row[field])
+                    except Exception:
+                        dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
+                        row[field] = dt_field.replace(tzinfo=None)
+
         # store archived value in _hg_archived
         row["_hg_archived"] = False
         row = self.process_row_types(row)
