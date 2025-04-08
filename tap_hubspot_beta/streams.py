@@ -22,7 +22,7 @@ import time
 import pytz
 from singer_sdk.helpers._state import log_sort_error
 from pendulum import parse
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 association_schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
@@ -271,6 +271,16 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
         ))
     ).to_dict()
 
+    def get_url(self, context: Optional[dict]) -> str:
+
+        if context and context.get("subscriber_email"):
+
+            encoded_email = quote(context["subscriber_email"])
+            path = self.path.format(subscriber_email=encoded_email)
+            return self.url_base + path
+        
+        return self.url_base + self.path
+    
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
     ) -> None:
