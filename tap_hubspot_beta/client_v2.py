@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Iterable
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
+from tap_hubspot_beta.client_v1 import hubspotV1SplitUrlStream
 import copy
 
 
@@ -25,23 +26,10 @@ class hubspotV2Stream(hubspotStreamSchema):
     
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row.get("properties").items():
-                row[name] = value.get("value")
-            row["id"] = str(row["companyId"])
-            del row["properties"]
-        for field in self.datetime_fields:
-            if row.get(field) is not None:
-                if row.get(field) in [0, ""]:
-                    row[field] = None
-                else:
-                    # format datetime as hubspot standard ex. 2024-04-24T20:20:53.386Z
-                    dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                    row[field] = dt_field.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        row = super().post_process(row, context)
         row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row["createdate"]
         row["archived"] = False
-        row = self.process_row_types(row)
         return row
 
     def populate_params(self, context):
@@ -77,3 +65,7 @@ class hubspotV2Stream(hubspotStreamSchema):
                 )
             # Cycle until get_next_page_token() no longer returns a value
             finished = not next_page_token
+
+
+class hubspotV2SplitUrlStream(hubspotV2Stream, hubspotV1SplitUrlStream):
+    pass

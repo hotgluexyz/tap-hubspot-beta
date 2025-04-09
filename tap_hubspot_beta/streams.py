@@ -19,7 +19,7 @@ from pendulum import parse
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
-from tap_hubspot_beta.client_v2 import hubspotV2Stream
+from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 import pytz
 from pendulum import parse
@@ -937,6 +937,7 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
     ]
 
     # to match contactsv3 rep key    
@@ -959,28 +960,11 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
 
     def post_process(self, row, context) -> dict:
         """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            if row.get("properties"):
-                for name, value in row.get("properties", {}).items():
-                    row[name] = value.get("value")
-                del row["properties"]
-
         row["id"] = str(row.pop("vid", ""))
-        row["updatedAt"] = row.get("lastmodifieddate")
         row["createdAt"] = row.pop("addedAt")
-        
-        for field in self.datetime_fields:
-            if row.get(field) is not None:
-                if row.get(field) in [0, ""]:
-                    row[field] = None
-                else:
-                    try:
-                        row[field] = parse(row[field])
-                    except Exception:
-                        dt_field = datetime.fromtimestamp(int(row[field]) / 1000)
-                        row[field] = dt_field.replace(tzinfo=None)
-        row = self.process_row_types(row)
-        # modify fields to have the same schema as contacts_v3
+        row["_hg_archived"] = row.get("archived", False)
+        row = super().post_process(row, context)
+        row["updatedAt"] = row.get("lastmodifieddate")
         return row
 
     @property
@@ -1158,8 +1142,7 @@ class ArchivedStream(hubspotV3Stream):
         rep_key = self.get_starting_timestamp(context)
         if rep_key:
             rep_key = rep_key.replace(tzinfo=pytz.utc)
-            archived_at = parse(row['archivedAt']).replace(tzinfo=pytz.utc)
-            if archived_at > rep_key:
+            if row['archivedAt'] > rep_key:
                 return row
             return None
         return row
@@ -1175,7 +1158,7 @@ class CompaniesStream(ObjectSearchV3):
     properties_url = "properties/v1/companies/properties"
 
 
-class FullsyncCompaniesStream(hubspotV2Stream):
+class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
     """Companies Fullsync Stream"""
 
     name = "fullsync_companies"
@@ -1185,6 +1168,8 @@ class FullsyncCompaniesStream(hubspotV2Stream):
     records_jsonpath = "$.companies[*]"
     properties_url = "properties/v2/companies/properties"
     limit = 250
+    properties_param = "properties"
+    merge_pk = "companyId"
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1196,9 +1181,10 @@ class FullsyncCompaniesStream(hubspotV2Stream):
     ]
 
     def post_process(self, row, context):
+        row["id"] = str(row["companyId"])
         row = super().post_process(row, context)
         # add archived value to _hg_archived
-        row["_hg_archived"] = row["archived"]
+        row["_hg_archived"] = row.get("archived", False)
         return row
 
     @cached_property
@@ -1499,7 +1485,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         # modify fields to have the same schema as contacts_v3
         row["id"] = str(row.get("dealId", ""))
-        row["_hg_archived"] = row.get("archived")
+        row["_hg_archived"] = row.get("archived", False)
         row["createdAt"] = row.get("hs_createdate")
         row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
         return row
@@ -2702,14 +2688,6 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
         params: dict = {}
         params.update(self.additional_params)
         return params
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        if self.properties_url:
-            for name, value in row["properties"].items():
-                row[name] = value
-            del row["properties"]
-        return row
     
     def populate_params(self, context):
         """Should be implemented to populate helpers params like d1, d2 and f (filters)"""
@@ -3002,6 +2980,7 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
         return params
 
     def post_process(self, row: dict, context: Optional[dict] = None) -> Optional[dict]:
+        row = super().post_process(row, context)
         # Once last page is fetched breakdowns are empty
         if "breakdowns" in row and not row["breakdowns"]:
             return None
@@ -3108,14 +3087,7 @@ class FormsAllStream(hubspotV3Stream):
             params['offset'] = next_page_token
         params["formTypes"] = "ALL" # V2 is case sensitive     
         return params
-    
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        row = super().post_process(row, context)
-        for field in ["createdAt", "updatedAt"]:
-            if field in row:
-                #This endpoint seems to be sending time in milliseconds
-                row[field] = datetime.fromtimestamp((int(row[field]))/1000)
-        return row
+
 
 class SourcesSummaryMonthlyStream(FormsSummaryMonthlyStream):
     #https://legacydocs.hubspot.com/docs/methods/analytics/get-analytics-data-breakdowns

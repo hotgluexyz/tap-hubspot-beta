@@ -21,7 +21,8 @@ from pendulum import parse
 from tap_hubspot_beta.auth import OAuth2Authenticator
 import singer
 from singer import StateMessage
-
+from datetime import datetime
+import pytz
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
 
@@ -453,13 +454,10 @@ class hubspotStream(RESTStream):
             field_type = field_info.get("type", ["null"])[0]
 
             if field_type == "boolean":
-                if value is None:
-                    row[field] = False
-                elif isinstance(value, str):
-                    # Attempt to cast to boolean
+                if isinstance(value, str):
                     if value.lower() == "true":
                         row[field] = True
-                    elif value == "" or value.lower() == "false":
+                    elif value.lower() == "false":
                         row[field] = False
 
         return row
@@ -487,6 +485,38 @@ class hubspotStream(RESTStream):
             f"calling function {details['target']} with args {details['args']} "
             f"and kwargs {details['kwargs']}"
         )
+    
+    def parse_properties(self, row, skip_id=None):
+        if self.properties_url:
+            for name, value in row.get("properties", {}).items():
+                if skip_id and name == "id":
+                    continue
+                if isinstance(value, dict) and "value" in value:
+                    row[name] = value["value"]
+                else:
+                    row[name] = value
+            del row["properties"]
+        return row
+    
+    def parse_datetimes(self, row):
+        for field in self.datetime_fields:
+            if row.get(field) is not None:
+                if row.get(field) in [0, ""]:
+                    row[field] = None
+                else:
+                    try:
+                        row[field] = parse(row[field])
+                    except Exception:
+                        dt_field = datetime.fromtimestamp(int(row[field]) / 1000, tz=pytz.UTC)
+                        row[field] = dt_field.replace(tzinfo=None)
+        return row
+
+    def post_process(self, row: dict, context: Optional[dict], skip_id=None) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        row = self.parse_properties(row, skip_id=skip_id)
+        row = self.parse_datetimes(row)
+        row = self.process_row_types(row)
+        return row
 
 class hubspotStreamSchema(hubspotStream):
 
