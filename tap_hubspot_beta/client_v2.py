@@ -23,14 +23,7 @@ class hubspotV2Stream(hubspotStreamSchema):
         if next_page_token:
             params["offset"] = next_page_token["offset"]
         return params
-    
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        row = super().post_process(row, context)
-        row["updatedAt"] = row["hs_lastmodifieddate"]
-        row["createdAt"] = row["createdate"]
-        row["archived"] = False
-        return row
+
 
     def populate_params(self, context):
         """Should be implemented to populate helpers params like d1, d2 and f (filters)"""

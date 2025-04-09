@@ -1184,6 +1184,8 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         row["id"] = str(row["companyId"])
         row = super().post_process(row, context)
         # add archived value to _hg_archived
+        row["updatedAt"] = row["hs_lastmodifieddate"]
+        row["createdAt"] = row["createdate"]
         row["_hg_archived"] = row.get("archived", False)
         return row
 
