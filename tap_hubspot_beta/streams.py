@@ -962,7 +962,7 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         """As needed, append or transform raw data to match expected structure."""
         row["id"] = str(row.pop("vid", ""))
         row["createdAt"] = row.pop("addedAt")
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("archived") or False
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
         return row
@@ -1186,7 +1186,7 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         # add archived value to _hg_archived
         row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row["createdate"]
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("archived") or False
         return row
 
     @cached_property
@@ -1487,7 +1487,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         # modify fields to have the same schema as contacts_v3
         row["id"] = str(row.get("dealId", ""))
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("archived") or False
         row["createdAt"] = row.get("hs_createdate")
         row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
         return row
