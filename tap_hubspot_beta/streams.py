@@ -962,9 +962,10 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         """As needed, append or transform raw data to match expected structure."""
         row["id"] = str(row.pop("vid", ""))
         row["createdAt"] = row.pop("addedAt")
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = False # incremental sync always uses _hg_archived as false, this endpoint doesn't return archived values
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
+        row["archived"] = row.get("archived") if row.get("archived") is not None else False
         return row
 
     @property
@@ -1186,7 +1187,8 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         # add archived value to _hg_archived
         row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row["createdate"]
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
+        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
         return row
 
     @cached_property
@@ -1487,9 +1489,10 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         # modify fields to have the same schema as contacts_v3
         row["id"] = str(row.get("dealId", ""))
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
         row["createdAt"] = row.get("hs_createdate")
         row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
+        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
         return row
         
     @cached_property
