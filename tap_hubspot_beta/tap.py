@@ -105,7 +105,8 @@ from tap_hubspot_beta.streams import (
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream
+    FullsyncContactsV3Stream,
+    ArchivedContactsStream
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -231,7 +232,8 @@ STREAM_TYPES = add_streams([
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream
+    FullsyncContactsV3Stream,
+    ArchivedContactsStream
 ])
 
 
