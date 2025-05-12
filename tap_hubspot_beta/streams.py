@@ -275,7 +275,7 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
 
         if context and context.get("subscriber_email"):
 
-            encoded_email = quote(context["subscriber_email"])
+            encoded_email = quote(context["subscriber_email"], safe='')
             path = self.path.format(subscriber_email=encoded_email)
             return self.url_base + path
         
