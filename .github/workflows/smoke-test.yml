@@ -2,8 +2,7 @@ name: Smoke Test
 
 
 on:
-  repository_dispatch:
-    types: [smoke_test]  # Custom event type
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
   pull_request:
     types: [opened, synchronize, reopened]
 
