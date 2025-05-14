@@ -192,13 +192,14 @@ class Taphubspot(Tap):
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
         streams = [stream_class(tap=self) for stream_class in STREAM_TYPES]
-        try:
-            discover_stream = DiscoverCustomObjectsStream(tap=self)
-            for record in discover_stream.get_records(context={}):
-                stream_class = self.generate_stream_class(record)
-                streams.append(stream_class(tap=self))
-        except FatalAPIError as exc:
-            self.logger.info(f"failed to discover custom objects. Error={exc}")
+        if 'DiscoverCustomObjectsStream' not in ignore_streams:
+            try:
+                discover_stream = DiscoverCustomObjectsStream(tap=self)
+                for record in discover_stream.get_records(context={}):
+                    stream_class = self.generate_stream_class(record)
+                    streams.append(stream_class(tap=self))
+            except FatalAPIError as exc:
+                self.logger.info(f"failed to discover custom objects. Error={exc}")
         return streams
 
     @property
