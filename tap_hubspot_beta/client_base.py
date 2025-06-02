@@ -2,6 +2,7 @@
 import copy
 import logging
 import urllib3
+import time
 
 import requests
 import backoff
@@ -207,7 +208,26 @@ class hubspotStream(RESTStream):
             logging.info(f"CURL command for failed request: {curl_command}")
             raise exception_class(f"Msg {message}, response {response.text}")
 
-        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
+        if response.status_code == 429:
+            interval_ms = int(response.headers.get("X-HubSpot-RateLimit-Interval-Milliseconds", "1000"))
+            max_calls = int(response.headers.get("X-HubSpot-RateLimit-Max", "100"))
+            remaining = int(response.headers.get("X-HubSpot-RateLimit-Remaining", "0"))
+
+            logging.warning(
+                f"429 on stream {self.name}: "
+                f"Interval={interval_ms}ms, Max={max_calls}, Remaining={remaining}"
+            )
+
+            if remaining == 0:
+                time_to_sleep = (interval_ms / 1000.0)  # full window (divide by 1000 to get seconds)
+            else:
+                time_to_sleep = (interval_ms / max_calls) / 1000.0  # average time between calls
+
+            time.sleep(time_to_sleep)
+            msg = f"429 Rate Limit: sleeping {time_to_sleep}s for {self.path}"
+            _log_and_raise(RetriableAPIError, msg)
+
+        if 500 <= response.status_code < 600 or response.status_code in [401, 104]:
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
             _log_and_raise(RetriableAPIError, msg)
         
