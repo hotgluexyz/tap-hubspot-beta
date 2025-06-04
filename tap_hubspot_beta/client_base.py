@@ -2,7 +2,6 @@
 import copy
 import logging
 import urllib3
-import time
 
 import requests
 import backoff
@@ -208,26 +207,7 @@ class hubspotStream(RESTStream):
             logging.info(f"CURL command for failed request: {curl_command}")
             raise exception_class(f"Msg {message}, response {response.text}")
 
-        if response.status_code == 429:
-            interval_ms = int(response.headers.get("X-HubSpot-RateLimit-Interval-Milliseconds", "1000"))
-            max_calls = int(response.headers.get("X-HubSpot-RateLimit-Max", "100"))
-            remaining = int(response.headers.get("X-HubSpot-RateLimit-Remaining", "0"))
-
-            logging.warning(
-                f"429 on stream {self.name}: "
-                f"Interval={interval_ms}ms, Max={max_calls}, Remaining={remaining}"
-            )
-
-            if remaining == 0:
-                time_to_sleep = (interval_ms / 1000.0)  # full window (divide by 1000 to get seconds)
-            else:
-                time_to_sleep = (interval_ms / max_calls) / 1000.0  # average time between calls
-
-            time.sleep(time_to_sleep)
-            msg = f"429 Rate Limit: sleeping {time_to_sleep}s for {self.path}"
-            _log_and_raise(RetriableAPIError, msg)
-
-        if 500 <= response.status_code < 600 or response.status_code in [401, 104]:
+        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
             _log_and_raise(RetriableAPIError, msg)
         
@@ -355,7 +335,7 @@ class hubspotStream(RESTStream):
                 requests.exceptions.RequestException,
                 urllib3.exceptions.HTTPError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=7,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -371,9 +351,6 @@ class hubspotStream(RESTStream):
             - 6th retry: 320 seconds (capped at 5 minutes)
         """
         return backoff.expo(base=2, factor=10, max_value=320)
-
-    def backoff_max_tries(self) -> int:
-        return 7
 
     @property
     def stream_maps(self) -> List[StreamMap]:
