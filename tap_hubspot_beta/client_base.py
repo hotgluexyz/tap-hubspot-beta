@@ -335,7 +335,7 @@ class hubspotStream(RESTStream):
                 requests.exceptions.RequestException,
                 urllib3.exceptions.HTTPError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=7,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
@@ -351,9 +351,6 @@ class hubspotStream(RESTStream):
             - 6th retry: 320 seconds (capped at 5 minutes)
         """
         return backoff.expo(base=2, factor=10, max_value=320)
-
-    def backoff_max_tries(self) -> int:
-        return 7
 
     @property
     def stream_maps(self) -> List[StreamMap]:
