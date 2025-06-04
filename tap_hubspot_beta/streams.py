@@ -23,7 +23,7 @@ from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 import pytz
 from pendulum import parse
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 import json
 from itertools import groupby
 
@@ -303,6 +303,14 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
             )
         ))
     ).to_dict()
+
+    def get_url(self, context: Optional[dict]) -> str:
+        if context and context.get("subscriber_email"):
+            encoded_email = quote(context["subscriber_email"], safe='')
+            path = self.path.format(subscriber_email=encoded_email)
+            return self.url_base + path
+
+        return self.url_base + self.path
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
