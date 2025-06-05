@@ -15,7 +15,7 @@ from singer_sdk import typing as th
 from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
-from tap_hubspot_beta.client_v1 import hubspotV1Stream
+from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 import time
@@ -734,13 +734,14 @@ class ContactListsStream(hubspotStreamSchema):
         }
 
 
-class ContactListData(hubspotV1Stream):
+class ContactListData(hubspotV1SplitUrlStream):
     """Lists Stream"""
 
     name = "contact_list_data"
     records_jsonpath = "$.contacts[*]"
     parent_stream_type = ContactListsStream
     primary_keys = ["vid", "listId"]
+    merge_pk = "vid"
     replication_key = None
     path = "/contacts/v1/lists/{list_id}/contacts/all"
     properties_url = "properties/v1/contacts/properties"
