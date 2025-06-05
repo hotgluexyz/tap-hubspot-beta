@@ -82,7 +82,7 @@ class hubspotV1Stream(hubspotStream):
 
 
 class hubspotV1SplitUrlStream(hubspotV1Stream):
-    properties_param = "properties"
+
     # the response validation happens in _handle_request, having backoff in _request as well hides errors
     def backoff_max_tries(self) -> int:
         return 1
