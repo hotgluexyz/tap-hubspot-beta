@@ -16,7 +16,7 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
 
-from tap_hubspot_beta.client_base import hubspotStreamSchema
+from tap_hubspot_beta.client_base import hubspotStreamSchema, hubspotBulkStream
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
 from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
@@ -647,7 +647,7 @@ class OwnersStream(hubspotV3Stream):
         row["_hg_archived"] = False
         return row
 
-class ListsStream(hubspotV1Stream):
+class ListsStream(hubspotV1Stream, hubspotBulkStream):
     """Lists Stream"""
 
     name = "lists"
@@ -656,6 +656,8 @@ class ListsStream(hubspotV1Stream):
     primary_keys = ["listId", "updatedAt"]
     replication_key = "updatedAt"
     page_size = 250
+    bulk_child_size = 5000
+    child_context_key = "listId"
 
     schema = th.PropertiesList(
         th.Property("listId", th.IntegerType),
@@ -679,6 +681,12 @@ class ListsStream(hubspotV1Stream):
         super().post_process(row, context)
         row["listId"] = int(row["listId"])
         return row
+    
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "listId": record["listId"]
+        }
 
 
 class DealsPipelinesStream(hubspotV1Stream):
@@ -1988,7 +1996,6 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         }
 
 
-
 class ListMembershipV3Stream(hubspotV3Stream):
     """
     List members - child stream from ListsStream
@@ -2009,6 +2016,25 @@ class ListMembershipV3Stream(hubspotV3Stream):
         row = super().post_process(row, context)
         row["list_id"] = context["list_id"]
         return row
+
+
+class ListLegacyIdsStream(hubspotV3Stream):
+    """List Legacy IDs Stream"""
+
+    name = "list_legacy_ids"
+    path = "crm/v3/lists/idmapping"
+    primary_keys = ["id"]
+    parent_stream_type = ListsStream
+    rest_method = "POST"
+    records_jsonpath = "$.legacyListIdsToIdsMapping[*]"
+
+    schema = th.PropertiesList(
+        th.Property("listId", th.StringType),
+        th.Property("legacyListId", th.StringType),
+    ).to_dict()
+
+    def prepare_request_payload(self, context, next_page_token):
+        return context["listId"]
 
 
 class AssociationDealsStream(hubspotV4Stream):
