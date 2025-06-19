@@ -1315,7 +1315,8 @@ class ArchivedContactsStream(ArchivedStream):
         th.Property("_hg_archived", th.BooleanType),
         th.Property("archivedAt", th.DateTimeType),
         th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType)
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("email", th.StringType),
     ]
 
     @property
@@ -1355,7 +1356,7 @@ class ArchivedContactsStream(ArchivedStream):
     def get_url_params(self, context, next_page_token):
         params = super().get_url_params(context, next_page_token)
         if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email"
         return params
 
 class ArchivedProductsStream(ArchivedStream):
