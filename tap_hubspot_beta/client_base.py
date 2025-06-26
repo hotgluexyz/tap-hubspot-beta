@@ -365,6 +365,10 @@ class hubspotStream(RESTStream):
         if field_type == "boolean" and isinstance(value, str) and value.lower() in ["true", "false"]:
             return value.lower() == "true"
 
+        # Handle carriage return characters
+        if isinstance(value, str) and "\r" in value:
+            value = value.replace("\r", "\\r")
+
         return value
 
     def parse_properties(self, row):
