@@ -281,7 +281,13 @@ class hubspotStream(RESTStream):
 
     def request_schema(self, url, headers):
         response = requests.get(url, headers=headers)
-        self.validate_response(response)
+        try:
+            self.validate_response(response)
+        except Exception as e:
+            if "You do not have permissions" in str(e):
+                self.logger.error(f"Insufficient permissions for {self.name}: {e}")
+                return None
+            raise e
         return response
 
     @cached_property
@@ -297,19 +303,20 @@ class hubspotStream(RESTStream):
         if isinstance(self.base_properties, list):
             base_properties = [property.name.lower() for property in self.base_properties]
 
-        schema_res = response.json()
-        fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
-        for field in fields:
-            field_name = field.get("name")
-            # filter duplicated columns (case insensitive)
-            if deduplicate_columns:
-                if field_name.lower() in base_properties:
-                    self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
-                    continue
+        if response:
+            schema_res = response.json()
+            fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
+            for field in fields:
+                field_name = field.get("name")
+                # filter duplicated columns (case insensitive)
+                if deduplicate_columns:
+                    if field_name.lower() in base_properties:
+                        self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                        continue
 
-            if not field.get("deleted"):
-                property = th.Property(field_name, self.extract_type(field))
-                properties.append(property)
+                if not field.get("deleted"):
+                    property = th.Property(field_name, self.extract_type(field))
+                    properties.append(property)
 
         return th.PropertiesList(*properties).to_dict()
 
