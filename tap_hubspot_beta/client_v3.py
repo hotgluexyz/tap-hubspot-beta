@@ -188,6 +188,8 @@ class hubspotV3SearchStream(hubspotStream):
                 None if current_context is None else copy.copy(current_context)
             )
             child_context_bulk = {"ids": []}
+
+            record_id_set = set()
             for record_result in self.get_records(current_context):
                 if isinstance(record_result, tuple):
                     # Tuple items should be the record and the child context
@@ -195,6 +197,10 @@ class hubspotV3SearchStream(hubspotStream):
                 else:
                     record = record_result
 
+                # Skip duplicate records
+                if record["id"] in record_id_set:
+                    continue
+                record_id_set.add(record["id"])
 
                 child_context = copy.copy(
                     self.get_child_context(record=record, context=child_context)
