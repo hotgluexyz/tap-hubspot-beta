@@ -1396,7 +1396,43 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("vidsExcluded", th.CustomType({"type": ["array", "string"]})),
         th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
-
+    
+    
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Override default get_url_params to use the limit parameter for marketing-emails
+        Per documentation at 
+        https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails/v1#get-all-marketing-emails"""
+        params: dict = {}
+        self.page_size = 10
+        params["limit"] = self.page_size
+        if next_page_token:
+            params.update(next_page_token)
+        params.update(self.additional_prarams)
+        params[self.properties_param] = self.selected_properties
+        return params
+    
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Override default get_next_page_token method to accurately count objects and return the right offset"""
+        response_json = response.json()
+        self.records_jsonpath = "$.objects[*]"
+        if isinstance(response_json, list):
+            return None
+        if "has-more" not in response_json and "hasMore" not in response_json:
+            items = len(
+                list(extract_jsonpath(self.records_jsonpath, input=response.json()))
+            )
+            if items == self.page_size:
+                previous_token = (
+                    0 if not previous_token else previous_token.get("offset")
+                )
+                offset = self.page_size + previous_token
+                return dict(offset=offset)
+        return None
 
 class PostalMailStream(ObjectSearchV3):
     """Owners Stream"""
