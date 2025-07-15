@@ -1296,7 +1296,7 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
 
 
 class MarketingEmailsStream(hubspotV1Stream):
-    """Dispositions Stream"""
+    """Marketing Emails Stream"""
 
     name = "marketing_emails"
     path = "marketing-emails/v1/emails"
