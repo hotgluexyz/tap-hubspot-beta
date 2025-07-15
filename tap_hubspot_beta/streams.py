@@ -1294,7 +1294,57 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
     name = "associations_contacts_companies"
     path = "crm/v4/associations/contacts/companies/batch/read"
 
+class MarketingEmailsV3Stream(hubspotV3Stream):
+    """Marketing Emails V3 Stream"""
 
+    name = "marketing-emails-v3"
+    path = "marketing/v3/emails"
+    replication_key = "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("feedbackSurveyId", th.StringType), 
+        th.Property("subject", th.StringType), 
+        th.Property("publishedByEmail", th.StringType), 
+        th.Property("publishDate", th.StringType), 
+        th.Property("isTransactional", th.BooleanType), 
+        th.Property("language", th.StringType), 
+        th.Property("type", th.StringType), 
+        th.Property("campaignUtm", th.StringType), 
+        th.Property("content", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("businessUnitId", th.StringType), 
+        th.Property("webversion", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("archived", th.BooleanType), 
+        th.Property("publishedByName", th.StringType), 
+        th.Property("createdAt", th.StringType), 
+        th.Property("stats", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("jitterSendTime", th.BooleanType), 
+        th.Property("from", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("id", th.StringType), 
+        th.Property("state", th.StringType), 
+        th.Property("createdById", th.StringType), 
+        th.Property("updatedAt", th.StringType), 
+        th.Property("clonedFrom", th.StringType), 
+        th.Property("rssData", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("publishedAt", th.StringType), 
+        th.Property("publishedById", th.StringType), 
+        th.Property("isPublished", th.BooleanType), 
+        th.Property("testing", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("updatedById", th.StringType), 
+        th.Property("folderId", th.IntegerType), 
+        th.Property("emailCampaignGroupId", th.StringType), 
+        th.Property("subscriptionDetails", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("deletedAt", th.StringType), 
+        th.Property("name", th.StringType), 
+        th.Property("activeDomain", th.StringType), 
+        th.Property("campaign", th.StringType), 
+        th.Property("to", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("subcategory", th.StringType), 
+        th.Property("campaignName", th.StringType), 
+        th.Property("sendOnPublish", th.BooleanType), 
+
+    ).to_dict()
+    
+    
 class MarketingEmailsStream(hubspotV1Stream):
     """Marketing Emails Stream"""
 
@@ -1406,7 +1456,7 @@ class MarketingEmailsStream(hubspotV1Stream):
         Per documentation at 
         https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails/v1#get-all-marketing-emails"""
         params: dict = {}
-        self.page_size = 10
+        self.page_size = 100
         params["limit"] = self.page_size
         if next_page_token:
             params.update(next_page_token)

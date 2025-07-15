@@ -76,6 +76,7 @@ from tap_hubspot_beta.streams import (
     DiscoverCustomObjectsStream,
     CampaignsStream,
     UsersStream,
+    MarketingEmailsV3Stream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -160,7 +161,8 @@ STREAM_TYPES = add_streams([
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
     CampaignsStream,
-    UsersStream
+    UsersStream,
+    MarketingEmailsV3Stream
 ])
 
 class Taphubspot(Tap):
