@@ -1302,45 +1302,47 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
     replication_key = "updatedAt"
 
     schema = th.PropertiesList(
-        th.Property("feedbackSurveyId", th.StringType), 
-        th.Property("subject", th.StringType), 
-        th.Property("publishedByEmail", th.StringType), 
-        th.Property("publishDate", th.StringType), 
-        th.Property("isTransactional", th.BooleanType), 
-        th.Property("language", th.StringType), 
-        th.Property("type", th.StringType), 
-        th.Property("campaignUtm", th.StringType), 
-        th.Property("content", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("businessUnitId", th.StringType), 
-        th.Property("webversion", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("activeDomain", th.StringType), 
+        th.Property("allEmailCampaignIds", th.CustomType({"type": ["object", "array"]})), 
         th.Property("archived", th.BooleanType), 
-        th.Property("publishedByName", th.StringType), 
+        th.Property("businessUnitId", th.StringType), 
+        th.Property("campaign", th.StringType), 
+        th.Property("campaignName", th.StringType), 
+        th.Property("campaignUtm", th.StringType), 
+        th.Property("clonedFrom", th.StringType), 
+        th.Property("content", th.CustomType({"type": ["object", "string"]})), 
         th.Property("createdAt", th.StringType), 
-        th.Property("stats", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("jitterSendTime", th.BooleanType), 
+        th.Property("createdById", th.StringType), 
+        th.Property("deletedAt", th.StringType), 
+        th.Property("emailCampaignGroupId", th.StringType), 
+        th.Property("feedbackSurveyId", th.StringType), 
+        th.Property("folderId", th.IntegerType), 
         th.Property("from", th.CustomType({"type": ["object", "string"]})), 
         th.Property("id", th.StringType), 
-        th.Property("state", th.StringType), 
-        th.Property("createdById", th.StringType), 
-        th.Property("updatedAt", th.StringType), 
-        th.Property("clonedFrom", th.StringType), 
-        th.Property("rssData", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("publishedAt", th.StringType), 
-        th.Property("publishedById", th.StringType), 
         th.Property("isPublished", th.BooleanType), 
-        th.Property("testing", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("updatedById", th.StringType), 
-        th.Property("folderId", th.IntegerType), 
-        th.Property("emailCampaignGroupId", th.StringType), 
-        th.Property("subscriptionDetails", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("deletedAt", th.StringType), 
+        th.Property("isTransactional", th.BooleanType), 
+        th.Property("jitterSendTime", th.BooleanType), 
+        th.Property("language", th.StringType), 
         th.Property("name", th.StringType), 
-        th.Property("activeDomain", th.StringType), 
-        th.Property("campaign", th.StringType), 
-        th.Property("to", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("subcategory", th.StringType), 
-        th.Property("campaignName", th.StringType), 
+        th.Property("publishDate", th.StringType), 
+        th.Property("publishedAt", th.StringType), 
+        th.Property("publishedByEmail", th.StringType), 
+        th.Property("publishedById", th.StringType), 
+        th.Property("publishedByName", th.StringType), 
+        th.Property("rssData", th.CustomType({"type": ["object", "string"]})), 
         th.Property("sendOnPublish", th.BooleanType), 
+        th.Property("state", th.StringType), 
+        th.Property("stats", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("subcategory", th.StringType), 
+        th.Property("subject", th.StringType), 
+        th.Property("subscriptionDetails", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("testing", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("to", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("type", th.StringType), 
+        th.Property("updatedAt", th.StringType), 
+        th.Property("updatedById", th.StringType), 
+        th.Property("webversion", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("workflowNames", th.CustomType({"type": ["object", "array"]})),  
 
     ).to_dict()
     
@@ -1447,8 +1449,6 @@ class MarketingEmailsStream(hubspotV1Stream):
         th.Property("vidsIncluded", th.CustomType({"type": ["array", "string"]})),
     ).to_dict()
     
-    
-    
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -1456,33 +1456,12 @@ class MarketingEmailsStream(hubspotV1Stream):
         Per documentation at 
         https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails/v1#get-all-marketing-emails"""
         params: dict = {}
-        self.page_size = 100
         params["limit"] = self.page_size
         if next_page_token:
             params.update(next_page_token)
         params.update(self.additional_prarams)
         params[self.properties_param] = self.selected_properties
         return params
-    
-    def get_next_page_token(
-        self, response: requests.Response, previous_token: Optional[Any]
-    ) -> Optional[Any]:
-        """Override default get_next_page_token method to accurately count objects and return the right offset"""
-        response_json = response.json()
-        self.records_jsonpath = "$.objects[*]"
-        if isinstance(response_json, list):
-            return None
-        if "has-more" not in response_json and "hasMore" not in response_json:
-            items = len(
-                list(extract_jsonpath(self.records_jsonpath, input=response.json()))
-            )
-            if items == self.page_size:
-                previous_token = (
-                    0 if not previous_token else previous_token.get("offset")
-                )
-                offset = self.page_size + previous_token
-                return dict(offset=offset)
-        return None
 
 class PostalMailStream(ObjectSearchV3):
     """Owners Stream"""
