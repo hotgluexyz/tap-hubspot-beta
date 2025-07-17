@@ -1297,7 +1297,7 @@ class AssociationContactsCompaniesStream(AssociationContactsStream):
 class MarketingEmailsV3Stream(hubspotV3Stream):
     """Marketing Emails V3 Stream"""
 
-    name = "marketing-emails-v3"
+    name = "marketing_emails_v3"
     path = "marketing/v3/emails"
     replication_key = "updatedAt"
 
