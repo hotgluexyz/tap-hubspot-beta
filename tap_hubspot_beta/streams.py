@@ -1346,6 +1346,98 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
         th.Property("workflowNames", th.CustomType({"type": ["object", "array"]})),  
 
     ).to_dict()
+
+
+class ArchivedMarketingEmailsV3Stream(hubspotV3Stream):
+    """Archived Marketing Emails V3 Stream"""
+
+    name = "marketing_emails_v3_archived"
+    path = "marketing/v3/emails?archived=true"
+    replication_key = "updatedAt"
+    primary_keys = ["id"]
+
+    schema = th.PropertiesList(
+        th.Property("activeDomain", th.StringType), 
+        th.Property("allEmailCampaignIds", th.CustomType({"type": ["object", "array"]})), 
+        th.Property("archived", th.BooleanType), 
+        th.Property("businessUnitId", th.StringType), 
+        th.Property("campaign", th.StringType), 
+        th.Property("campaignName", th.StringType), 
+        th.Property("campaignUtm", th.StringType), 
+        th.Property("clonedFrom", th.StringType), 
+        th.Property("content", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("createdAt", th.DateTimeType), 
+        th.Property("createdById", th.StringType), 
+        th.Property("deletedAt", th.DateTimeType), 
+        th.Property("emailCampaignGroupId", th.StringType), 
+        th.Property("feedbackSurveyId", th.StringType), 
+        th.Property("folderId", th.IntegerType), 
+        th.Property("from", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("id", th.StringType), 
+        th.Property("isPublished", th.BooleanType), 
+        th.Property("isTransactional", th.BooleanType), 
+        th.Property("jitterSendTime", th.BooleanType), 
+        th.Property("language", th.StringType), 
+        th.Property("name", th.StringType), 
+        th.Property("publishDate", th.DateTimeType), 
+        th.Property("publishedAt", th.DateTimeType), 
+        th.Property("publishedByEmail", th.StringType), 
+        th.Property("publishedById", th.StringType), 
+        th.Property("publishedByName", th.StringType), 
+        th.Property("rssData", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("sendOnPublish", th.BooleanType), 
+        th.Property("state", th.StringType), 
+        th.Property("stats", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("subcategory", th.StringType), 
+        th.Property("subject", th.StringType), 
+        th.Property("subscriptionDetails", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("testing", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("to", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("type", th.StringType), 
+        th.Property("updatedAt", th.DateTimeType), 
+        th.Property("updatedById", th.StringType), 
+        th.Property("webversion", th.CustomType({"type": ["object", "string"]})), 
+        th.Property("workflowNames", th.CustomType({"type": ["object", "array"]})),  
+
+    ).to_dict()
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("marketing_emails_v3_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if deals is selected
+            self._tap.catalog["marketing_emails_v3_archived"] = self._tap.catalog["marketing_emails_v3"]
+            return self.mask.get((), False) or self._tap.catalog["marketing_emails_v3"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the deals stream
+            record_message.stream = "marketing_emails_v3"
+            singer.write_message(record_message)
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+
+        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        updatedAt = parse(row['updatedAt']).replace(tzinfo=pytz.utc)
+
+        if updatedAt > rep_key:
+            return row
+
+        return None
     
     
 class MarketingEmailsStream(hubspotV1Stream):
