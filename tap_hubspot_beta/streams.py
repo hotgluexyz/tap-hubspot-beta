@@ -1300,7 +1300,8 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
     name = "marketing_emails_v3"
     path = "marketing/v3/emails"
     replication_key = "updatedAt"
-
+    primary_keys = ["id"]
+    
     schema = th.PropertiesList(
         th.Property("activeDomain", th.StringType), 
         th.Property("allEmailCampaignIds", th.CustomType({"type": ["object", "array"]})), 
@@ -1311,9 +1312,9 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
         th.Property("campaignUtm", th.StringType), 
         th.Property("clonedFrom", th.StringType), 
         th.Property("content", th.CustomType({"type": ["object", "string"]})), 
-        th.Property("createdAt", th.StringType), 
+        th.Property("createdAt", th.DateTimeType), 
         th.Property("createdById", th.StringType), 
-        th.Property("deletedAt", th.StringType), 
+        th.Property("deletedAt", th.DateTimeType), 
         th.Property("emailCampaignGroupId", th.StringType), 
         th.Property("feedbackSurveyId", th.StringType), 
         th.Property("folderId", th.IntegerType), 
@@ -1324,8 +1325,8 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
         th.Property("jitterSendTime", th.BooleanType), 
         th.Property("language", th.StringType), 
         th.Property("name", th.StringType), 
-        th.Property("publishDate", th.StringType), 
-        th.Property("publishedAt", th.StringType), 
+        th.Property("publishDate", th.DateTimeType), 
+        th.Property("publishedAt", th.DateTimeType), 
         th.Property("publishedByEmail", th.StringType), 
         th.Property("publishedById", th.StringType), 
         th.Property("publishedByName", th.StringType), 
@@ -1339,7 +1340,7 @@ class MarketingEmailsV3Stream(hubspotV3Stream):
         th.Property("testing", th.CustomType({"type": ["object", "string"]})), 
         th.Property("to", th.CustomType({"type": ["object", "string"]})), 
         th.Property("type", th.StringType), 
-        th.Property("updatedAt", th.StringType), 
+        th.Property("updatedAt", th.DateTimeType), 
         th.Property("updatedById", th.StringType), 
         th.Property("webversion", th.CustomType({"type": ["object", "string"]})), 
         th.Property("workflowNames", th.CustomType({"type": ["object", "array"]})),  
