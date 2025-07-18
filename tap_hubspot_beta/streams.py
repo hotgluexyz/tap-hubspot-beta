@@ -1949,6 +1949,9 @@ class QuotesStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
 class AssociationQuotesDealsStream(AssociationDealsStream):
     """Association Quotes -> Deals Stream"""
 
@@ -2041,6 +2044,17 @@ class ArchivedOwnersStream(ArchivedStream):
         return row
     
 
+class InvoicesStream(ObjectSearchV3):
+    """Invoices Stream"""
+
+    name = "invoices"
+    path = "crm/v3/objects/invoices/search"
+    primary_keys = ["id"]
+    replication_key_filter = "hs_lastmodifieddate"
+    properties_url = "properties/v2/invoices/properties"
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
 # Get associations for engagements streams in v3
 
 class AssociationMeetingsStream(hubspotV4Stream):
@@ -2257,5 +2271,39 @@ class AssociationTasksDealsStream(AssociationTasksStream):
 
     name = "associations_tasks_deals"
     path = "crm/v4/associations/tasks/deals/batch/read"
+
+
+class AssociationQuotesStream(hubspotV4Stream):
+    """Association Base Stream for Quotes"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = QuotesStream
+    name = "associations_quotes"
+
+    schema = association_schema
+
+
+class AssociationQuotesLineItemsStream(AssociationQuotesStream):
+    """Association Quotes -> Line Items Stream"""
+
+    name = "associations_quotes_line_items"
+    path = "crm/v4/associations/quotes/line_items/batch/read"
+
+
+class AssociationInvoicesStream(hubspotV4Stream):
+    """Association Base Stream for Invoices"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = InvoicesStream
+    name = "associations_invoices"
+
+    schema = association_schema
+
+
+class AssociationInvoicesLineItemsStream(AssociationInvoicesStream):
+    """Association Invoices -> Line Items Stream"""
+
+    name = "associations_invoices_line_items"
+    path = "crm/v4/associations/invoices/line_items/batch/read"
 
 
