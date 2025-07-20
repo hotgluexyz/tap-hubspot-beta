@@ -767,7 +767,7 @@ class ContactListsStream(hubspotStreamSchema):
         name = "name"
         property_names.add(name)
         properties.append(th.Property(name, th.StringType))
-        # Loop through all records – some objects have different keys
+        # Loop through all records – some objects have different keys
         for record in records:
             # Add the new property to our list
             name = f"{record['listId']}"
@@ -2049,12 +2049,92 @@ class InvoicesStream(ObjectSearchV3):
 
     name = "invoices"
     path = "crm/v3/objects/invoices/search"
-    primary_keys = ["id"]
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/invoices/properties"
+    bulk_child_size = 50 
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
+
+
+class FullsyncInvoicesStream(hubspotV3Stream):
+    """Invoices Fullsync Stream"""
+
+    name = "fullsync_invoices"
+    path = "crm/v3/objects/invoices"
+    replication_key = "updatedAt"
+    properties_url = "properties/v2/invoices/properties"
+    stream_alias = "invoices"
+    bulk_child_size = 50
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("_hg_archived", th.BooleanType),
+    ]
+
+    def post_process(self, row, context):
+        row = super().post_process(row, context)
+        # add archived value to _hg_archived
+        row["_hg_archived"] = row.get("archived", False)
+        return row
+
+    @cached_property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("fullsync_invoices"):
+            return False
+
+        try:
+            # Make this stream auto-select if invoices is selected
+            self._tap.catalog["fullsync_invoices"] = self._tap.catalog["invoices"]
+            params = self.get_url_params(dict(), None)
+            if len(urlencode(params)) > 15000:
+                self.logger.warn("Too many properties to use fullsync invoices. Defaulting back to normal invoices stream.")
+                return False
+            invoices_state = self.tap_state.get("bookmarks", {}).get("invoices", {})
+            if not invoices_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                return self.mask.get((), False) or self._tap.catalog["invoices"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the invoices stream
+            record_message.stream = "invoices"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
+        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
+        return new_metadata
+
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records."""
+        # only use fullsync_invoices in the first sync
+        if self.name == "fullsync_invoices" and not self.is_first_sync():
+            yield from []
+            return
+
+        yield from super().request_records(context)
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
+
 # Get associations for engagements streams in v3
 
 class AssociationMeetingsStream(hubspotV4Stream):
