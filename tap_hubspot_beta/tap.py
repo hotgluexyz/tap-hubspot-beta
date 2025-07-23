@@ -79,6 +79,10 @@ from tap_hubspot_beta.streams import (
     ArchivedProductsStream,
     FullsyncDealsStream,
     TeamsStream,
+    InvoicesStream,
+    FullsyncInvoicesStream,
+    AssociationQuotesLineItemsStream,
+    AssociationInvoicesLineItemsStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -169,6 +173,10 @@ STREAM_TYPES = add_streams([
     ArchivedProductsStream,
     FullsyncDealsStream,
     TeamsStream,
+    InvoicesStream,
+    FullsyncInvoicesStream,
+    AssociationQuotesLineItemsStream,
+    AssociationInvoicesLineItemsStream,
 ])
 
 
