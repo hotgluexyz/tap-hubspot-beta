@@ -105,7 +105,6 @@ from tap_hubspot_beta.streams import (
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     ArchivedContactsStream
 )
 
@@ -232,7 +231,6 @@ STREAM_TYPES = add_streams([
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     ArchivedContactsStream
 ])
 
