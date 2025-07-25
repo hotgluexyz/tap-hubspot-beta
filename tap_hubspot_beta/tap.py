@@ -366,7 +366,7 @@ class Taphubspot(Tap):
             if not field_name:
                 self.logger.info(f"Skipping field without name.")
                 continue
-            th_type = hubspotV3Stream.extract_type(property, self.config.get("type_booleancheckbox_as_boolean"))
+            th_type = hubspotV3Stream.extract_type(property)
             properties_list.append(th.Property(field_name, th_type))
         return th.PropertiesList(*properties_list).to_dict()
     
