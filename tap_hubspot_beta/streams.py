@@ -3367,3 +3367,84 @@ class LeadsStream(ObjectSearchV3):
     properties_url = "crm/v3/properties/leads"
 
     replication_key_filter = "hs_lastmodifieddate"
+
+
+class DiscoverCustomObjectsStream(hubspotV3Stream):
+    name = "discover_stream"
+    path = "crm-object-schemas/v3/schemas"
+    primary_keys = ["id"]
+    replication_key = "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("labels", th.ObjectType(
+            th.Property("singular", th.StringType),
+            th.Property("plural", th.StringType)
+        )),
+        th.Property("requiredProperties", th.ArrayType(th.StringType)),
+        th.Property("searchableProperties", th.ArrayType(th.StringType)),
+        th.Property("primaryDisplayProperty", th.StringType),
+        th.Property("secondaryDisplayProperties", th.ArrayType(th.StringType)),
+        th.Property("description", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("restorable", th.BooleanType),
+        th.Property("metaType", th.StringType),
+        th.Property("id", th.StringType),
+        th.Property("fullyQualifiedName", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("createdByUserId", th.IntegerType),
+        th.Property("updatedByUserId", th.IntegerType),
+        th.Property("objectTypeId", th.StringType),
+        th.Property("properties", th.ArrayType(th.ObjectType(
+            th.Property("name", th.StringType),
+            th.Property("label", th.StringType),
+            th.Property("type", th.StringType),
+            th.Property("fieldType", th.StringType),
+            th.Property("description", th.StringType),
+            th.Property("groupName", th.StringType),
+            th.Property("options", th.ArrayType(th.ObjectType(
+                th.Property("label", th.StringType),
+                th.Property("value", th.StringType),
+                th.Property("description", th.StringType),
+                th.Property("displayOrder", th.IntegerType),
+                th.Property("hidden", th.BooleanType)
+            ))),
+            th.Property("createdUserId", th.StringType),
+            th.Property("updatedUserId", th.StringType),
+            th.Property("displayOrder", th.IntegerType),
+            th.Property("calculated", th.BooleanType),
+            th.Property("externalOptions", th.BooleanType),
+            th.Property("archived", th.BooleanType),
+            th.Property("hasUniqueValue", th.BooleanType),
+            th.Property("hidden", th.BooleanType),
+            th.Property("modificationMetadata", th.ObjectType(
+                th.Property("archivable", th.BooleanType),
+                th.Property("readOnlyDefinition", th.BooleanType),
+                th.Property("readOnlyValue", th.BooleanType)
+            )),
+            th.Property("formField", th.BooleanType),
+            th.Property("dataSensitivity", th.StringType),
+            th.Property("showCurrencySymbol", th.BooleanType),
+            th.Property("hubspotDefined", th.BooleanType),
+            th.Property("createdAt", th.DateTimeType),
+            th.Property("updatedAt", th.DateTimeType),
+            th.Property("archivedAt", th.DateTimeType),
+            th.Property("referencedObjectType", th.StringType),
+            th.Property("calculationFormula", th.StringType),
+        ))),
+        th.Property("associations", th.ArrayType(th.ObjectType(
+            th.Property("fromObjectTypeId", th.StringType),
+            th.Property("toObjectTypeId", th.StringType),
+            th.Property("name", th.StringType),
+            th.Property("cardinality", th.StringType),
+            th.Property("inverseCardinality", th.StringType),
+            th.Property("hasUserEnforcedMaxToObjectIds", th.BooleanType),
+            th.Property("hasUserEnforcedMaxFromObjectIds", th.BooleanType),
+            th.Property("maxToObjectIds", th.IntegerType),
+            th.Property("maxFromObjectIds", th.IntegerType),
+            th.Property("id", th.StringType),
+            th.Property("createdAt", th.StringType),
+            th.Property("updatedAt", th.StringType),
+        ))),
+        th.Property("name", th.StringType),
+    ).to_dict()
