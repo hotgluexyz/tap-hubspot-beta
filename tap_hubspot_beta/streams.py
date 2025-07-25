@@ -23,7 +23,7 @@ from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 import pytz
 from pendulum import parse
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 import json
 from itertools import groupby
 
@@ -303,6 +303,14 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
             )
         ))
     ).to_dict()
+
+    def get_url(self, context: Optional[dict]) -> str:
+        if context and context.get("subscriber_email"):
+            encoded_email = quote(context["subscriber_email"], safe='')
+            path = self.path.format(subscriber_email=encoded_email)
+            return self.url_base + path
+
+        return self.url_base + self.path
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
@@ -962,9 +970,10 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         """As needed, append or transform raw data to match expected structure."""
         row["id"] = str(row.pop("vid", ""))
         row["createdAt"] = row.pop("addedAt")
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = False # incremental sync always uses _hg_archived as false, this endpoint doesn't return archived values
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
+        row["archived"] = row.get("archived") if row.get("archived") is not None else False
         return row
 
     @property
@@ -1186,7 +1195,8 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         # add archived value to _hg_archived
         row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row["createdate"]
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
+        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
         return row
 
     @cached_property
@@ -1288,6 +1298,65 @@ class ArchivedCompaniesStream(ArchivedStream):
         params = super().get_url_params(context, next_page_token)
         if len(urlencode(params)) > 3000:
             params["properties"] = "id,createdAt,updatedAt,archived,archivedAt"
+        return params
+
+class ArchivedContactsStream(ArchivedStream):
+    """Archived Contacts Stream"""
+
+    name = "contacts_v3_archived"
+    replication_key = "archivedAt"
+    path = "crm/v3/objects/contacts?archived=true"
+    properties_url = "properties/v1/contacts/properties"
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("email", th.StringType),
+    ]
+
+    @property
+    def selected(self) -> bool:
+        """Check if stream is selected.
+        Returns:
+            True if the stream is selected.
+        """
+        # It has to be in the catalog or it will cause issues
+        if not self._tap.catalog.get("contacts_v3_archived"):
+            return False
+
+        try:
+            # Make this stream auto-select if companies is selected
+            self._tap.catalog["contacts_v3_archived"] = self._tap.catalog["contacts_v3"]
+            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
+        except:
+            return self.mask.get((), False)
+
+    def _write_record_message(self, record: dict) -> None:
+        """Write out a RECORD message.
+        Args:
+            record: A single stream record.
+        """
+        for record_message in self._generate_record_messages(record):
+            # force this to think it's the companies stream
+            record_message.stream = "contacts_v3"
+            singer.write_message(record_message)
+
+    @property
+    def metadata(self):
+        new_metadata = super().metadata
+        new_metadata[("properties", "archivedAt")].selected = True
+        new_metadata[("properties", "archivedAt")].selected_by_default = True
+        return new_metadata
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        if len(urlencode(params)) > 3000:
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email"
         return params
 
 class ArchivedProductsStream(ArchivedStream):
@@ -1487,9 +1556,10 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         # modify fields to have the same schema as contacts_v3
         row["id"] = str(row.get("dealId", ""))
-        row["_hg_archived"] = row.get("archived", False)
+        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
         row["createdAt"] = row.get("hs_createdate")
         row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
+        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
         return row
         
     @cached_property

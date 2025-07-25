@@ -66,6 +66,10 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         }
 
     def is_token_valid(self) -> bool:
+        # used for testing, so if vcr didn't record an auth request we can return True
+        if self._tap._config.get("is_token_valid"):
+            return True
+        
         access_token = self._tap._config.get("access_token")
         now = round(datetime.utcnow().timestamp())
         expires_in = self._tap._config.get("expires_in")

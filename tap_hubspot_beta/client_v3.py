@@ -37,6 +37,7 @@ class hubspotV3SearchStream(hubspotStream):
     max_dates = []
     starting_times = []
     bulk_child = True
+    query_end_time = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -109,6 +110,17 @@ class hubspotV3SearchStream(hubspotStream):
                 self.previous_starting_time = self.starting_time    
             next_page_token = "0"
         return next_page_token
+    
+    def get_end_time(self):
+        # Maintain consistent end_time within stream syncs
+        if self.query_end_time:
+            return self.query_end_time
+        end_date = self._tap.config.get("end_date")
+        if end_date:
+            return int(parse(end_date).timestamp() * 1000)
+        end_date = datetime.now()
+        self.query_end_time = int(end_date.timestamp() * 1000)
+        return int(end_date.timestamp() * 1000)
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -123,13 +135,18 @@ class hubspotV3SearchStream(hubspotStream):
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].append(
+            payload["filters"].extend([
                 {
                     "propertyName": self.replication_key_filter,
                     "operator": "GT",
                     "value": starting_time,
+                },
+                {
+                    "propertyName": self.replication_key_filter,
+                    "operator": "LTE",
+                    "value": self.get_end_time()
                 }
-            )
+            ])
             payload["sorts"] = [{
                 "propertyName": self.replication_key_filter,
                 "direction": "ASCENDING"
@@ -171,12 +188,20 @@ class hubspotV3SearchStream(hubspotStream):
                 None if current_context is None else copy.copy(current_context)
             )
             child_context_bulk = {"ids": []}
+
+            record_id_set = set()
             for record_result in self.get_records(current_context):
                 if isinstance(record_result, tuple):
                     # Tuple items should be the record and the child context
                     record, child_context = record_result
                 else:
                     record = record_result
+
+                # Skip duplicate records
+                if record["id"] in record_id_set:
+                    continue
+                record_id_set.add(record["id"])
+
                 child_context = copy.copy(
                     self.get_child_context(record=record, context=child_context)
                 )
