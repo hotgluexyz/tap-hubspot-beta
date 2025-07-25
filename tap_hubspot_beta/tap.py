@@ -1,6 +1,9 @@
 """hubspot tap class."""
 
-from typing import List
+import os
+from typing import List, Dict, Type 
+import logging
+from singer_sdk.helpers._compat import final
 
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
@@ -47,6 +50,7 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -69,9 +73,36 @@ from tap_hubspot_beta.streams import (
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    ArchivedOwnersStream,
+    ArchivedProductsStream,
+    FullsyncDealsStream,
+    TeamsStream,
+    InvoicesStream,
+    FullsyncInvoicesStream,
+    AssociationQuotesLineItemsStream,
+    AssociationInvoicesLineItemsStream,
 )
 
-STREAM_TYPES = [
+ #When a new stream is added to the tap, it would break existing test suites.
+# By allowing caller to ignore the stream we are able ensure existing tests continue to pass.
+# 1. Get the environment variable IGNORE_STREAMS and split by commas
+ignore_streams = os.environ.get('IGNORE_STREAMS', '').split(',')
+logging.info(f"IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
+
+# Function to add multiple streams to STREAM_TYPES if not in ignore_streams
+def add_streams(stream_classes):
+
+    stream_types = []
+    for stream_class in stream_classes:
+        if stream_class.__name__ not in ignore_streams:
+            stream_types.append(stream_class)
+        else:
+            logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
+    return stream_types
+
+STREAM_TYPES = add_streams([
     ContactsStream,
     ListsStream,
     CompaniesStream,
@@ -113,6 +144,7 @@ STREAM_TYPES = [
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
+    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -135,7 +167,17 @@ STREAM_TYPES = [
     AssociationTasksCompaniesStream,
     AssociationTasksContactsStream,
     AssociationTasksDealsStream,
-]
+    DealsHistoryPropertiesStream,
+    ContactsHistoryPropertiesStream,
+    ArchivedOwnersStream,
+    ArchivedProductsStream,
+    FullsyncDealsStream,
+    TeamsStream,
+    InvoicesStream,
+    FullsyncInvoicesStream,
+    AssociationQuotesLineItemsStream,
+    AssociationInvoicesLineItemsStream,
+])
 
 
 class Taphubspot(Tap):
@@ -162,11 +204,23 @@ class Taphubspot(Tap):
         th.Property("expires_in", th.IntegerType),
         th.Property("start_date", th.DateTimeType),
         th.Property("access_token", th.StringType),
+        th.Property("enable_list_selection", th.BooleanType, default=False),
+
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        stream_types = list(STREAM_TYPES)
+
+        # If enable_list_selection is false, remove ContactListsStream and ContactListData from the list
+        if not self.config.get("enable_list_selection"):
+            stream_types = [
+                st for st in stream_types
+                if st.__name__ != "ContactListsStream" and st.__name__ != "ContactListData"
+            ]
+
+        # Instantiate them
+        return [stream_class(tap=self) for stream_class in stream_types]
 
     @property
     def catalog_dict(self) -> dict:
@@ -185,6 +239,51 @@ class Taphubspot(Tap):
                 for field in stream["schema"]["properties"]:
                     stream["schema"]["properties"][field]["field_meta"] = stream_class.fields_metadata.get(field, {})
         return catalog
+
+    @final
+    def load_streams(self) -> List[Stream]:
+        """Load streams from discovery and initialize DAG.
+
+        Return the output of `self.discover_streams()` to enumerate
+        discovered streams.
+
+        Returns:
+            A list of discovered streams, ordered by name.
+        """
+        # Build the parent-child dependency DAG
+
+        # Index streams by type
+        streams_by_type: Dict[Type[Stream], List[Stream]] = {}
+        for stream in self.discover_streams():
+            stream_type = type(stream)
+            if stream_type not in streams_by_type:
+                streams_by_type[stream_type] = []
+            streams_by_type[stream_type].append(stream)
+
+        # Initialize child streams list for parents
+        for stream_type, streams in streams_by_type.items():
+            if stream_type.parent_stream_type:
+                parents = streams_by_type[stream_type.parent_stream_type]
+
+                # assign parent stream dynamically, if stream has parent attribute
+                if hasattr(stream_type, "parent"):
+                    new_parent = [streams_by_type[stream][0] for stream in streams_by_type if stream.name == streams[0].parent]
+                    if new_parent and new_parent != parents:
+                        parents = new_parent
+
+                for parent in parents:
+                    for stream in streams:
+                        parent.child_streams.append(stream)
+                        self.logger.info(
+                            f"Added '{stream.name}' as child stream to '{parent.name}'"
+                        )
+
+        streams = [stream for streams in streams_by_type.values() for stream in streams]
+        return sorted(
+            streams,
+            key=lambda x: x.name,
+            reverse=False,
+        )
 
 
 if __name__ == "__main__":

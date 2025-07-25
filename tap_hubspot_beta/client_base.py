@@ -1,23 +1,25 @@
 """REST client handling, including hubspotStream base class."""
 import copy
 import logging
+import urllib3
 
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List
+from typing import Any, Dict, Optional, cast, List, Callable, Generator
+
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
-from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
 
 from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+import singer
+from singer import StateMessage
 
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
@@ -35,6 +37,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -91,6 +94,58 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
+            
+            # only use companies stream for incremental syncs
+            if self.name == "companies":
+                fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
+                fullsync_on = False
+                try:
+                    # Check if the fullsync stream is selected or not
+                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
+                except:
+                    pass
+                if fullsync_on and not fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_companies_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+            
+            # only use deals stream for incremental syncs
+            if self.name == "deals":
+                fullsync_deals_state = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
+                fullsync_on = False
+                try:
+                    # Check if the fullsync stream is selected or not
+                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_deals"][0][1].selected
+                except:
+                    pass
+                if fullsync_on and not fullsync_deals_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_deals_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_deals_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+
+            # only use invoices stream for incremental syncs
+            if self.name == "invoices":
+                fullsync_invoices_state = self.tap_state.get("bookmarks", {}).get("fullsync_invoices", {})
+                fullsync_on = False
+                try:
+                    # Check if the fullsync stream is selected or not
+                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_invoices"][0][1].selected
+                except:
+                    pass
+                if fullsync_on and not fullsync_invoices_state.get("replication_key") and self.is_first_sync():
+                    finished = True
+                    yield from []
+                    break
+                elif fullsync_invoices_state.get("replication_key") and self.is_first_sync():
+                    self.stream_state.update(fullsync_invoices_state)
+                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
+
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -139,28 +194,47 @@ class hubspotStream(RESTStream):
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
                 selected_properties.append(key[-1])
         return selected_properties
+    
+    def curlify_request(self, request):
+        command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
+        method = request.method
+        uri = request.url
+        data = request.body
+
+        headers = []
+        for k, v in request.headers.items():
+            # Mask the Authorization header
+            if k.lower() == "authorization":
+                v = "__MASKED__"
+            headers.append('"{0}: {1}"'.format(k, v))
+
+        headers = " -H ".join(headers)
+        return command.format(method=method, headers=headers, data=data, uri=uri)
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
+        try:
+            json_response = response.json()
+        except ValueError:
+            json_response = {}
+            
+        def _log_and_raise(exception_class, message):
+            curl_command = self.curlify_request(response.request)
+            logging.info(f"Response code: {response.status_code}, info: {response.text}")
+            logging.info(f"CURL command for failed request: {curl_command}")
+            raise exception_class(f"Msg {message}, response {response.text}")
+
         if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
-            msg = (
-                f"{response.status_code} Server Error: "
-                f"{response.reason} for path: {self.path}"
-            )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
+            msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
+            _log_and_raise(RetriableAPIError, msg)
+        
+        elif response.status_code == 400 and "Invalid JSON input" in json_response.get('message', ''):
+            msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
+            _log_and_raise(RetriableAPIError, msg)
 
         elif 400 <= response.status_code < 500:
-            msg = (
-                f"{response.status_code} Client Error: "
-                f"{response.reason} for path: {self.path}"
-            )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise FatalAPIError(f"Msg {msg}, response {response.text}")
+            msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
+            _log_and_raise(FatalAPIError, msg)
 
     @staticmethod
     def extract_type(field):
@@ -189,11 +263,23 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
-
         fields = response.json()
+
+        deduplicate_columns = self.config.get("deduplicate_columns", True)
+        base_properties = []
+        if isinstance(self.base_properties, list):
+            base_properties = [property.name.lower() for property in self.base_properties]
+
         for field in fields:
+            field_name = field.get("name")
+            # filter duplicated columns (case insensitive)
+            if deduplicate_columns:
+                if field_name.lower() in base_properties:
+                    self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                    continue
+
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -263,15 +349,26 @@ class hubspotStream(RESTStream):
             self.backoff_wait_generator,
             (
                 RetriableAPIError,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError,
-                ProtocolError
+                requests.exceptions.RequestException,
+                urllib3.exceptions.HTTPError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=7,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
-    
+
+    def backoff_wait_generator(self) -> Callable[..., Generator[int, Any, None]]:
+        """
+        Example:
+            - 1st retry: 10 seconds
+            - 2nd retry: 20 seconds
+            - 3rd retry: 40 seconds
+            - 4th retry: 80 seconds
+            - 5th retry: 160 seconds
+            - 6th retry: 320 seconds (capped at 5 minutes)
+        """
+        return backoff.expo(base=2, factor=10, max_value=320)
+
     @property
     def stream_maps(self) -> List[StreamMap]:
         """Get stream transformation maps.
@@ -308,6 +405,48 @@ class hubspotStream(RESTStream):
             ]
         return self._stream_maps
 
+    def process_row_types(self,row) -> Dict[str, Any]:
+        schema = self.schema['properties']
+        # If the row is null we ignore
+        if row is None:
+            return row
+
+        for field, value in row.items():
+            if field not in schema:
+                # Skip fields not found in the schema
+                continue
+
+            field_info = schema[field]
+            field_type = field_info.get("type", ["null"])[0]
+
+            if field_type == "boolean":
+                if value is None:
+                    row[field] = False
+                elif isinstance(value, str):
+                    # Attempt to cast to boolean
+                    if value.lower() == "true":
+                        row[field] = True
+                    elif value == "" or value.lower() == "false":
+                        row[field] = False
+
+        return row
+
+    def is_first_sync(self):
+        if self.stream_state.get("replication_key"):
+            return False
+        return True
+    
+    def _write_state_message(self) -> None:
+        """Write out a STATE message with the latest state."""
+        tap_state = self.tap_state
+
+        if tap_state and tap_state.get("bookmarks"):
+            for stream_name in tap_state.get("bookmarks").keys():
+                if tap_state["bookmarks"][stream_name].get("partitions"):
+                    tap_state["bookmarks"][stream_name]["partitions"] = []
+
+        singer.write_message(StateMessage(value=tap_state))
+
 
 class hubspotStreamSchema(hubspotStream):
 
@@ -334,11 +473,3 @@ class hubspotStreamSchema(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         return params
-
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8
