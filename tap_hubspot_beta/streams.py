@@ -1965,6 +1965,7 @@ class CurrenciesStream(hubspotV3Stream):
     name = "currencies_exchange_rate"
     path = "settings/v3/currencies/exchange-rates"
     primary_keys = ["id"]
+    page_size = 90
 
     schema = th.PropertiesList(
         th.Property("createdAt", th.DateTimeType),
