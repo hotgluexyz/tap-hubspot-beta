@@ -1,8 +1,7 @@
 # tap-hubspot
 
-`tap-hubspot` is a Singer tap for hubspot.
-
-Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
+**tap-hubspot-beta** is a Singer Tap capable of syncing data from Hubspot. 
+**tap-hubspot-beta** can be run on [hotglue](https://hotglue.com), an embedded integration platform for running Singer Taps and Targets.
 
 ## Installation
 
