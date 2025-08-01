@@ -299,7 +299,7 @@ class hubspotV3SearchStream(hubspotStream):
         context_list: Optional[List[dict]]
         context_list = [context] if context is not None else self.partitions
         selected = self.selected
-
+        record_id_set = set()
         for current_context in context_list or [{}]:
             partition_record_count = 0
             current_context = current_context or None
@@ -316,6 +316,12 @@ class hubspotV3SearchStream(hubspotStream):
                     record, child_context = record_result
                 else:
                     record = record_result
+
+                # Skip duplicate records
+                if record["id"] in record_id_set:
+                    continue
+                record_id_set.add(record["id"])
+
                 child_context = copy.copy(
                     self.get_child_context(record=record, context=child_context)
                 )
