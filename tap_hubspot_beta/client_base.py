@@ -89,13 +89,19 @@ class hubspotStream(RESTStream):
         finished = False
         decorated_request = self.request_decorator(self._request)
 
+        def _request_and_parse(prepared_request, context):
+            resp = decorated_request(prepared_request, context)
+            return list(self.parse_response(resp)), resp
+        
+        decorated_request_and_parse = self.request_decorator(_request_and_parse)
+
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
+            rows, resp = decorated_request_and_parse(prepared_request, context)
+            for row in rows:
                 yield row
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
@@ -297,7 +303,8 @@ class hubspotStream(RESTStream):
             (
                 RetriableAPIError,
                 requests.exceptions.RequestException,
-                urllib3.exceptions.HTTPError
+                requests.exceptions.JSONDecodeError,
+                urllib3.exceptions.HTTPError,
             ),
             max_tries=self.backoff_max_tries,
             on_backoff=self.backoff_handler,
