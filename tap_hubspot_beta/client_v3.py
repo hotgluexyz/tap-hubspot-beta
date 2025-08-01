@@ -51,16 +51,19 @@ class hubspotV3SearchStream(hubspotStream):
         if start_date:
             return int(start_date.timestamp() * 1000)
     
-    def get_end_time(self):
+    def get_end_time(self, curr_date_fallback=True):
         # Maintain consistent end_time within stream syncs
-        if self.query_end_time:
+        if self.query_end_time and curr_date_fallback:
             return self.query_end_time
         end_date = self._tap.config.get("end_date")
         if end_date:
             return int(parse(end_date).timestamp() * 1000)
-        end_date = datetime.now()
-        self.query_end_time = int(end_date.timestamp() * 1000)
-        return int(end_date.timestamp() * 1000)
+        if curr_date_fallback:
+            end_date = datetime.now()
+            self.query_end_time = int(end_date.timestamp() * 1000)
+            return int(end_date.timestamp() * 1000)
+        else:
+            return None
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
@@ -92,7 +95,7 @@ class hubspotV3SearchStream(hubspotStream):
 
         return next_page_token
     
-    def prepare_bucket_request_payload(self, starting_time: int, end_time: int):
+    def prepare_bucket_request_payload(self, starting_time: int, end_time: int | None):
         payload = {}
         payload["limit"] = 1
         payload["filters"] = []
@@ -100,18 +103,17 @@ class hubspotV3SearchStream(hubspotStream):
         if self.filter:
             payload["filters"].append(self.filter)
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].extend([
-                {
-                    "propertyName": self.replication_key_filter,
-                    "operator": "GT",
-                    "value": starting_time,
-                },
-                {
+            payload["filters"].append({
+                "propertyName": self.replication_key_filter,
+                "operator": "GT",
+                "value": starting_time,
+            })
+            if end_time:
+                payload["filters"].append({
                     "propertyName": self.replication_key_filter,
                     "operator": "LTE",
                     "value": end_time
-                }
-            ])
+                })
             payload["sorts"] = [{
                 "propertyName": self.replication_key_filter,
                 "direction": "ASCENDING"
@@ -137,7 +139,7 @@ class hubspotV3SearchStream(hubspotStream):
 
         return self.requests_session.prepare_request(request)
 
-    def get_time_bucket_size(self, context: dict, starting_time: int, end_time: int):
+    def get_time_bucket_size(self, context: dict, starting_time: int, end_time: int | None):
         decorated_request = self.request_decorator(self._request)
         request_data = self.prepare_bucket_request_payload(starting_time, end_time)
         prepared_request = self.prepare_bucket_request(context, request_data)
@@ -203,6 +205,11 @@ class hubspotV3SearchStream(hubspotStream):
         self.logger.info(f"Merging small adjacent buckets")
         self.merge_small_adjacent_buckets(buckets)
 
+        end_time = self.get_end_time(curr_date_fallback=False)
+        if len(buckets) > 0 and buckets[-1]["end_time"] is not None:
+            bucket_size = self.get_time_bucket_size(context, buckets[-1]["end_time"], end_time)
+            buckets += [{"starting_time": buckets[-1]["end_time"], "end_time": end_time, "bucket_size": bucket_size}]
+
         for bucket in buckets:
             filter_by_id = False
             last_record_id = None
@@ -235,18 +242,17 @@ class hubspotV3SearchStream(hubspotStream):
         if next_page_token and next_page_token not in ["0", "-1"]:
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].extend([
-                {
-                    "propertyName": self.replication_key_filter,
-                    "operator": "GT",
-                    "value": self.current_bucket["starting_time"],
-                },
-                {
+            payload["filters"].append({
+                "propertyName": self.replication_key_filter,
+                "operator": "GT",
+                "value": self.current_bucket["starting_time"],
+            })
+            if self.current_bucket["end_time"] is not None:
+                payload["filters"].append({
                     "propertyName": self.replication_key_filter,
                     "operator": "LTE",
                     "value": self.current_bucket["end_time"]
-                }
-            ])
+                })
             if self.current_bucket["filter_by_id"]:
                 payload["filters"].append({
                     "propertyName": "hs_object_id",
