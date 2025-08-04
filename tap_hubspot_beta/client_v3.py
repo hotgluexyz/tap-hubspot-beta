@@ -299,7 +299,7 @@ class hubspotV3SearchStream(hubspotStream):
         context_list: Optional[List[dict]]
         context_list = [context] if context is not None else self.partitions
         selected = self.selected
-        record_id_set = set()
+        
         for current_context in context_list or [{}]:
             partition_record_count = 0
             current_context = current_context or None
@@ -310,6 +310,7 @@ class hubspotV3SearchStream(hubspotStream):
                 None if current_context is None else copy.copy(current_context)
             )
             child_context_bulk = {"ids": []}
+            record_id_set = set()
             for record_result in self.get_records(current_context):
                 if isinstance(record_result, tuple):
                     # Tuple items should be the record and the child context
