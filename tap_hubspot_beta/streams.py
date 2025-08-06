@@ -275,8 +275,9 @@ class ContactsStream(hubspotV1SplitUrlStream):
         if next_page_token:
             params.update(next_page_token)
         params.update(self.additional_params)
-        if self._tap.streams["contacts_v3"].selected:
-            self.selected_properties = self._tap.streams["contacts_v3"].selected_properties
+        contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+        if self._tap.streams[contacts_v3_name].selected:
+            self.selected_properties = self._tap.streams[contacts_v3_name].selected_properties
         params["property"] = self.selected_properties
         return params
 
@@ -934,10 +935,13 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
     additional_params = dict(showListMemberships=True)
     properties_url = "properties/v1/contacts/properties"
     name = "fullsync_contacts_v3"
-    stream_alias = "contacts_v3"
     records_jsonpath = "$.contacts[*]"
     bulk_child_size = 50 # max allowed in the API
     merge_pk = "vid"
+
+    @property
+    def stream_alias(self):
+        return self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -986,12 +990,13 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         if not self._tap.catalog.get("fullsync_contacts_v3"):
             return False
 
-        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
         # if contacts_v3 and fullsync_contacts_v3 have no state select this stream if contacts_v3 is selected
         if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
             # Make this stream auto-select if contacts is selected
-            self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
-            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
+            self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog[contacts_v3_name]
+            return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
         else:
             return self.mask.get((), False)
 
@@ -1125,11 +1130,12 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     @property
     def parent(self):
         # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
-        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
         fullsync_contacts_v3 = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})
         if not contacts_v3_state.get("replication_key_value") and not fullsync_contacts_v3.get("replication_key_value"):
             return "fullsync_contacts_v3"
-        return "contacts_v3"
+        return contacts_v3_name
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1331,8 +1337,9 @@ class ArchivedContactsStream(ArchivedStream):
 
         try:
             # Make this stream auto-select if companies is selected
-            self._tap.catalog["contacts_v3_archived"] = self._tap.catalog["contacts_v3"]
-            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
+            contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+            self._tap.catalog["contacts_v3_archived"] = self._tap.catalog[contacts_v3_name]
+            return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
         except:
             return self.mask.get((), False)
 
@@ -1343,7 +1350,8 @@ class ArchivedContactsStream(ArchivedStream):
         """
         for record_message in self._generate_record_messages(record):
             # force this to think it's the companies stream
-            record_message.stream = "contacts_v3"
+            contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+            record_message.stream = contacts_v3_name
             singer.write_message(record_message)
 
     @property
@@ -2036,11 +2044,12 @@ class AssociationContactsStream(hubspotV4Stream):
     @property
     def parent(self):
         # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
-        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
+        contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+        contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
         fullsync_contacts_v3 = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})
         if not contacts_v3_state.get("replication_key_value") and not fullsync_contacts_v3.get("replication_key_value"):
             return "fullsync_contacts_v3"
-        return "contacts_v3"
+        return contacts_v3_name
 
     schema = th.PropertiesList(
         th.Property("from_id", th.StringType),
