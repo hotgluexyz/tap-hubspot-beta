@@ -91,7 +91,9 @@ class hubspotStream(RESTStream):
 
         def _request_and_parse(prepared_request, context):
             resp = decorated_request(prepared_request, context)
-            return list(self.parse_response(resp)), resp
+            # try to json parse the response, if it fails this decorated request will backoff and retry
+            resp.json()
+            return self.parse_response(resp), resp
         
         decorated_request_and_parse = self.request_decorator(_request_and_parse)
 
