@@ -1228,6 +1228,8 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
             # if fullsync_companies or companies doesn't have a state, select this stream if companies is selected
             companies_state = self.tap_state.get("bookmarks", {}).get("companies", {})
             if not companies_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                # populate metadata to fetch all fields selected in companies
+                self._metadata = self._tap.catalog["companies"].metadata
                 return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
@@ -1589,6 +1591,8 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
             self._tap.catalog["fullsync_deals"] = self._tap.catalog["deals"]
             deals_state = self.tap_state.get("bookmarks", {}).get("deals", {})
             if not deals_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
+                # populate metadata to fetch all fields selected in deals
+                self._metadata = self._tap.catalog["deals"].metadata
                 return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
