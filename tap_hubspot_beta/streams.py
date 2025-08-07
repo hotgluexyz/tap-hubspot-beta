@@ -1220,17 +1220,13 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         try:
             # Make this stream auto-select if companies is selected
             self._tap.catalog["fullsync_companies"] = self._tap.catalog["companies"]
-            params = self.get_url_params(dict(), None)
-            if len(urlencode(params)) > 15000:
-                self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
-                # TODO: in this case we can fall back and split the requests
-                return False
             # if fullsync_companies or companies doesn't have a state, select this stream if companies is selected
             companies_state = self.tap_state.get("bookmarks", {}).get("companies", {})
             if not companies_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
-                # populate metadata to fetch all fields selected in companies
+                # # populate metadata to fetch all fields selected in companies
                 self._metadata = self._tap.catalog["companies"].metadata
                 return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
+            
         except:
             return self.mask.get((), False)
 
