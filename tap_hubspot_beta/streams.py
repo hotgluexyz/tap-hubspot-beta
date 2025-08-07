@@ -996,6 +996,8 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
             # Make this stream auto-select if contacts is selected
             self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog[contacts_v3_name]
+            # populate metadata to fetch all fields selected in contacts_v3
+            self._metadata = self._tap.catalog[contacts_v3_name].metadata
             return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
         else:
             return self.mask.get((), False)
