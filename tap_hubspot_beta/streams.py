@@ -1341,6 +1341,8 @@ class ArchivedContactsStream(ArchivedStream):
             # Make this stream auto-select if companies is selected
             contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
             self._tap.catalog["contacts_v3_archived"] = self._tap.catalog[contacts_v3_name]
+            # populate metadata to fetch all fields selected in contacts_v3
+            self._metadata = self._tap.catalog[contacts_v3_name].metadata
             return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
         except:
             return self.mask.get((), False)
