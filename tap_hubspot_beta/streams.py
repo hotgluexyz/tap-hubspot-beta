@@ -289,40 +289,6 @@ class OwnersStream(hubspotV3Stream):
         row["_hg_archived"] = False
         return row
 
-class ListsStream(hubspotV1Stream):
-    """Lists Stream"""
-
-    name = "lists"
-    path = "contacts/v1/lists"
-    records_jsonpath = "$.lists[*]"
-    primary_keys = ["listId", "updatedAt"]
-    replication_key = "updatedAt"
-    page_size = 250
-
-    schema = th.PropertiesList(
-        th.Property("listId", th.IntegerType),
-        th.Property("name", th.StringType),
-        th.Property("authorId", th.IntegerType),
-        th.Property("portalId", th.IntegerType),
-        th.Property("internalListId", th.IntegerType),
-        th.Property("dynamic", th.BooleanType),
-        th.Property("listType", th.StringType),
-        th.Property("metaData", th.CustomType({"type": ["object", "string"]})),
-        th.Property("filters", th.CustomType({"type": ["array", "string"]})),
-        th.Property("teamIds", th.CustomType({"type": ["array", "string"]})),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("deleteable", th.BooleanType),
-        th.Property("archived", th.BooleanType),
-    ).to_dict()
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        super().post_process(row, context)
-        row["listId"] = int(row["listId"])
-        return row
-
-
 class DealsPipelinesStream(hubspotV1Stream):
     """Deal Pipelines Stream"""
 
@@ -411,15 +377,13 @@ class DealsPipelinesStream(hubspotV1Stream):
         return row
 
 
-class ContactListsStream(hubspotStreamSchema):
+class ContactListsStream(hubspotV3SingleSearchStream):
     """Lists Stream"""
 
     name = "contact_list"
-    parent_stream_type = None
-    records_jsonpath = "$.lists[*]"
     primary_keys = ["id", "name"]
-    replication_key = None
-    path = "/contacts/v1/lists"
+    path = "/crm/v3/lists/search"
+    records_jsonpath = "$.lists[*]"
 
     def _request_records(self, params: dict) -> Iterable[dict]:
         """Request and return a page of records from the API."""
@@ -2792,7 +2756,6 @@ class LeadsStream(ObjectSearchV3):
     properties_url = "crm/v3/properties/leads"
 
     replication_key_filter = "hs_lastmodifieddate"
-
 
 class DiscoverCustomObjectsStream(hubspotV3Stream):
     name = "discover_stream"

@@ -29,7 +29,6 @@ from tap_hubspot_beta.streams import (
     FormSubmissionsStream,
     LineItemsStream,
     ArchivedLineItemsStream,
-    ListsStream,
     MeetingsStream,
     NotesStream,
     OwnersStream,
@@ -136,7 +135,6 @@ def add_streams(stream_classes):
     return stream_types
 
 STREAM_TYPES = add_streams([
-    ListsStream,
     CompaniesStream,
     DealsStream,
     OwnersStream,
