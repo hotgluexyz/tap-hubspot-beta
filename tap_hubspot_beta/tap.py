@@ -467,11 +467,10 @@ class Taphubspot(Tap):
                         if streams_by_type[base_name].child_streams:
                             streams_by_type[base_name].name = f"is_parent_stream_{base_name}"
                             streams_by_type[base_name].visible_in_catalog = False
-
-                            # add original name to the mapping
-                            self.legacy_streams_mapping[stream.name] = base_name
                         else:
                             del_streams.append(base_name)
+                    # add original name to the mapping
+                    self.legacy_streams_mapping[stream.name] = base_name
                     # change v3 name to base_name
                     stream.name = base_name
 
