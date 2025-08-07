@@ -31,84 +31,63 @@ class hubspotV3SearchStream(hubspotStream):
     next_page_token_jsonpath = "$.paging.next.after"
     filter = None
     starting_time = None
-    page_size = 100
+    page_size = 200
     special_replication = False
     previous_starting_time = None
     max_dates = []
     starting_times = []
     bulk_child = True
     query_end_time = None
+    max_bucket_size = 10000
+    buckets = None
+    current_bucket = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
         if start_date:
             return int(start_date.timestamp() * 1000)
 
+    def get_end_time(self, curr_date_fallback=True):
+        # Maintain consistent end_time within stream syncs
+        if self.query_end_time and curr_date_fallback:
+            return self.query_end_time
+        end_date = self._tap.config.get("end_date")
+        if end_date:
+            return int(parse(end_date).timestamp() * 1000)
+        if curr_date_fallback:
+            end_date = datetime.now()
+            self.query_end_time = int(end_date.timestamp() * 1000)
+            return int(end_date.timestamp() * 1000)
+        else:
+            return None
+
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
-
-        if not previous_token:
-            self.logger.info(f"Total records to fetch for stream = {self.name}: {response.json().get('total')}")
-
         next_page_token = next(iter(all_matches), None)
-        # next_page_token = "10000"
-        if next_page_token is not None and float(next_page_token) + self.page_size >= 10000:
-            start_date = self.stream_state.get("progress_markers", {}).get(
-                "replication_key_value"
-            )
-            # We need to paginate using lastmodifieddates after page #10000
+
+        if self.current_bucket["filter_by_id"]:
             data = response.json()
-               
-            # extract maximum modified date to overcome 10000 pagination limit
-            hs_lastmodifieddates = [
-                entry["properties"]["hs_lastmodifieddate"]
-                for entry in data["results"]
-                if "properties" in entry
-                and "hs_lastmodifieddate" in entry["properties"]
-                and entry["properties"]["hs_lastmodifieddate"] is not None
-            ]
-            #If hs_lastmodifieddate is empty in properties. Do the lookup using replication key
-            if not hs_lastmodifieddates and self.replication_key is not None:
-                hs_lastmodifieddates = [
-                entry[self.replication_key]
-                for entry in data["results"]
-                ]
 
-            hs_lastmodifieddates = [
-                date for date in hs_lastmodifieddates if date is not None
-            ]
-            max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
-            replication_value = self.stream_state.get("progress_markers", {}).get(
-                "replication_key_value"
-            )
-            
-            if max_date:
-                if replication_value:
-                    if parse(replication_value) > parse(max_date):
-                        max_date = replication_value
-                if max_date in self.max_dates:
-                    self.logger.warn("Date based pagination loop detected")
-                    return None
-                self.max_dates.append(max_date)
-                start_date = max_date
-                self.special_replication = True
+            if len(data["results"]) > 0:
+                new_last_record_id = data["results"][-1]["properties"]["hs_object_id"]
+
+                if self.current_bucket["last_record_id"] == new_last_record_id:
+                    self.logger.warning(f"Bucket pagination loop detected. Skipping to next bucket")
+                    next_page_token = None
+                else:
+                    self.current_bucket["last_record_id"] = new_last_record_id
+                    next_page_token = "-1" if previous_token == "0" else "0"
+
+        # we've reached the end of this time bucket
+        if not next_page_token:
+            if len(self.buckets) > 0:
+                self.current_bucket = self.buckets.pop(0)
+                next_page_token = "-1" if previous_token == "0" else "0"
             else:
-                return None
-
-            if start_date:
-                start_date = parse(start_date)
-                self.starting_time = int(start_date.timestamp() * 1000)
-                self.starting_times.append(self.starting_time )
-                #Adding it just in case
-                if self.previous_starting_time:
-                    if self.previous_starting_time == self.starting_time:
-                        self.logger.warn("Date based pagination loop detected")
-                        return None
-                self.previous_starting_time = self.starting_time    
-            next_page_token = "0"
+                self.logger.warning(f"No more buckets to process")
         return next_page_token
     
     def get_end_time(self):
@@ -122,35 +101,180 @@ class hubspotV3SearchStream(hubspotStream):
         self.query_end_time = int(end_date.timestamp() * 1000)
         return int(end_date.timestamp() * 1000)
 
+    def prepare_bucket_request_payload(self, starting_time: int, end_time: int | None):
+        payload = {}
+        payload["limit"] = 1
+        payload["filters"] = []
+        payload["properties"] = []
+        if self.filter:
+            payload["filters"].append(self.filter)
+        if self.replication_key and starting_time or self.special_replication:
+            payload["filters"].append({
+                "propertyName": self.replication_key_filter,
+                "operator": "GT",
+                "value": starting_time,
+            })
+            if end_time:
+                payload["filters"].append({
+                    "propertyName": self.replication_key_filter,
+                    "operator": "LTE",
+                    "value": end_time
+                })
+            payload["sorts"] = [{
+                "propertyName": self.replication_key_filter,
+                "direction": "ASCENDING"
+            }]
+
+        return payload
+
+    def prepare_bucket_request(
+        self, context: dict | None, request_data: dict | None
+    ) -> requests.PreparedRequest:
+        http_method = self.rest_method
+        url: str = self.get_url(context)
+        params: dict = self.get_url_params(context, next_page_token=None)
+        headers = self.http_headers
+
+        request = requests.Request(
+            method=http_method,
+            url=url,
+            params=params,
+            headers=headers,
+            json=request_data
+        )
+
+        return self.requests_session.prepare_request(request)
+
+    def get_time_bucket_size(self, context: dict, starting_time: int, end_time: int | None):
+        decorated_request = self.request_decorator(self._request)
+        request_data = self.prepare_bucket_request_payload(starting_time, end_time)
+        prepared_request = self.prepare_bucket_request(context, request_data)
+        response = decorated_request(prepared_request, context).json()
+
+        return response.get('total')
+
+    def split_time_bucket(self, context: dict, starting_time: int, end_time: int):
+        buckets = []
+        time_diff = end_time - starting_time
+
+        if time_diff == 1:
+            bucket_size = self.get_time_bucket_size(context, starting_time, end_time)
+            self.logger.info(f"Cannot split bucket anymore. Bucket size is {bucket_size}")
+            return [{"starting_time": starting_time, "end_time": end_time, "bucket_size": bucket_size}]
+
+        mid_time = end_time - int(time_diff/2)
+        bucket_1_size = self.get_time_bucket_size(context, starting_time, mid_time)
+        bucket_2_size = self.get_time_bucket_size(context, mid_time, end_time)
+
+        if bucket_1_size > self.max_bucket_size:
+            self.logger.info(f"Bucket size is {bucket_1_size}, splitting into multiple buckets")
+            buckets += self.split_time_bucket(context, starting_time, mid_time)
+        elif bucket_1_size > 0:
+            buckets += [{"starting_time": starting_time, "end_time": mid_time, "bucket_size": bucket_1_size}]
+
+        if bucket_2_size > self.max_bucket_size:
+            self.logger.info(f"Bucket size is {bucket_2_size}, splitting into multiple buckets")
+            buckets += self.split_time_bucket(context, mid_time, end_time)
+        elif bucket_2_size > 0:
+            buckets += [{"starting_time": mid_time, "end_time": end_time, "bucket_size": bucket_2_size}]
+
+        return buckets
+
+    def merge_small_adjacent_buckets(self, buckets: List[dict]):
+        bucket_index = 0
+        while bucket_index < (len(buckets)-1):
+            bucket_1 = buckets[bucket_index]
+            bucket_2 = buckets[bucket_index+1]
+            if (bucket_1["bucket_size"] + bucket_2["bucket_size"]) <= self.max_bucket_size:
+                bucket_1["end_time"] = bucket_2["end_time"]
+                bucket_1["bucket_size"] += bucket_2["bucket_size"]
+                buckets.pop(bucket_index+1)
+            else:
+                bucket_index += 1
+
+    def create_time_buckets(self, context: Optional[dict]):
+        self.logger.info(f"Creating time buckets for stream = {self.name}")
+        starting_time = self.starting_time or self.get_starting_time(context)
+        end_time = self.get_end_time()
+        buckets = []
+        bucket_size = self.get_time_bucket_size(context, starting_time, end_time)
+
+        self.logger.info(f"Total records to fetch for stream = {self.name}: {bucket_size}")
+
+        if bucket_size > self.max_bucket_size:
+            self.logger.info(f"Bucket size is greater than {self.max_bucket_size}, splitting into multiple buckets")
+            buckets += self.split_time_bucket(context,starting_time, end_time)
+        else:
+            self.logger.info(f"Bucket size is less than {self.max_bucket_size}, creating single bucket")
+            buckets = [{"starting_time": starting_time, "end_time": end_time, "bucket_size": bucket_size}]
+
+        self.logger.info(f"Merging small adjacent buckets")
+        self.merge_small_adjacent_buckets(buckets)
+
+        end_time = self.get_end_time(curr_date_fallback=False)
+        if len(buckets) > 0 and buckets[-1]["end_time"] is not None:
+            bucket_size = self.get_time_bucket_size(context, buckets[-1]["end_time"], end_time)
+            buckets += [{"starting_time": buckets[-1]["end_time"], "end_time": end_time, "bucket_size": bucket_size}]
+
+        for bucket in buckets:
+            filter_by_id = False
+            last_record_id = None
+            if bucket["bucket_size"] > self.max_bucket_size:
+                filter_by_id = True
+                last_record_id = "0"
+            bucket["filter_by_id"] = filter_by_id
+            bucket["last_record_id"] = last_record_id
+
+        self.logger.info(f"Total buckets created: {len(buckets)} with total records: {sum([b['bucket_size'] for b in buckets])}")
+        self.logger.info(buckets)
+
+        return buckets
+
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Optional[dict]:
         """Prepare the data payload for the REST API request."""
+        if self.buckets is None:
+            # in the first request, create the buckets with all time ranges
+            self.buckets = self.create_time_buckets(context)
+            self.current_bucket = self.buckets.pop(0)
+
         payload = {}
         payload["limit"] = self.page_size
         payload["filters"] = []
         starting_time = self.starting_time or self.get_starting_time(context)
         if self.filter:
             payload["filters"].append(self.filter)
-        if next_page_token and next_page_token!="0":
+        if next_page_token and next_page_token not in ["0", "-1"]:
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].extend([
-                {
-                    "propertyName": self.replication_key_filter,
-                    "operator": "GT",
-                    "value": starting_time,
-                },
-                {
+            payload["filters"].append({
+                "propertyName": self.replication_key_filter,
+                "operator": "GT",
+                "value": self.current_bucket["starting_time"],
+            })
+            if self.current_bucket["end_time"] is not None:
+                payload["filters"].append({
                     "propertyName": self.replication_key_filter,
                     "operator": "LTE",
-                    "value": self.get_end_time()
-                }
-            ])
-            payload["sorts"] = [{
-                "propertyName": self.replication_key_filter,
-                "direction": "ASCENDING"
-            }]
+                    "value": self.current_bucket["end_time"]
+                })
+            if self.current_bucket["filter_by_id"]:
+                payload["filters"].append({
+                    "propertyName": "hs_object_id",
+                    "operator": "GT",
+                    "value": self.current_bucket["last_record_id"]
+                })
+            if self.current_bucket["last_record_id"]:
+                payload["sorts"] = [{
+                    "propertyName": "hs_object_id",
+                    "direction": "ASCENDING"
+                }]
+            else:
+                payload["sorts"] = [{
+                    "propertyName": self.replication_key_filter,
+                    "direction": "ASCENDING"
+                }]
             if self.properties_url:
                 if self.name =="deals_association_parent":
                     payload["properties"] = ["id"]
@@ -177,7 +301,6 @@ class hubspotV3SearchStream(hubspotStream):
         context_list: Optional[List[dict]]
         context_list = [context] if context is not None else self.partitions
         selected = self.selected
-
         for current_context in context_list or [{}]:
             partition_record_count = 0
             current_context = current_context or None

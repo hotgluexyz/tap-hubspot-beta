@@ -161,364 +161,6 @@ class EngagementStream(hubspotV1Stream):
             row["threadId"] = str(row.get("threadId"))
         return row
 
-
-class ContactsStream(hubspotV1SplitUrlStream):
-    """Contacts Stream"""
-
-    name = "contacts"
-    path = "contacts/v1/lists/all/contacts/all"
-    records_jsonpath = "$.contacts[*]"
-    primary_keys = ["vid"]
-    replication_key = None
-    additional_params = dict(showListMemberships=True)
-    properties_url = "properties/v1/contacts/properties"
-    merge_pk = "vid"
-    write_as_contacts_v3 = False
-
-    base_properties = [
-        th.Property("vid", th.IntegerType),
-        th.Property("addedAt", th.DateTimeType),
-        th.Property("portal-id", th.IntegerType),
-        th.Property("list-memberships", th.CustomType({"type": ["array", "string"]})),
-        th.Property("subscriber_email", th.StringType)
-    ]
-
-    def parse_response(self, response):
-        response_content = response.json()
-        for record in extract_jsonpath(self.records_jsonpath, response_content):
-            for identity_profile in record['identity-profiles']:
-                    for identity in identity_profile["identities"]:
-                        if identity['type'] == 'EMAIL':
-                           record['subscriber_email'] = identity['value']
-            yield record
-
-    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
-        """Return a context dictionary for child streams."""
-        return {
-            "contact_id": record["vid"],
-            "contact_date": record.get("lastmodifieddate"),
-            "subscriber_email": record.get("subscriber_email"),
-            "subscriber_email": record.get("subscriber_email"),
-            "row": record
-        }
-
-    def get_child_bookmark(self, child_stream, child_context):
-        state_date = None
-        if child_stream.tap_state.get("bookmarks"):
-            if child_stream.tap_state["bookmarks"].get(child_stream.name):
-                child_state = child_stream.tap_state["bookmarks"][child_stream.name]
-                if child_state.get("partitions"):
-                    for partition in child_state["partitions"]:
-                        if partition.get("context"):
-                            key = list(child_context.keys())[0]
-                            if partition["context"].get(key) == child_context[key]:
-                                if partition.get("replication_key_value"):
-                                    return parse(partition["replication_key_value"])
-            return None
-        if state_date:
-            return parse(state_date)
-        return state_date
-
-    def _sync_children(self, child_context: dict) -> None:
-        for child_stream in self.child_streams:
-            # sync fullsync contacts child stream normally
-            if child_stream.name == "fullsync_contacts_v3" and (child_stream.selected or child_stream.has_selected_descendents):
-                child_stream._sync_records(context=child_context)
-                continue
-
-            # keep custom logic for other child streams
-            if child_stream.selected or child_stream.has_selected_descendents:
-                last_job = self.last_job
-                if child_stream.get_replication_key_signpost(child_context):
-                    current_job = child_stream.get_replication_key_signpost(child_context)
-                else:
-                    current_job = datetime.utcnow()
-                child_state = self.get_child_bookmark(child_stream, {"contact_id": child_context.get("contact_id")})
-                full_event_sync = self.config.get("full_event_sync")
-                partial_event_sync_lookup = self.config.get("partial_event_sync_lookup")
-
-                # Test conditions to sync or not the events
-                if not last_job or not full_event_sync:
-                    child_stream.sync_custom(context=child_context)
-                    self.tap_state["bookmarks"]["last_job"] = dict(value=current_job.isoformat())
-                elif (last_job and full_event_sync and ((current_job-last_job).total_hours() >= full_event_sync)) and current_job.weekday()>=5:
-                    self.tap_state["bookmarks"]["last_job"] = dict(value=current_job.isoformat())
-                    child_stream.sync_custom(context=child_context)
-                elif child_state and partial_event_sync_lookup:
-                    if child_context.get("contact_date"):
-                        updated_date = parse(child_context.get("contact_date"))
-                        child_state = max(updated_date, child_state)
-                    if (current_job-child_state).total_hours() < partial_event_sync_lookup:
-                        child_stream.sync_custom(context=child_context)
-                elif not child_state:
-                    if child_context.get("contact_date"):
-                        context_date = parse(child_context.get("contact_date"))
-                        if (current_job-context_date).total_hours() < partial_event_sync_lookup:
-                            child_stream.sync_custom(context=child_context)
-
-                # set replication date to the contact create date
-                if child_stream.tap_state.get("bookmarks"):
-                    if child_stream.tap_state["bookmarks"].get(child_stream.name):
-                        child_state = child_stream.tap_state["bookmarks"][child_stream.name]
-                        if child_state.get("partitions"):
-                            child_part = next((p for p in child_state["partitions"] if p["context"].get("contact_id")==child_context.get("contact_id")), None)
-                            if child_part and ("replication_key" not in child_part):
-                                child_part["replication_key"] = child_stream.replication_key
-                                child_part["replication_key_value"] = child_context["contact_date"]
-
-    def get_url_params(
-        self, context: Optional[dict], next_page_token: Optional[Any]
-    ) -> Dict[str, Any]:
-        """Return a dictionary of values to be used in URL parameterization."""
-        params: dict = {}
-        params["count"] = self.page_size
-        if next_page_token:
-            params.update(next_page_token)
-        params.update(self.additional_params)
-        if self._tap.streams["contacts_v3"].selected:
-            self.selected_properties = self._tap.streams["contacts_v3"].selected_properties
-        params["property"] = self.selected_properties
-        return params
-
-class ContactSubscriptionStatusStream(hubspotV3Stream):
-    name = 'contact_subscription_status'
-    path = 'communication-preferences/v3/status/email/{subscriber_email}'
-    records_jsonpath = "$.[*]"
-    parent_stream_type = ContactsStream
-    ignore_parent_replication_keys = True
-    schema_writed = False
-
-    schema = th.PropertiesList(
-        th.Property("recipient", th.StringType),
-        th.Property("subscriptionStatuses", th.ArrayType(
-            th.ObjectType(
-                th.Property("id", th.StringType),
-                th.Property("name", th.StringType),
-                th.Property("description", th.StringType),
-                th.Property("status", th.StringType),
-                th.Property("sourceOfStatus", th.StringType),
-                th.Property("preferenceGroupName", th.StringType),
-                th.Property("legalBasis", th.StringType),
-                th.Property("legalBasisExplanation", th.StringType),
-            )
-        ))
-    ).to_dict()
-
-    def get_url(self, context: Optional[dict]) -> str:
-        if context and context.get("subscriber_email"):
-            encoded_email = quote(context["subscriber_email"], safe='')
-            path = self.path.format(subscriber_email=encoded_email)
-            return self.url_base + path
-
-        return self.url_base + self.path
-
-    def _sync_records(  # noqa C901  # too complex
-        self, context: Optional[dict] = None
-    ) -> None:
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-        selected = self.selected
-
-        for current_context in context_list or [{}]:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
-                )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
-
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    self._sync_children(child_context)
-                self._check_max_record_limit(record_count)
-                if selected:
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                record_count += 1
-                partition_record_count += 1
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                self.finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            self.finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-
-    schema_writed = False
-
-    def sync_custom(self, context: Optional[dict] = None) -> None:
-        msg = f"Beginning {self.replication_method.lower()} sync of '{self.name}'"
-        if context:
-            msg += f" with context: {context}"
-        self.logger.info(f"{msg}...")
-        # Use a replication signpost, if available
-        signpost = self.get_replication_key_signpost(context)
-        if signpost:
-            self._write_replication_key_signpost(context, signpost)
-        # Send a SCHEMA message to the downstream target:
-        if not self.schema_writed:
-            self._write_schema_message()
-            self.schema_writed = True
-        # Sync the records themselves:
-        self._sync_records(context)
-
-
-class ContactEventsStream(hubspotV3Stream):
-    """ContactEvents Stream"""
-
-    name = "contact_events"
-    path = "events/v3/events/?objectType=contact&objectId={contact_id}"
-
-    records_jsonpath = "$.results[*]"
-    parent_stream_type = ContactsStream
-    primary_keys = ["id"]
-    replication_key = "occurredAt"
-
-    schema = th.PropertiesList(
-        th.Property("objectType", th.StringType),
-        th.Property("objectId", th.StringType),
-        th.Property("eventType", th.StringType),
-        th.Property("occurredAt", th.DateTimeType),
-        th.Property("id", th.StringType),
-        th.Property("contact_id", th.IntegerType),
-        th.Property("properties", th.CustomType({"type": ["object", "string"]})),
-    ).to_dict()
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        row = super().post_process(row, context)
-        row["contact_id"] = context.get("contact_id")
-        return row
-
-    def get_url_params(
-        self, context: Optional[dict], next_page_token: Optional[Any]
-    ) -> Dict[str, Any]:
-        params = super().get_url_params(context, next_page_token)
-
-        child_part = {}
-        if self.tap_state.get("bookmarks"):
-            if self.tap_state["bookmarks"].get(self.name):
-                child_state = self.tap_state["bookmarks"][self.name]
-                if child_state.get("partitions"):
-                    child_part = next((p for p in child_state["partitions"] if p["context"].get("contact_id")==context.get("contact_id")), None)
-        if child_part.get("replication_key_value"):
-            start_date = parse(child_part.get("replication_key_value"))
-            params["occurredAfter"] = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        return params
-
-    def _sync_records(  # noqa C901  # too complex
-        self, context: Optional[dict] = None
-    ) -> None:
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-        selected = self.selected
-
-        for current_context in context_list or [{}]:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
-                )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
-
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    self._sync_children(child_context)
-                self._check_max_record_limit(record_count)
-                if selected:
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                record_count += 1
-                partition_record_count += 1
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                self.finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            self.finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-
-    schema_writed = False
-
-    def sync_custom(self, context: Optional[dict] = None) -> None:
-        msg = f"Beginning {self.replication_method.lower()} sync of '{self.name}'"
-        if context:
-            msg += f" with context: {context}"
-        self.logger.info(f"{msg}...")
-        # Use a replication signpost, if available
-        signpost = self.get_replication_key_signpost(context)
-        if signpost:
-            self._write_replication_key_signpost(context, signpost)
-        # Send a SCHEMA message to the downstream target:
-        if not self.schema_writed:
-            self._write_schema_message()
-            self.schema_writed = True
-        # Sync the records themselves:
-        self._sync_records(context)
-
-
 class EmailEventsStream(hubspotV1Stream):
     """EmailEvents Stream"""
 
@@ -885,7 +527,7 @@ class ObjectSearchV3(hubspotV3SearchStream):
     ]
 
 
-class ContactsV3Stream(ObjectSearchV3):
+class ContactsStream(ObjectSearchV3):
     """Contacts Stream"""
 
     name = "contacts_v3"
@@ -921,205 +563,13 @@ class ContactsV3Stream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-
-
-class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
-    """Fullsync Contacts v3 Stream"""
-    # this is a stream created to run fullsyncs when contacts_v3 is selected and there's no state
-    # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
-    # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice
-
-    path = "contacts/v1/lists/all/contacts/all"
-    primary_keys = ["id"]
-    additional_params = dict(showListMemberships=True)
-    properties_url = "properties/v1/contacts/properties"
-    name = "fullsync_contacts_v3"
-    stream_alias = "contacts_v3"
-    records_jsonpath = "$.contacts[*]"
-    bulk_child_size = 50 # max allowed in the API
-    merge_pk = "vid"
-
-    base_properties = [
-        th.Property("id", th.StringType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-        th.Property("_hg_archived", th.BooleanType),
-    ]
-
-    # to match contactsv3 rep key    
-    @property
-    def replication_key(self):
-        if self.config.get("filter_contacts_created_at"):
-            return "createdAt"
-        return "updatedAt"
-
-    def apply_catalog(self, catalog) -> None:
-        self._tap_input_catalog = catalog
-        catalog_entry = catalog.get_stream(self.name)
-        if catalog_entry:
-            self.primary_keys = catalog_entry.key_properties
-            if catalog_entry.replication_method:
-                self.forced_replication_method = catalog_entry.replication_method
-
-    def parse_response(self, response) -> Iterable[dict]:
-        yield from extract_jsonpath(self.records_jsonpath, input=response.json())
-
-    def post_process(self, row, context) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        row["id"] = str(row.pop("vid", ""))
-        row["createdAt"] = row.pop("addedAt")
-        row["_hg_archived"] = False # incremental sync always uses _hg_archived as false, this endpoint doesn't return archived values
-        row = super().post_process(row, context)
-        row["updatedAt"] = row.get("lastmodifieddate")
-        row["archived"] = row.get("archived") if row.get("archived") is not None else False
-        return row
-
-    @property
-    def selected(self) -> bool:
-        """Check if stream is selected.
-        Returns:
-            True if the stream is selected.
-        """
-        # It has to be in the catalog or it will cause issues
-        if not self._tap.catalog.get("fullsync_contacts_v3"):
-            return False
-
-        contacts_v3_state = self.tap_state.get("bookmarks", {}).get("contacts_v3", {})
-        # if contacts_v3 and fullsync_contacts_v3 have no state select this stream if contacts_v3 is selected
-        if not contacts_v3_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
-            # Make this stream auto-select if contacts is selected
-            self._tap.catalog["fullsync_contacts_v3"] = self._tap.catalog["contacts_v3"]
-            return self.mask.get((), False) or self._tap.catalog["contacts_v3"].metadata.get(()).selected
-        else:
-            return self.mask.get((), False)
-
-    def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.stream = self.stream_alias
-            schema_message.schema = self.schema
-            singer.write_message(schema_message)
-
-    def _write_record_message(self, record: dict) -> None:
-        """Write out a RECORD message.
-        Args:
-            record: A single stream record.
-        """
-        for record_message in self._generate_record_messages(record):
-            # force this to think it's the companies stream
-            record_message.stream = self.stream_alias
-            singer.write_message(record_message)
-
-    @property
-    def metadata(self):
-        new_metadata = super().metadata
-        # Itera sobre todas las propiedades en el metadata
-        for field in new_metadata.get('properties', {}).keys():
-            new_metadata[("properties", field)].selected = True        
-        return new_metadata
-
-    def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
-        return {}
-
-    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
-        if not self._metric_logging_function:
-            return None
-
-        if extra_tags:
-            metric["tags"].update(extra_tags)
-
-        # clean records from metric logs
-        metric.get("tags", {}).pop("context", None)
-        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
-
-    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
-        """Return a context dictionary for child streams."""
-        return {"id": record["id"]}
-    
-    def _sync_records(  # noqa C901  # too complex
-        self, context: Optional[dict] = None
-    ) -> None:
-        """Sync records, emitting RECORD and STATE messages. """
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-        selected = self.selected
-
-        for current_context in context_list or [{}]:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            child_context_bulk = {"ids": []}
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
-                )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
-
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=self.bulk_child_size:
-                    self._sync_children(child_context_bulk)
-                    child_context_bulk = {"ids": []}
-                self._check_max_record_limit(record_count)
-                if selected:
-                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
-                        self._write_state_message()
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                record_count += 1
-                partition_record_count += 1
-            if len(child_context_bulk):
-                self._sync_children(child_context_bulk)
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-        # Reset interim bookmarks before emitting final STATE message:
-        self._write_state_message()
-
-
 class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
     name = "contacts_history_properties"
     path = "crm/v3/objects/contacts/batch/read"
     properties_url = "properties/v1/contacts/properties"
-    parent_stream_type = ContactsV3Stream
+    parent_stream_type = ContactsStream
     primary_keys = ["id"]
 
     @property
@@ -1140,7 +590,243 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
         th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
     ]
 
+class ContactSubscriptionStatusStream(hubspotV3Stream):
+    name = 'contact_subscription_status'
+    path = 'communication-preferences/v3/status/email/{subscriber_email}'
+    records_jsonpath = "$.[*]"
+    parent_stream_type = ContactsStream
+    ignore_parent_replication_keys = True
+    schema_writed = False
 
+    schema = th.PropertiesList(
+        th.Property("recipient", th.StringType),
+        th.Property("subscriptionStatuses", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("name", th.StringType),
+                th.Property("description", th.StringType),
+                th.Property("status", th.StringType),
+                th.Property("sourceOfStatus", th.StringType),
+                th.Property("preferenceGroupName", th.StringType),
+                th.Property("legalBasis", th.StringType),
+                th.Property("legalBasisExplanation", th.StringType),
+            )
+        ))
+    ).to_dict()
+
+    def get_url(self, context: Optional[dict]) -> str:
+        if context and context.get("subscriber_email"):
+            encoded_email = quote(context["subscriber_email"], safe='')
+            path = self.path.format(subscriber_email=encoded_email)
+            return self.url_base + path
+
+        return self.url_base + self.path
+
+    def _sync_records(  # noqa C901  # too complex
+        self, context: Optional[dict] = None
+    ) -> None:
+        record_count = 0
+        current_context: Optional[dict]
+        context_list: Optional[List[dict]]
+        context_list = [context] if context is not None else self.partitions
+        selected = self.selected
+
+        for current_context in context_list or [{}]:
+            partition_record_count = 0
+            current_context = current_context or None
+            state = self.get_context_state(current_context)
+            state_partition_context = self._get_state_partition_context(current_context)
+            self._write_starting_replication_value(current_context)
+            child_context: Optional[dict] = (
+                None if current_context is None else copy.copy(current_context)
+            )
+            for record_result in self.get_records(current_context):
+                if isinstance(record_result, tuple):
+                    # Tuple items should be the record and the child context
+                    record, child_context = record_result
+                else:
+                    record = record_result
+                child_context = copy.copy(
+                    self.get_child_context(record=record, context=child_context)
+                )
+                for key, val in (state_partition_context or {}).items():
+                    # Add state context to records if not already present
+                    if key not in record:
+                        record[key] = val
+
+                # Sync children, except when primary mapper filters out the record
+                if self.stream_maps[0].get_filter_result(record):
+                    self._sync_children(child_context)
+                self._check_max_record_limit(record_count)
+                if selected:
+                    self._write_record_message(record)
+                    try:
+                        self._increment_stream_state(record, context=current_context)
+                    except InvalidStreamSortException as ex:
+                        log_sort_error(
+                            log_fn=self.logger.error,
+                            ex=ex,
+                            record_count=record_count + 1,
+                            partition_record_count=partition_record_count + 1,
+                            current_context=current_context,
+                            state_partition_context=state_partition_context,
+                            stream_name=self.name,
+                        )
+                        raise ex
+
+                record_count += 1
+                partition_record_count += 1
+            if current_context == state_partition_context:
+                # Finalize per-partition state only if 1:1 with context
+                self.finalize_state_progress_markers(state)
+        if not context:
+            # Finalize total stream only if we have the full full context.
+            # Otherwise will be finalized by tap at end of sync.
+            self.finalize_state_progress_markers(self.stream_state)
+        self._write_record_count_log(record_count=record_count, context=context)
+
+    schema_writed = False
+
+    def sync_custom(self, context: Optional[dict] = None) -> None:
+        msg = f"Beginning {self.replication_method.lower()} sync of '{self.name}'"
+        if context:
+            msg += f" with context: {context}"
+        self.logger.info(f"{msg}...")
+        # Use a replication signpost, if available
+        signpost = self.get_replication_key_signpost(context)
+        if signpost:
+            self._write_replication_key_signpost(context, signpost)
+        # Send a SCHEMA message to the downstream target:
+        if not self.schema_writed:
+            self._write_schema_message()
+            self.schema_writed = True
+        # Sync the records themselves:
+        self._sync_records(context)
+
+
+class ContactEventsStream(hubspotV3Stream):
+    """ContactEvents Stream"""
+
+    name = "contact_events"
+    path = "events/v3/events/?objectType=contact&objectId={contact_id}"
+
+    records_jsonpath = "$.results[*]"
+    parent_stream_type = ContactsStream
+    primary_keys = ["id"]
+    replication_key = "occurredAt"
+
+    schema = th.PropertiesList(
+        th.Property("objectType", th.StringType),
+        th.Property("objectId", th.StringType),
+        th.Property("eventType", th.StringType),
+        th.Property("occurredAt", th.DateTimeType),
+        th.Property("id", th.StringType),
+        th.Property("contact_id", th.IntegerType),
+        th.Property("properties", th.CustomType({"type": ["object", "string"]})),
+    ).to_dict()
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        row = super().post_process(row, context)
+        row["contact_id"] = context.get("contact_id")
+        return row
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+
+        child_part = {}
+        if self.tap_state.get("bookmarks"):
+            if self.tap_state["bookmarks"].get(self.name):
+                child_state = self.tap_state["bookmarks"][self.name]
+                if child_state.get("partitions"):
+                    child_part = next((p for p in child_state["partitions"] if p["context"].get("contact_id")==context.get("contact_id")), None)
+        if child_part.get("replication_key_value"):
+            start_date = parse(child_part.get("replication_key_value"))
+            params["occurredAfter"] = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        return params
+
+    def _sync_records(  # noqa C901  # too complex
+        self, context: Optional[dict] = None
+    ) -> None:
+        record_count = 0
+        current_context: Optional[dict]
+        context_list: Optional[List[dict]]
+        context_list = [context] if context is not None else self.partitions
+        selected = self.selected
+
+        for current_context in context_list or [{}]:
+            partition_record_count = 0
+            current_context = current_context or None
+            state = self.get_context_state(current_context)
+            state_partition_context = self._get_state_partition_context(current_context)
+            self._write_starting_replication_value(current_context)
+            child_context: Optional[dict] = (
+                None if current_context is None else copy.copy(current_context)
+            )
+            for record_result in self.get_records(current_context):
+                if isinstance(record_result, tuple):
+                    # Tuple items should be the record and the child context
+                    record, child_context = record_result
+                else:
+                    record = record_result
+                child_context = copy.copy(
+                    self.get_child_context(record=record, context=child_context)
+                )
+                for key, val in (state_partition_context or {}).items():
+                    # Add state context to records if not already present
+                    if key not in record:
+                        record[key] = val
+
+                # Sync children, except when primary mapper filters out the record
+                if self.stream_maps[0].get_filter_result(record):
+                    self._sync_children(child_context)
+                self._check_max_record_limit(record_count)
+                if selected:
+                    self._write_record_message(record)
+                    try:
+                        self._increment_stream_state(record, context=current_context)
+                    except InvalidStreamSortException as ex:
+                        log_sort_error(
+                            log_fn=self.logger.error,
+                            ex=ex,
+                            record_count=record_count + 1,
+                            partition_record_count=partition_record_count + 1,
+                            current_context=current_context,
+                            state_partition_context=state_partition_context,
+                            stream_name=self.name,
+                        )
+                        raise ex
+
+                record_count += 1
+                partition_record_count += 1
+            if current_context == state_partition_context:
+                # Finalize per-partition state only if 1:1 with context
+                self.finalize_state_progress_markers(state)
+        if not context:
+            # Finalize total stream only if we have the full full context.
+            # Otherwise will be finalized by tap at end of sync.
+            self.finalize_state_progress_markers(self.stream_state)
+        self._write_record_count_log(record_count=record_count, context=context)
+
+    schema_writed = False
+
+    def sync_custom(self, context: Optional[dict] = None) -> None:
+        msg = f"Beginning {self.replication_method.lower()} sync of '{self.name}'"
+        if context:
+            msg += f" with context: {context}"
+        self.logger.info(f"{msg}...")
+        # Use a replication signpost, if available
+        signpost = self.get_replication_key_signpost(context)
+        if signpost:
+            self._write_replication_key_signpost(context, signpost)
+        # Send a SCHEMA message to the downstream target:
+        if not self.schema_writed:
+            self._write_schema_message()
+            self.schema_writed = True
+        # Sync the records themselves:
+        self._sync_records(context)
 class ArchivedStream(hubspotV3Stream):
 
     def post_process(self, row, context):
@@ -1165,82 +851,6 @@ class CompaniesStream(ObjectSearchV3):
     path = "crm/v3/objects/companies/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v1/companies/properties"
-
-
-class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
-    """Companies Fullsync Stream"""
-
-    name = "fullsync_companies"
-    object_type = "companies"
-    path = "companies/v2/companies/paged"
-    replication_key = "updatedAt"
-    records_jsonpath = "$.companies[*]"
-    properties_url = "properties/v2/companies/properties"
-    limit = 250
-    properties_param = "properties"
-    merge_pk = "companyId"
-
-    base_properties = [
-        th.Property("id", th.StringType),
-        th.Property("archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("_hg_archived", th.BooleanType),
-    ]
-
-    def post_process(self, row, context):
-        row["id"] = str(row["companyId"])
-        row = super().post_process(row, context)
-        # add archived value to _hg_archived
-        row["updatedAt"] = row["hs_lastmodifieddate"]
-        row["createdAt"] = row["createdate"]
-        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
-        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
-        return row
-
-    @cached_property
-    def selected(self) -> bool:
-        """Check if stream is selected.
-        Returns:
-            True if the stream is selected.
-        """
-        # It has to be in the catalog or it will cause issues
-        if not self._tap.catalog.get("fullsync_companies"):
-            return False
-
-        try:
-            # Make this stream auto-select if companies is selected
-            self._tap.catalog["fullsync_companies"] = self._tap.catalog["companies"]
-            params = self.get_url_params(dict(), None)
-            if len(urlencode(params)) > 15000:
-                self.logger.warn("Too many properties to use fullsync companies. Defaulting back to normal companies stream.")
-                # TODO: in this case we can fall back and split the requests
-                return False
-            # if fullsync_companies or companies doesn't have a state, select this stream if companies is selected
-            companies_state = self.tap_state.get("bookmarks", {}).get("companies", {})
-            if not companies_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
-                return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
-        except:
-            return self.mask.get((), False)
-
-    def _write_record_message(self, record: dict) -> None:
-        """Write out a RECORD message.
-        Args:
-            record: A single stream record.
-        """
-        for record_message in self._generate_record_messages(record):
-            # force this to think it's the companies stream
-            record_message.stream = "companies"
-            singer.write_message(record_message)
-
-    @property
-    def metadata(self):
-        new_metadata = super().metadata
-        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
-        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
-        return new_metadata
-
 
 class ArchivedCompaniesStream(ArchivedStream):
     """Archived Companies Stream"""
@@ -1433,191 +1043,6 @@ class DealsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v1/deals/properties"
     bulk_child_size = 50 # max allowed in the API
-
-    def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
-    
-
-class FullsyncDealsStream(hubspotV1SplitUrlStream):
-    """Fullsync Deals Stream"""
-
-    # # def get_child_context(self, record: dict, context) -> dict:
-    # #     return {"id": record["id"]}
-    
-    # this is a stream created to run fullsyncs when deals is selected and there's no state
-    # as the tap already has a fullsync contact stream we will make this stream a child stream from that one
-    # so if any of ContactsStream child streams is selected it doesn't fetch the same data twice # TODO: NOT YET
-
-    path = "deals/v1/deal/paged"
-    records_jsonpath = "$.deals[*]"
-    replication_key = "updatedAt"
-    primary_keys = ["id"]
-    additional_params = dict(showListMemberships=True)
-    properties_url = "properties/v1/deals/properties"
-    name = "fullsync_deals"
-    stream_alias = "deals"
-    properties_param = "properties"
-    merge_pk = "dealId"
-    bulk_child_size = 50 # max allowed in the API
-
-    base_properties = [
-        th.Property("id", th.StringType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-        th.Property("_hg_archived", th.BooleanType),
-    ]
-
-    def _sync_records(  # noqa C901  # too complex
-        self, context: Optional[dict] = None
-    ) -> None:
-        """Sync records, emitting RECORD and STATE messages. """
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-        selected = self.selected
-
-        for current_context in context_list or [{}]:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            child_context_bulk = {"ids": []}
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
-                )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
-
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=self.bulk_child_size:
-                    self._sync_children(child_context_bulk)
-                    child_context_bulk = {"ids": []}
-                self._check_max_record_limit(record_count)
-                if selected:
-                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
-                        self._write_state_message()
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                record_count += 1
-                partition_record_count += 1
-            if len(child_context_bulk):
-                self._sync_children(child_context_bulk)
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-        # Reset interim bookmarks before emitting final STATE message:
-        self._write_state_message()
-
-
-    def apply_catalog(self, catalog) -> None:
-        self._tap_input_catalog = catalog
-        catalog_entry = catalog.get_stream(self.name)
-        if catalog_entry:
-            self.primary_keys = catalog_entry.key_properties
-            if catalog_entry.replication_method:
-                self.forced_replication_method = catalog_entry.replication_method
-
-    def post_process(self, row, context) -> dict:
-        row = super().post_process(row, context)
-        # modify fields to have the same schema as contacts_v3
-        row["id"] = str(row.get("dealId", ""))
-        row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
-        row["createdAt"] = row.get("hs_createdate")
-        row["updatedAt"] = row.get("hs_lastmodifieddate") or row["createdAt"]
-        row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
-        return row
-        
-    @cached_property
-    def selected(self) -> bool:
-        """Check if stream is selected.
-        Returns:
-            True if the stream is selected.
-        """
-        # It has to be in the catalog or it will cause issues
-        if not self._tap.catalog.get("fullsync_deals"):
-            return False
-
-        try:
-            # Make this stream auto-select if deals is selected
-            self._tap.catalog["fullsync_deals"] = self._tap.catalog["deals"]
-            deals_state = self.tap_state.get("bookmarks", {}).get("deals", {})
-            if not deals_state.get("replication_key_value") and not self.stream_state.get("replication_key_value"):
-                return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
-        except:
-            return self.mask.get((), False)
-
-    def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.stream = self.stream_alias
-            schema_message.schema = self.schema
-            singer.write_message(schema_message)
-
-    def _write_record_message(self, record: dict) -> None:
-        """Write out a RECORD message.
-        Args:
-            record: A single stream record.
-        """
-        for record_message in self._generate_record_messages(record):
-            # force this to think it's the companies stream
-            record_message.stream = self.stream_alias
-            singer.write_message(record_message)
-
-    @property
-    def metadata(self):
-        new_metadata = super().metadata
-        new_metadata[("properties", "hs_lastmodifieddate")].selected = True
-        new_metadata[("properties", "hs_lastmodifieddate")].selected_by_default = True
-        return new_metadata
-
-    def _get_state_partition_context(self, context: Optional[dict]) -> Optional[Dict]:
-        return {}
-
-    def _write_metric_log(self, metric: dict, extra_tags: Optional[dict]) -> None:
-        if not self._metric_logging_function:
-            return None
-
-        if extra_tags:
-            metric["tags"].update(extra_tags)
-
-        # clean records from metric logs
-        metric.get("tags", {}).pop("context", None)
-        self._metric_logging_function(f"INFO METRIC: {str(metric)}")
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
@@ -2031,7 +1456,7 @@ class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = ContactsV3Stream
+    parent_stream_type = ContactsStream
 
     @property
     def parent(self):

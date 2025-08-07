@@ -22,7 +22,6 @@ from tap_hubspot_beta.streams import (
     ContactEventsStream,
     ContactListData,
     ContactListsStream,
-    ContactsStream,
     DealsStream,
     EmailEventsStream,
     EmailsStream,
@@ -38,7 +37,7 @@ from tap_hubspot_beta.streams import (
     TasksStream,
     EngagementStream,
     DealsPipelinesStream,
-    ContactsV3Stream,
+    ContactsStream,
     TicketsStream,
     DispositionsStream,
     MarketingEmailsStream,
@@ -52,7 +51,6 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
-    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -79,7 +77,6 @@ from tap_hubspot_beta.streams import (
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    FullsyncDealsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -107,7 +104,6 @@ from tap_hubspot_beta.streams import (
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream
 
@@ -140,7 +136,6 @@ def add_streams(stream_classes):
     return stream_types
 
 STREAM_TYPES = add_streams([
-    ContactsStream,
     ListsStream,
     CompaniesStream,
     DealsStream,
@@ -167,7 +162,7 @@ STREAM_TYPES = add_streams([
     CallsStream,
     EngagementStream,
     DealsPipelinesStream,
-    ContactsV3Stream,
+    ContactsStream,
     TicketsStream,
     DispositionsStream,
     MarketingEmailsStream,
@@ -181,7 +176,6 @@ STREAM_TYPES = add_streams([
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
-    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -208,7 +202,6 @@ STREAM_TYPES = add_streams([
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    FullsyncDealsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -236,7 +229,6 @@ STREAM_TYPES = add_streams([
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream
 ])
