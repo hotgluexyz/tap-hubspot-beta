@@ -2008,6 +2008,8 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
+        if not row.get("results"):
+            row["results"] = []
         row["list_id"] = context["list_id"]
         return row
 
