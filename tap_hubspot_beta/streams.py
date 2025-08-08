@@ -1151,6 +1151,8 @@ class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
 
 class ArchivedStream(hubspotV3Stream):
 
+    visible_in_catalog = False
+
     def post_process(self, row, context):
         row = super().post_process(row, context)
 

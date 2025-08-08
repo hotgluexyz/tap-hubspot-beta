@@ -459,9 +459,6 @@ class Taphubspot(Tap):
                 if stream.name.startswith("fullsync_"):
                     streams_by_type[base_name].visible_in_catalog = False
                     continue
-                elif stream.name.endswith("_archived"):
-                    streams_by_type[base_name].visible_in_catalog = False
-                    continue
                 # rename v3 streams that are visible in the catalog
                 if stream.name.endswith("_v3"):
                     # if stream name has v3 in it remove 'v3' from the stream name 
