@@ -316,8 +316,6 @@ class Taphubspot(Tap):
         catalog =  cast(dict, {"streams": new_catalog})
 
         # add metadata fields to catalog
-
-        # add metadata fields to catalog
         streams = self.streams
         for stream in catalog["streams"]:
             stream_class = streams[stream["tap_stream_id"]]

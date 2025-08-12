@@ -43,10 +43,6 @@ class hubspotStream(RESTStream):
     is_first_sync = False
     visible_in_catalog = True
 
-    @property
-    def use_legacy_streams(self):
-        return self.config.get("use_legacy_streams", True)
-
     def load_fields_metadata(self):
         if not self.properties_url:
             self.logger.info(f"Skipping fields_meta for {self.name} stream, because there is no properties_url set")
