@@ -83,24 +83,13 @@ class hubspotV3SearchStream(hubspotStream):
 
         # we've reached the end of this time bucket
         if not next_page_token:
-            if len(self.buckets) > 0:
+            if self.buckets and len(self.buckets) > 0:
                 self.current_bucket = self.buckets.pop(0)
                 next_page_token = "-1" if previous_token == "0" else "0"
             else:
                 self.logger.warning(f"No more buckets to process")
         return next_page_token
-    
-    def get_end_time(self):
-        # Maintain consistent end_time within stream syncs
-        if self.query_end_time:
-            return self.query_end_time
-        end_date = self._tap.config.get("end_date")
-        if end_date:
-            return int(parse(end_date).timestamp() * 1000)
-        end_date = datetime.now()
-        self.query_end_time = int(end_date.timestamp() * 1000)
-        return int(end_date.timestamp() * 1000)
-
+        
     def prepare_bucket_request_payload(self, starting_time: int, end_time: int | None):
         payload = {}
         payload["limit"] = 1
@@ -238,6 +227,11 @@ class hubspotV3SearchStream(hubspotStream):
             # in the first request, create the buckets with all time ranges
             self.buckets = self.create_time_buckets(context)
             self.current_bucket = self.buckets.pop(0)
+        
+        if not next_page_token and len(self.buckets) == 0:
+            # Set buckets to none as there are no more buckets to process and we need to create
+            # the buckets again for the next child context
+            self.buckets = None
 
         payload = {}
         payload["limit"] = self.page_size

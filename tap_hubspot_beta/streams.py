@@ -390,7 +390,7 @@ class ContactListsStream(hubspotV3SingleSearchStream):
         try:
             records = list(super().request_records(params))
         except FatalAPIError:
-            logging.info("Couldn't get schema for path: /contacts/v1/lists")
+            logging.info("Couldn't get schema for path: /crm/v3/lists/search")
             return []
 
         return records
@@ -448,33 +448,6 @@ class ContactListsStream(hubspotV3SingleSearchStream):
         return {
             "list_id": record["id"],
         }
-
-
-class ContactListData(hubspotV1Stream):
-    """Lists Stream"""
-
-    name = "contact_list_data"
-    records_jsonpath = "$.contacts[*]"
-    parent_stream_type = ContactListsStream
-    primary_keys = ["vid", "listId"]
-    replication_key = None
-    path = "/contacts/v1/lists/{list_id}/contacts/all"
-    properties_url = "properties/v1/contacts/properties"
-
-    base_properties = [
-        th.Property("vid", th.IntegerType),
-        th.Property("addedAt", th.DateTimeType),
-        th.Property("portal-id", th.IntegerType),
-        th.Property("listId", th.IntegerType),
-    ]
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        super().post_process(row, context)
-        row["listId"] = int(context.get("list_id"))
-        return row
-
-
 class ObjectSearchV3(hubspotV3SearchStream):
     """Base Object Stream"""
 
@@ -490,13 +463,12 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("archivedAt", th.DateTimeType),
     ]
 
-
 class ContactsStream(ObjectSearchV3):
     """Contacts Stream"""
 
     name = "contacts_v3"
     path = "crm/v3/objects/contacts/search"
-    properties_url = "properties/v1/contacts/properties"
+    properties_url = "crm/v3/properties/contacts"
     bulk_child_size = 50 # max allowed in the API
 
     @property
@@ -527,12 +499,39 @@ class ContactsStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
+class ContactListData(ObjectSearchV3):
+    """Lists Stream"""
+
+    name = "contact_list_data"
+    records_jsonpath = "$.contacts[*]"
+    parent_stream_type = ContactListsStream
+    primary_keys = ["vid", "listId"]
+    replication_key = None
+    special_replication = True
+    replication_key_filter = "lastmodifieddate"
+    path = "crm/v3/objects/contacts/search?associations.contact_list_id={list_id}"
+    properties_url = "crm/v3/properties/contacts"
+    starting_time = 946666800
+
+    base_properties = [
+        th.Property("vid", th.IntegerType),
+        th.Property("addedAt", th.DateTimeType),
+        th.Property("portal-id", th.IntegerType),
+        th.Property("listId", th.IntegerType),
+    ]
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        super().post_process(row, context)
+        row["listId"] = int(context.get("list_id"))
+        return row
+
 class ContactsHistoryPropertiesStream(hubspotHistoryV3Stream):
     """Contacts History Properties Stream"""
 
     name = "contacts_history_properties"
     path = "crm/v3/objects/contacts/batch/read"
-    properties_url = "properties/v1/contacts/properties"
+    properties_url = "crm/v3/properties/contacts"
     parent_stream_type = ContactsStream
     primary_keys = ["id"]
 
@@ -880,7 +879,7 @@ class ArchivedContactsStream(ArchivedStream):
     name = "contacts_v3_archived"
     replication_key = "archivedAt"
     path = "crm/v3/objects/contacts?archived=true"
-    properties_url = "properties/v1/contacts/properties"
+    properties_url = "crm/v3/properties/contacts"
     primary_keys = ["id"]
 
     base_properties = [
