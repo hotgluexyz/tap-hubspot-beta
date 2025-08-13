@@ -503,7 +503,7 @@ class ContactListData(ObjectSearchV3):
     """Lists Stream"""
 
     name = "contact_list_data"
-    records_jsonpath = "$.contacts[*]"
+    records_jsonpath = "$.results[*]"
     parent_stream_type = ContactListsStream
     primary_keys = ["vid", "listId"]
     replication_key = None
