@@ -371,7 +371,7 @@ class hubspotV3SearchStream(hubspotStream):
     def _sync_children(self, child_context: dict) -> None:
         for child_stream in self.child_streams:
             if child_stream.selected or child_stream.has_selected_descendents:
-                if not child_stream.bulk_child:
+                if not hasattr(child_stream, "bulk_child") or not child_stream.bulk_child:
                     ids = child_context.get("ids") or []
                     for id in ids:
                         child_stream.sync(context=id)
@@ -592,6 +592,6 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         """Prepare the data payload for the REST API request."""
         payload = {}
         payload["propertiesWithHistory"] = self.selected_properties
-        payload["inputs"] = context["ids"]
+        payload["inputs"] = [{"id": id['contact_id']} for id in context["ids"]]
         return payload
 

@@ -470,17 +470,26 @@ class ContactsStream(ObjectSearchV3):
     path = "crm/v3/objects/contacts/search"
     properties_url = "crm/v3/properties/contacts"
     bulk_child_size = 50 # max allowed in the API
+    additional_params = dict(showListMemberships=True)
+    merge_pk = "id"
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("_hg_archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("addedAt", th.DateTimeType),
+        th.Property("portal-id", th.IntegerType),
+        th.Property("list-memberships", th.CustomType({"type": ["array", "string"]})),
+        th.Property("subscriber_email", th.StringType)
+    ]
 
     @property
     def use_contacts_stream(self):
         if not self.stream_state.get("replication_key_value"):
             return True
-
-    @property
-    def replication_key(self):
-        if self.config.get("filter_contacts_created_at"):
-            return "createdAt"
-        return "updatedAt"
 
     @property
     def replication_key_filter(self):
@@ -497,7 +506,10 @@ class ContactsStream(ObjectSearchV3):
                 self.forced_replication_method = catalog_entry.replication_method
 
     def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
+        return {
+            "contact_id": record["id"],
+            "subscriber_email": record.get("subscriber_email"),
+        }
 
 class ContactListData(ObjectSearchV3):
     """Lists Stream"""
@@ -1440,6 +1452,13 @@ class AssociationContactsStream(hubspotV4Stream):
         th.Property("label", th.StringType),
         th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
     ).to_dict()
+
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        """Prepare the data payload for the REST API request."""
+        payload = {"inputs": [{"id": id['contact_id']} for id in context["ids"]]}
+        return payload
 
 class AssociationDealsCompaniesStream(AssociationDealsStream):
     """Association Deals -> Companies Stream"""
