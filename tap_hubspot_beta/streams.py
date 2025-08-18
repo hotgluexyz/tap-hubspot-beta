@@ -3456,18 +3456,14 @@ class GoalTargetsStream(hubspotV3Stream):
 
     name = "goal_targets"
     path = "crm/v3/objects/goal_targets"
+    properties_url = "crm/v3/properties/goal_targets"
     records_jsonpath = "$.results[*]"
     primary_keys = ["id"]
     replication_key = "updatedAt"
 
-    schema = th.PropertiesList(
+    base_properties = [
         th.Property("id", th.StringType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-        th.Property("objectWriteTraceId", th.StringType),
-        th.Property("associations", th.CustomType({"type": ["object", "string"]})),
-        th.Property("properties", th.CustomType({"type": ["object", "string"]})),
-        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]}))
-    ).to_dict()
+    ]
