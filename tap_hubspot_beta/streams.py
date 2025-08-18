@@ -3450,3 +3450,24 @@ class DiscoverCustomObjectsStream(hubspotV3Stream):
         ))),
         th.Property("name", th.StringType),
     ).to_dict()
+
+class GoalTargetsStream(hubspotV3Stream):
+    """Goal Targets Stream"""
+
+    name = "goal_targets"
+    path = "crm/v3/objects/goal_targets"
+    records_jsonpath = "$.results[*]"
+    primary_keys = ["id"]
+    replication_key = "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("objectWriteTraceId", th.StringType),
+        th.Property("associations", th.CustomType({"type": ["object", "string"]})),
+        th.Property("properties", th.CustomType({"type": ["object", "string"]})),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]}))
+    ).to_dict()
