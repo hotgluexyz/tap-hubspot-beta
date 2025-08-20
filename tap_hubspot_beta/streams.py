@@ -1281,6 +1281,8 @@ class ArchivedCompaniesStream(ArchivedStream):
         try:
             # Make this stream auto-select if companies is selected
             self._tap.catalog["companies_archived"] = self._tap.catalog["companies"]
+            # populate metadata to fetch all fields selected in companies
+            self._metadata = self._tap.catalog["companies"].metadata
             return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
@@ -1402,6 +1404,8 @@ class ArchivedProductsStream(ArchivedStream):
         try:
             # Make this stream auto-select if products is selected
             self._tap.catalog["products_archived"] = self._tap.catalog["products"]
+            # populate metadata to fetch all fields selected in contacts_v3
+            self._metadata = self._tap.catalog["products"].metadata
             return self.mask.get((), False) or self._tap.catalog["products"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
@@ -1812,6 +1816,8 @@ class ArchivedDealsStream(ArchivedStream):
         try:
             # Make this stream auto-select if deals is selected
             self._tap.catalog["deals_archived"] = self._tap.catalog["deals"]
+            # populate metadata to fetch all fields selected in deals
+            self._metadata = self._tap.catalog["deals"].metadata
             return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
@@ -1944,6 +1950,8 @@ class ArchivedLineItemsStream(ArchivedStream):
         try:
             # Make this stream auto-select if lineitems is selected
             self._tap.catalog["lineitems_archived"] = self._tap.catalog["lineitems"]
+            # populate metadata to fetch all fields selected in lineitems
+            self._metadata = self._tap.catalog["lineitems"].metadata
             return self.mask.get((), False) or self._tap.catalog["lineitems"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
@@ -2331,6 +2339,9 @@ class ArchivedOwnersStream(ArchivedStream):
         try:
             # Make this stream auto-select if owners is selected
             self._tap.catalog["owners_archived"] = self._tap.catalog["owners"]
+
+            # populate metadata to fetch all fields selected in contacts_v3
+            self._metadata = self._tap.catalog["owners"].metadata
             return self.mask.get((), False) or self._tap.catalog["owners"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
