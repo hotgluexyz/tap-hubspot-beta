@@ -41,6 +41,7 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     bulk_child_size = 1000
     is_first_sync = False
+    visible_in_catalog = True
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -133,7 +134,9 @@ class hubspotStream(RESTStream):
                     self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
             
             # only use contacts stream for incremental syncs
-            if self.name == "contacts_v3":
+            contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+            
+            if self.name == contacts_v3_name:
                 fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
                 if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
                     finished = True

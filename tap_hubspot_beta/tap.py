@@ -1,7 +1,7 @@
 """hubspot tap class."""
 
 import os
-from typing import List, Dict, Type, Any
+from typing import List, Dict, Type, Any, cast
 import logging
 from singer_sdk.helpers._compat import final
 
@@ -247,6 +247,7 @@ class Taphubspot(Tap):
     """hubspot tap class."""
 
     name = "tap-hubspot"
+    legacy_streams_mapping = {}
 
     def __init__(
         self,
@@ -268,7 +269,7 @@ class Taphubspot(Tap):
         th.Property("start_date", th.DateTimeType),
         th.Property("access_token", th.StringType),
         th.Property("enable_list_selection", th.BooleanType, default=False),
-
+        th.Property("use_legacy_streams", th.BooleanType, default=True),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
@@ -284,13 +285,15 @@ class Taphubspot(Tap):
         
         streams = [stream_class(tap=self) for stream_class in stream_types]
 
-        try:
-            discover_stream = DiscoverCustomObjectsStream(tap=self)
-            for record in discover_stream.get_records(context={}):
-                stream_class = self.generate_stream_class(record)
-                streams.append(stream_class(tap=self))
-        except FatalAPIError as exc:
-            self.logger.info(f"failed to discover custom objects. Error={exc}")
+        # flag only used for testing purposes
+        if self.config.get("discover_custom_objects", True):
+            try:
+                discover_stream = DiscoverCustomObjectsStream(tap=self)
+                for record in discover_stream.get_records(context={}):
+                    stream_class = self.generate_stream_class(record)
+                    streams.append(stream_class(tap=self))
+            except FatalAPIError as exc:
+                self.logger.info(f"failed to discover custom objects. Error={exc}")
 
         return streams
     
@@ -301,7 +304,19 @@ class Taphubspot(Tap):
         Returns:
             The tap's catalog as a dict
         """
-        catalog = super().catalog_dict
+        # add visible field to metadata
+        original_catalog = self._singer_catalog
+        # for some reason to_dict() gets rid of the value visible so we'll add it back before json dumping the catalog
+        _catalog = self._singer_catalog.to_dict()
+        new_catalog = []
+        for _, stream in enumerate(_catalog["streams"]):
+            # add original name
+            # stream["original_name"] = original_catalog[stream["tap_stream_id"]].original_name
+            stream["metadata"][-1]["metadata"]["visible"] = original_catalog[stream["tap_stream_id"]].metadata[()].visible
+            new_catalog.append(stream)
+        catalog =  cast(dict, {"streams": new_catalog})
+
+        # add metadata fields to catalog
         streams = self.streams
         for stream in catalog["streams"]:
             stream_class = streams[stream["tap_stream_id"]]
@@ -311,6 +326,27 @@ class Taphubspot(Tap):
                 for field in stream["schema"]["properties"]:
                     stream["schema"]["properties"][field]["field_meta"] = stream_class.fields_metadata.get(field, {})
         return catalog
+    
+    @property
+    def streams(self) -> Dict[str, Stream]:
+        """Get streams discovered or catalogued for this tap.
+        Results will be cached after first execution.
+        Returns:
+            A mapping of names to streams, using discovery or a provided catalog.
+        """
+        input_catalog = self.input_catalog
+
+        if self._streams is None:
+            self._streams = {}
+            for stream in self.load_streams():
+                if input_catalog is not None:
+                    stream.apply_catalog(input_catalog)
+
+                # add metadata visible value
+                setattr(stream.metadata[()], "visible", stream.visible_in_catalog)
+                self._streams[stream.name] = stream
+        return self._streams
+
 
     def generate_stream_class(self, custom_object: Dict[str, Any]) -> hubspotV3Stream:
         # check for required fields to construct the custom objects class
@@ -409,7 +445,40 @@ class Taphubspot(Tap):
                             f"Added '{stream.name}' as child stream to '{parent.name}'"
                         )
 
-        streams = [stream for streams in streams_by_type.values() for stream in streams]
+        # clean streams dict and use stream name as keys
+        streams_by_type = {v[0].name:v[0] for v in streams_by_type.values()}
+
+        # change name for v3 streams and hide streams with the same base name (personalized request HGI-5253)
+        del_streams = []
+        if not self.config.get("use_legacy_streams"):
+            for stream in streams_by_type.values():
+                self.logger.info(f"Stream name: {stream.name}")
+                base_name = stream.name
+                streams_by_type[base_name].original_name = base_name
+                if stream.name.startswith("fullsync_"):
+                    streams_by_type[base_name].visible_in_catalog = False
+                    continue
+                # rename v3 streams that are visible in the catalog
+                if stream.name.endswith("_v3"):
+                    # if stream name has v3 in it remove 'v3' from the stream name 
+                    base_name = stream.name.split("_v3")[0]
+                    # excluding streams with the same base name from the catalog
+                    if base_name in streams_by_type.keys():
+                        # if same name stream is a parent stream change name and change visible = False
+                        if streams_by_type[base_name].child_streams:
+                            streams_by_type[base_name].name = f"is_parent_stream_{base_name}"
+                            streams_by_type[base_name].visible_in_catalog = False
+                        else:
+                            del_streams.append(base_name)
+                    # add original name to the mapping
+                    self.legacy_streams_mapping[stream.name] = base_name
+                    # change v3 name to base_name
+                    stream.name = base_name
+
+        # delete streams that have same name as v3 stream
+        streams_by_type = {key: value for key, value in streams_by_type.items() if key not in del_streams}
+
+        streams = streams_by_type.values()
         return sorted(
             streams,
             key=lambda x: x.name,
