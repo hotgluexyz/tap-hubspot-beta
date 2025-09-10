@@ -227,7 +227,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
     rest_method = "POST"
 
     records_jsonpath = "$.results[*]"
-    next_page_token_jsonpath = "$.paging.next.after"
+    next_page_token_jsonpath = "$.offset"
     filter = None
     starting_time = None
     page_size = 100
@@ -243,6 +243,10 @@ class hubspotV3SingleSearchStream(hubspotStream):
         """Return a token for identifying next page or None if no more pages."""
         all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
         next_page_token = next(iter(all_matches), None)
+
+        if not response.json().get("hasMore"):
+            return None
+        
         if next_page_token == "10000":
 
             start_date = self.stream_state.get("progress_markers", {}).get("replication_key_value")
@@ -264,7 +268,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
         if self.filter:
             payload["filters"].append(self.filter)
         if next_page_token and next_page_token!="0":
-            payload["after"] = next_page_token
+            payload["offset"] = next_page_token
         return payload
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
