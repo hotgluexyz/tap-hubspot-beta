@@ -1,6 +1,7 @@
 """REST client handling, including hubspotStream base class."""
 
 from typing import Any, Dict, Optional, List
+from datetime import datetime
 import copy
 
 import requests
@@ -36,6 +37,10 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
+    previous_starting_time = None
+    max_dates = []
+    starting_times = []
+    query_end_time = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -52,34 +57,73 @@ class hubspotV3SearchStream(hubspotStream):
             self.logger.info(f"Total records to fetch for stream = {self.name}: {response.json().get('total')}")
 
         next_page_token = next(iter(all_matches), None)
-        if next_page_token == "10000":
+        # next_page_token = "10000"
+        if next_page_token is not None and float(next_page_token) + self.page_size >= 10000:
             start_date = self.stream_state.get("progress_markers", {}).get(
                 "replication_key_value"
             )
-            if self.name in ["deals_association_parent"]:
-                data = response.json()
-                # extract maximum modified date to overcome 10000 pagination limit
+            # We need to paginate using lastmodifieddates after page #10000
+            data = response.json()
+               
+            # extract maximum modified date to overcome 10000 pagination limit
+            hs_lastmodifieddates = [
+                entry["properties"]["hs_lastmodifieddate"]
+                for entry in data["results"]
+                if "properties" in entry
+                and "hs_lastmodifieddate" in entry["properties"]
+                and entry["properties"]["hs_lastmodifieddate"] is not None
+            ]
+            #If hs_lastmodifieddate is empty in properties. Do the lookup using replication key
+            if not hs_lastmodifieddates and self.replication_key is not None:
                 hs_lastmodifieddates = [
-                    entry["properties"]["hs_lastmodifieddate"]
-                    for entry in data["results"]
-                    if "properties" in entry
-                    and "hs_lastmodifieddate" in entry["properties"]
+                entry[self.replication_key]
+                for entry in data["results"]
                 ]
-                hs_lastmodifieddates = [
-                    date for date in hs_lastmodifieddates if date is not None
-                ]
-                max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
-                if max_date:
-                    start_date = max_date
-                    self.special_replication = True
-                else:
+
+            hs_lastmodifieddates = [
+                date for date in hs_lastmodifieddates if date is not None
+            ]
+            max_date = max(hs_lastmodifieddates) if hs_lastmodifieddates else None
+            replication_value = self.stream_state.get("progress_markers", {}).get(
+                "replication_key_value"
+            )
+            
+            if max_date:
+                if replication_value:
+                    if parse(replication_value) > parse(max_date):
+                        max_date = replication_value
+                if max_date in self.max_dates:
+                    self.logger.warn("Date based pagination loop detected")
                     return None
+                self.max_dates.append(max_date)
+                start_date = max_date
+                self.special_replication = True
+            else:
+                return None
 
             if start_date:
                 start_date = parse(start_date)
                 self.starting_time = int(start_date.timestamp() * 1000)
+                self.starting_times.append(self.starting_time )
+                #Adding it just in case
+                if self.previous_starting_time:
+                    if self.previous_starting_time == self.starting_time:
+                        self.logger.warn("Date based pagination loop detected")
+                        return None
+                self.previous_starting_time = self.starting_time    
             next_page_token = "0"
         return next_page_token
+
+    def get_end_time(self):
+        # Maintain consistent end_time within stream syncs
+        if self.query_end_time:
+            return self.query_end_time
+        end_date = self._tap.config.get("end_date")
+        if end_date:
+            return int(parse(end_date).timestamp() * 1000)
+        end_date = datetime.now()
+        self.query_end_time = int(end_date.timestamp() * 1000)
+        return int(end_date.timestamp() * 1000)
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -94,13 +138,18 @@ class hubspotV3SearchStream(hubspotStream):
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].append(
+            payload["filters"].extend([
                 {
                     "propertyName": self.replication_key_filter,
                     "operator": "GT",
                     "value": starting_time,
+                },
+                {
+                    "propertyName": self.replication_key_filter,
+                    "operator": "LTE",
+                    "value": self.get_end_time()
                 }
-            )
+            ])
             payload["sorts"] = [{
                 "propertyName": self.replication_key_filter,
                 "direction": "ASCENDING"
@@ -258,7 +307,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
     rest_method = "POST"
 
     records_jsonpath = "$.results[*]"
-    next_page_token_jsonpath = "$.paging.next.after"
+    next_page_token_jsonpath = "$.offset"
     filter = None
     starting_time = None
     page_size = 100
