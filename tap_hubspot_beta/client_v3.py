@@ -28,6 +28,10 @@ class hubspotV3SearchStream(hubspotStream):
     starting_time = None
     page_size = 100
     special_replication = False
+    previous_starting_time = None
+    max_dates = []
+    starting_times = []
+    query_end_time = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
