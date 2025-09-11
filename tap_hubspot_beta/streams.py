@@ -3493,3 +3493,11 @@ class GoalTargetsStream(hubspotV3Stream):
         th.Property("updatedAt", th.DateTimeType),
         th.Property("archived", th.BooleanType),
     ]
+
+class OrdersStream(ObjectSearchV3):
+    """Orders Stream"""
+
+    name = "orders"
+    path = "crm/v3/objects/orders/search"
+    properties_url = "properties/v2/orders/properties"
+    replication_key_filter = "hs_lastmodifieddate"

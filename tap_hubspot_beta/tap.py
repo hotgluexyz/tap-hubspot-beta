@@ -110,7 +110,8 @@ from tap_hubspot_beta.streams import (
     FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream,
-    GoalTargetsStream
+    GoalTargetsStream,
+    OrdersStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -239,7 +240,8 @@ STREAM_TYPES = add_streams([
     FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream,
-    GoalTargetsStream
+    GoalTargetsStream,
+    OrdersStream,
 ])
 
 
