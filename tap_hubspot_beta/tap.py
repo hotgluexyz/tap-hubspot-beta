@@ -363,6 +363,7 @@ class Taphubspot(Tap):
         name = custom_object.get("name")
         object_type_id = custom_object.get("objectTypeId")
         properties = custom_object.get("properties")
+        associations = custom_object.get("associations")
         
         if custom_object.get("archived", False):
             name = "archived_" + name
@@ -381,12 +382,12 @@ class Taphubspot(Tap):
                 "primary_keys": ["id"],
                 "replication_key": "updatedAt",
                 "page_size": 100,
-                "schema": self.generate_schema(properties),
+                "schema": self.generate_schema(properties, associations),
                 "is_custom_stream": True,
             },
         )
     
-    def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
+    def generate_schema(self, properties: List[Dict[str, Any]], associations: List[Dict[str, Any]] = None) -> dict:
         properties_list = [
             th.Property("id", th.StringType),
             th.Property("updatedAt", th.DateTimeType), 
@@ -405,6 +406,20 @@ class Taphubspot(Tap):
                 continue
             th_type = hubspotV3Stream.extract_type(property)
             properties_list.append(th.Property(field_name, th_type))
+        
+        # add associations
+        if self.config.get("add_associations_to_schema") and associations:
+            associations_list = []
+            for association in associations:
+                associated_object_name = association.get("name").split("_to_")[-1]
+
+                if associated_object_name in associations_list:
+                    continue
+                associations_list.append(associated_object_name)
+                # add toObjectTypeId, fromObjectTypeId and name to properties_list to be mapped in the widget
+                properties_list.append(th.Property(f"toObjectTypeId_{associated_object_name}", th.StringType))
+                properties_list.append(th.Property(f"fromObjectTypeId_{associated_object_name}", th.StringType))
+                properties_list.append(th.Property(f"name_{associated_object_name}", th.StringType))
         return th.PropertiesList(*properties_list).to_dict()
     
     @final
