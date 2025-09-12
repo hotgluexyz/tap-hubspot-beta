@@ -437,8 +437,8 @@ class Taphubspot(Tap):
             properties_list.append(th.Property(field_name, th_type))
         
         # add associations
+        associations_metadata = {}
         if self.config.get("add_associations_to_schema") and associations:
-            associations_metadata = {}
             for association in associations:
                 association_name = association.get("name")
 
