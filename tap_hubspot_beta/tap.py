@@ -299,6 +299,25 @@ class Taphubspot(Tap):
 
         return streams
     
+    def set_associations_metadata(self, stream_dict: dict, stream_class: Stream) -> dict:
+        # add associations metadata to metadata
+        if hasattr(stream_class, "object_id"):
+            stream_dict["metadata"][-1]["metadata"]["object_id"] = stream_class.object_id
+        if hasattr(stream_class, "fullyQualifiedName"):
+            stream_dict["metadata"][-1]["metadata"]["fullyQualifiedName"] =stream_class.fullyQualifiedName
+        
+        # add associations metadata to schema
+        if hasattr(stream_class, "associations_metadata"):
+            associations_metadata = stream_class.associations_metadata
+            for field in stream_dict["metadata"]:
+                field_name = field["breadcrumb"][-1] if len(field["breadcrumb"]) > 0 else None
+                if field_name not in associations_metadata:
+                    continue
+                field["metadata"]["associationTypeId"] = associations_metadata.get(field_name).get("associationTypeId")
+                field["metadata"]["toObjectTypeId"] = associations_metadata.get(field_name).get("toObjectTypeId")
+        
+        return stream_dict
+    
     @property
     def catalog_dict(self) -> dict:
         """Get catalog dictionary.
@@ -327,6 +346,9 @@ class Taphubspot(Tap):
                 stream_class.load_fields_metadata()
                 for field in stream["schema"]["properties"]:
                     stream["schema"]["properties"][field]["field_meta"] = stream_class.fields_metadata.get(field, {})
+            # add associations metadata to metadata
+            stream = self.set_associations_metadata(stream, stream_class)
+
         return catalog
     
     @property
@@ -365,6 +387,7 @@ class Taphubspot(Tap):
         name = custom_object.get("name")
         object_type_id = custom_object.get("objectTypeId")
         properties = custom_object.get("properties")
+        associations = custom_object.get("associations")
         
         if custom_object.get("archived", False):
             name = "archived_" + name
@@ -372,6 +395,8 @@ class Taphubspot(Tap):
         class_name = "".join(word.capitalize() for word in class_name.split("_"))
 
         self.logger.info(f"Creating class {class_name}")
+
+        schema, associations_metadata = self.generate_schema(properties, associations, object_type_id)
 
         return type(
             class_name,
@@ -383,12 +408,15 @@ class Taphubspot(Tap):
                 "primary_keys": ["id"],
                 "replication_key": "updatedAt",
                 "page_size": 100,
-                "schema": self.generate_schema(properties),
+                "schema": schema,
                 "is_custom_stream": True,
+                "object_id": custom_object.get("id"),
+                "fullyQualifiedName": custom_object.get("fullyQualifiedName"),
+                "associations_metadata": associations_metadata
             },
         )
     
-    def generate_schema(self, properties: List[Dict[str, Any]]) -> dict:
+    def generate_schema(self, properties: List[Dict[str, Any]], associations: List[Dict[str, Any]] = None, object_type_id: str = None) -> dict:
         properties_list = [
             th.Property("id", th.StringType),
             th.Property("updatedAt", th.DateTimeType), 
@@ -407,7 +435,26 @@ class Taphubspot(Tap):
                 continue
             th_type = hubspotV3Stream.extract_type(property)
             properties_list.append(th.Property(field_name, th_type))
-        return th.PropertiesList(*properties_list).to_dict()
+        
+        # add associations
+        associations_metadata = {}
+        if self.config.get("add_associations_to_schema") and associations:
+            for association in associations:
+                association_name = association.get("name")
+
+                # only add associations that are from current object to other objects, not the other way around
+                if association.get("toObjectTypeId") == object_type_id:
+                    continue
+
+                # add toObjectTypeId, fromObjectTypeId and name to properties_list to be mapped in the widget
+                properties_list.append(th.Property(f"{association_name}", th.StringType))
+
+                # add metadata for the association field
+                associations_metadata[association_name] = {
+                    "toObjectTypeId": association.get("toObjectTypeId").split("-")[-1],
+                    "associationTypeId": association.get("id")
+                }
+        return th.PropertiesList(*properties_list).to_dict(), associations_metadata
     
     @final
     def load_streams(self) -> List[Stream]:
