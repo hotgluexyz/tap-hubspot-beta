@@ -301,13 +301,14 @@ class hubspotStream(RESTStream):
     def request_decorator(self, func):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
-            self.backoff_wait_generator,
+            backoff.expo,
             (
                 RetriableAPIError,
                 requests.exceptions.RequestException,
                 requests.exceptions.JSONDecodeError,
                 urllib3.exceptions.HTTPError,
             ),
+            factor=3,
             max_tries=self.backoff_max_tries,
             on_backoff=self.backoff_handler,
         )(func)
