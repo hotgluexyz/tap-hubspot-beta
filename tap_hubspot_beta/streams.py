@@ -1986,7 +1986,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         th.Property("listId", th.StringType),
         th.Property("listVersion", th.NumberType),
         th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.StringType),
+        th.Property("updatedAt", th.DateTimeType),
         th.Property("filtersUpdateAt", th.DateTimeType),
         th.Property("processingStatus", th.StringType),
         th.Property("createdById", th.StringType),
@@ -2017,7 +2017,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             "list_id": record["listId"],
             "list_last_added_at": additional.get("hs_last_record_added_at"),
             "list_last_removed_at": additional.get("hs_last_record_removed_at"),
-            "list_updated_at": record.get("updatedAt"),
+            "list_updated_at": int(record.get("updatedAt").timestamp())
         }
 
     def _sync_children(self, child_context: dict) -> None:
