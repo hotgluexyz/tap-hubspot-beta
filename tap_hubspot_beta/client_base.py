@@ -60,6 +60,7 @@ class hubspotStream(RESTStream):
         if authenticator:
             prepared_request.headers.update(authenticator.auth_headers or {})
 
+        self.logger.debug(f"Requesting {prepared_request.url}")
         response = self.requests_session.send(prepared_request, timeout=self.timeout)
         if self._LOG_REQUEST_METRICS:
             extra_tags = {}
@@ -98,9 +99,11 @@ class hubspotStream(RESTStream):
             for row in self.parse_response(resp):
                 yield row
             previous_token = copy.deepcopy(next_page_token)
+            self.logger.debug(f"Previous page token: {previous_token}")
             next_page_token = self.get_next_page_token(
                 response=resp, previous_token=previous_token
             )
+            self.logger.debug(f"Next page token: {next_page_token}")
             if next_page_token and next_page_token == previous_token:
                 raise RuntimeError(
                     f"Loop detected in pagination. "
@@ -310,6 +313,7 @@ class hubspotStreamSchema(hubspotStream):
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
         response_json = response.json()
+        self.logger.debug(f"Response JSON: has-more: {response_json.get('has-more')}, offset: {response_json.get('offset')}, vid-offset: {response_json.get('vid-offset')}")
         if response_json.get("has-more"):
             offset = response_json.get("offset")
             vid_offset = response_json.get("vid-offset")
