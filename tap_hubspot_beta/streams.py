@@ -1995,11 +1995,11 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         th.Property("objectTypeId", th.StringType),
         th.Property("name", th.StringType),
         th.Property("additionalProperties", th.ObjectType(
-            th.Property("hs_list_size", th.NumberType),
+            th.Property("hs_list_size", th.StringType),
             th.Property("hs_last_record_added_at", th.StringType),
             th.Property("hs_last_record_removed_at", th.StringType),
             th.Property("hs_folder_name", th.StringType),
-            th.Property("hs_list_reference_count", th.NumberType),
+            th.Property("hs_list_reference_count", th.StringType),
         )),
     ).to_dict()
 
