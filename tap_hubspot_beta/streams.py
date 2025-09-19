@@ -728,11 +728,11 @@ class ContactListsStream(hubspotStreamSchema):
                 )
                 if list_name is None:
                     self.logger.error(
-                        f"No matching list name found for property '{property}' in list ids: {list(map(lambda x: x['listId'], records))}"
+                        f"No matching list name found for list id '{property}' in list ids: {list(map(lambda x: x['listId'], records))}"
                     )
                     raise ValueError(
-                        f"Could not find a list name for property '{property}'. "
-                        "This may indicate a mismatch between selected properties and available records."
+                        f"Could not find a list name for list id '{property}'. "
+                        "This may indicate a mismatch between selected list ids and available list ids from fetched records."
                     )
                 yield {"id": property.strip(), "name": list_name}
 
