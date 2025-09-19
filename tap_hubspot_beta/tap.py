@@ -250,6 +250,7 @@ class Taphubspot(Tap):
 
     name = "tap-hubspot"
     legacy_streams_mapping = {}
+    associations_metadata = {}
 
     def __init__(
         self,
@@ -307,11 +308,11 @@ class Taphubspot(Tap):
             stream_dict["metadata"][-1]["metadata"]["fullyQualifiedName"] =stream_class.fullyQualifiedName
         
         # add associations metadata to schema
-        if hasattr(stream_class, "associations_metadata"):
-            associations_metadata = stream_class.associations_metadata
+        if hasattr(stream_class, "associations_metadata") or self.associations_metadata.get(stream_class.name):
+            associations_metadata = stream_class.associations_metadata or self.associations_metadata.get(stream_class.name)
             for field in stream_dict["metadata"]:
                 field_name = field["breadcrumb"][-1] if len(field["breadcrumb"]) > 0 else None
-                if field_name not in associations_metadata:
+                if not associations_metadata or field_name not in associations_metadata:
                     continue
                 field["metadata"]["associationTypeId"] = associations_metadata.get(field_name).get("associationTypeId")
                 field["metadata"]["toObjectTypeId"] = associations_metadata.get(field_name).get("toObjectTypeId")
@@ -397,6 +398,7 @@ class Taphubspot(Tap):
         self.logger.info(f"Creating class {class_name}")
 
         schema, associations_metadata = self.generate_schema(properties, associations, object_type_id)
+        self.associations_metadata[name] = associations_metadata
 
         return type(
             class_name,
@@ -438,7 +440,7 @@ class Taphubspot(Tap):
         
         # add associations
         associations_metadata = {}
-        if self.config.get("add_associations_to_schema") and associations:
+        if "CustomObjects" in self.config.get("add_associations_to_schema", []) and associations:
             for association in associations:
                 association_name = association.get("name")
 

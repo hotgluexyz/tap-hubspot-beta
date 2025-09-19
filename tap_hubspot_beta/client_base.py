@@ -14,6 +14,7 @@ from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+from singer_sdk import Stream
 import time
 
 from pendulum import parse
@@ -23,6 +24,7 @@ import singer
 from singer import StateMessage
 from datetime import datetime
 import pytz
+import requests
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
 
@@ -42,6 +44,34 @@ class hubspotStream(RESTStream):
     bulk_child_size = 1000
     is_first_sync = False
     visible_in_catalog = True
+
+    def get_associations(self, from_current_object: str, to_current_object: str) -> list:
+        # request associations for the from_current_object and to_current_object
+        associations = requests.get(
+            f"{self.url_base}crm/v3/associations/{from_current_object}/{to_current_object}/types",
+            headers = self.authenticator.auth_headers or {},
+        )
+        return associations.json().get("results", [])
+    
+    def get_crm_associations_metadata(self) -> dict:
+        # request all associations for the stream
+        associations_objects = self.config.get("add_associations_to_schema", [])
+        from_current_object = next((obj for obj in associations_objects if obj.lower() == self.name.lower()), None)
+
+        associations_metadata = {}
+        # get assoaciations for all permutations of from_current_object and to_current_object
+        for object in associations_objects:
+            if object.lower() == self.name.lower():
+                continue
+            # get associations for the object
+            associations = self.get_associations(from_current_object, object)
+            for association in associations:
+                associations_metadata[association["name"]] = {
+                    "toObjectTypeId": object,
+                    "associationTypeId": association.get("id")
+                }
+        self._tap.associations_metadata[self.name] = associations_metadata
+        return associations_metadata
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -328,6 +358,12 @@ class hubspotStream(RESTStream):
                 if not field.get("deleted"):
                     property = th.Property(field_name, self.extract_type(field))
                     properties.append(property)
+        
+        # get crm objects associations metadata
+        if self.config.get("add_associations_to_schema") and self.name.lower() in [col.lower() for col in self.config.get("add_associations_to_schema")]:
+            associations = self.get_crm_associations_metadata()
+            for association in associations:
+                properties.append(th.Property(association, th.StringType))
 
         return th.PropertiesList(*properties).to_dict()
 
