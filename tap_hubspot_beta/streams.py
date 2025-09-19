@@ -723,8 +723,17 @@ class ContactListsStream(hubspotStreamSchema):
         for property in selected_properties:
             if property not in ignore:
                 list_name = next(
-                    r["name"] for r in records if str(r["listId"]) == property
+                    (r["name"] for r in records if str(r["listId"]) == property),
+                    None
                 )
+                if list_name is None:
+                    self.logger.error(
+                        f"No matching list name found for property '{property}' in list ids: {list(map(lambda x: x['listId'], records))}"
+                    )
+                    raise ValueError(
+                        f"Could not find a list name for property '{property}'. "
+                        "This may indicate a mismatch between selected properties and available records."
+                    )
                 yield {"id": property.strip(), "name": list_name}
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
