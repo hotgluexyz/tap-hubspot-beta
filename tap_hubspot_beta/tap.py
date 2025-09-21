@@ -309,13 +309,14 @@ class Taphubspot(Tap):
         
         # add associations metadata to schema
         if hasattr(stream_class, "associations_metadata") or self.associations_metadata.get(stream_class.name):
-            associations_metadata = stream_class.associations_metadata or self.associations_metadata.get(stream_class.name)
+            associations_metadata = self.associations_metadata.get(stream_class.name) or stream_class.associations_metadata
             for field in stream_dict["metadata"]:
                 field_name = field["breadcrumb"][-1] if len(field["breadcrumb"]) > 0 else None
                 if not associations_metadata or field_name not in associations_metadata:
                     continue
                 field["metadata"]["associationTypeId"] = associations_metadata.get(field_name).get("associationTypeId")
                 field["metadata"]["toObjectTypeId"] = associations_metadata.get(field_name).get("toObjectTypeId")
+                field["metadata"]["associationCategory"] = associations_metadata.get(field_name).get("associationCategory")
         
         return stream_dict
     

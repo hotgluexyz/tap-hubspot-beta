@@ -48,7 +48,7 @@ class hubspotStream(RESTStream):
     def get_associations(self, from_current_object: str, to_current_object: str) -> list:
         # request associations for the from_current_object and to_current_object
         associations = requests.get(
-            f"{self.url_base}crm/v3/associations/{from_current_object}/{to_current_object}/types",
+            f"{self.url_base}crm/v4/associations/{from_current_object}/{to_current_object}/labels",
             headers = self.authenticator.auth_headers or {},
         )
         return associations.json().get("results", [])
@@ -66,9 +66,12 @@ class hubspotStream(RESTStream):
             # get associations for the object
             associations = self.get_associations(from_current_object, object)
             for association in associations:
-                associations_metadata[association["name"]] = {
+                default_association_label = f"{self.name}_to_{object}"
+                association_label = association.get("label") or default_association_label
+                associations_metadata[association_label] = {
                     "toObjectTypeId": object,
-                    "associationTypeId": association.get("id")
+                    "associationTypeId": str(association.get("typeId")),
+                    "associationCategory": association.get("category")
                 }
         self._tap.associations_metadata[self.name] = associations_metadata
         return associations_metadata
