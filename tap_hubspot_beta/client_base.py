@@ -1,7 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 import copy
 import logging
-import curlify
 import urllib3
 
 import requests
@@ -147,6 +146,22 @@ class hubspotStream(RESTStream):
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
                 selected_properties.append(key[-1])
         return selected_properties
+    
+    def curlify_request(self, request):
+        command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
+        method = request.method
+        uri = request.url
+        data = request.body
+
+        headers = []
+        for k, v in request.headers.items():
+            # Mask the Authorization header
+            if k.lower() == "authorization":
+                v = "__MASKED__"
+            headers.append('"{0}: {1}"'.format(k, v))
+
+        headers = " -H ".join(headers)
+        return command.format(method=method, headers=headers, data=data, uri=uri)
 
     def log_rate_limit(self, resp):
         """
@@ -170,15 +185,18 @@ class hubspotStream(RESTStream):
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
+        def _log_and_raise(exception_class, message):
+            curl_command = self.curlify_request(response.request)
+            logging.info(f"Response code: {response.status_code}, info: {response.text}")
+            logging.info(f"CURL command for failed request: {curl_command}")
+            raise exception_class(f"Msg {message}, response {response.text}")
+
         if 500 <= response.status_code < 600 or response.status_code in [400, 401, 104]:
             msg = (
                 f"{response.status_code} Server Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
+            _log_and_raise(RetriableAPIError, msg)
 
         if 429 == response.status_code:
             self.log_rate_limit(response)
@@ -189,10 +207,7 @@ class hubspotStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.reason} for path: {self.path}"
             )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise FatalAPIError(RetriableAPIError(f"Msg {msg}, response {response.text}"))
+            _log_and_raise(FatalAPIError, msg)
 
     @staticmethod
     def extract_type(field, type_booleancheckbox_as_boolean=False, cast_numbers_as_float=False):
