@@ -61,8 +61,6 @@ class hubspotStream(RESTStream):
         associations_metadata = {}
         # get assoaciations for all permutations of from_current_object and to_current_object
         for object in associations_objects:
-            if object.lower() == self.name.lower():
-                continue
             # get associations for the object
             associations = self.get_associations(from_current_object, object)
             for association in associations:
