@@ -167,3 +167,18 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
                 responses.append(self._handle_request(req, context))
             return merge_responses(responses, self.merge_pk, self.records_jsonpath)
         return self._handle_request(prepared_request, context)
+                
+    def parse_response(self, response) -> Iterable[dict]:
+        # if the stream has a list id config mapping, fetch the list memberships
+        if self._list_id_config_mapping.get(self.name):
+            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
+            if list_ids:
+                list_memberships = self.fetch_list_memberships(list_ids)
+                for record in extract_jsonpath(self.records_jsonpath, input=response.json()):
+                    pk = self.merge_pk if hasattr(self, "merge_pk") else "id"
+                    if record[pk] in list_memberships or str(record[pk]) in list_memberships:
+                        yield record
+            else:
+                yield from extract_jsonpath(self.records_jsonpath, input=response.json())
+        else:
+            yield from extract_jsonpath(self.records_jsonpath, input=response.json())
