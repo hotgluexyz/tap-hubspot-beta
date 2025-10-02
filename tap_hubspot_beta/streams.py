@@ -885,6 +885,21 @@ class ObjectSearchV3(hubspotV3SearchStream):
         th.Property("archivedAt", th.DateTimeType),
     ]
 
+    def parse_response(self, response) -> Iterable[dict]:
+        # if the stream has a list id config mapping, fetch the list memberships
+        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
+            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
+            if list_ids:
+                list_memberships = self.fetch_list_memberships(list_ids)
+                for record in extract_jsonpath(self.records_jsonpath, input=response.json()):
+                    pk = self.merge_pk if hasattr(self, "merge_pk") else "id"
+                    if record[pk] in list_memberships or str(record[pk]) in list_memberships:
+                        yield record
+            else:
+                yield from extract_jsonpath(self.records_jsonpath, input=response.json())
+        else:
+            yield from extract_jsonpath(self.records_jsonpath, input=response.json())
+
 
 class ContactsV3Stream(ObjectSearchV3):
     """Contacts Stream"""
@@ -966,9 +981,6 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
             self.primary_keys = catalog_entry.key_properties
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
-
-    def parse_response(self, response) -> Iterable[dict]:
-        yield from extract_jsonpath(self.records_jsonpath, input=response.json())
 
     def post_process(self, row, context) -> dict:
         """As needed, append or transform raw data to match expected structure."""
@@ -1165,6 +1177,21 @@ class ArchivedStream(hubspotV3Stream):
                 return row
             return None
         return row
+    
+    def parse_response(self, response) -> Iterable[dict]:
+        # if the stream has a list id config mapping, fetch the list memberships
+        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
+            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
+            if list_ids:
+                list_memberships = self.fetch_list_memberships(list_ids)
+                for record in extract_jsonpath(self.records_jsonpath, input=response.json()):
+                    pk = self.merge_pk if hasattr(self, "merge_pk") else "id"
+                    if record[pk] in list_memberships or str(record[pk]) in list_memberships:
+                        yield record
+            else:
+                yield from extract_jsonpath(self.records_jsonpath, input=response.json())
+        else:
+            yield from extract_jsonpath(self.records_jsonpath, input=response.json())
 
 
 class CompaniesStream(ObjectSearchV3):

@@ -6,7 +6,7 @@ import urllib3
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List, Callable, Generator
+from typing import Any, Dict, Iterable, Optional, cast, List, Callable, Generator
 
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
@@ -44,6 +44,8 @@ class hubspotStream(RESTStream):
     bulk_child_size = 1000
     is_first_sync = False
     visible_in_catalog = True
+    _list_record_ids = set()
+    _list_record_ids_for_stream = ""
 
     def get_associations(self, from_current_object: str, to_current_object: str) -> list:
         # request associations for the from_current_object and to_current_object
@@ -572,6 +574,49 @@ class hubspotStream(RESTStream):
         row = self.parse_datetimes(row)
         row = self.process_row_types(row)
         return row
+    
+    _list_id_config_mapping = {
+        "fullsync_contacts_v3": "contacts_list_ids",
+        "contacts": "contacts_list_ids",
+        "contacts_v3_archived": "contacts_list_ids",
+        "fullsync_companies": "companies_list_ids",
+        "companies": "companies_list_ids",
+        "companies_archived": "companies_list_ids",
+        "fullsync_deals": "deals_list_ids",
+        "deals": "deals_list_ids",
+        "deals_archived": "deals_list_ids",
+        "tickets": "tickets_list_ids",
+        "orders": "orders_list_ids",
+    }
+    
+    def fetch_list_memberships(self, list_ids) -> Iterable[dict]:
+        # reset the list record ids for each stream
+        if self._list_record_ids_for_stream != self.name:
+            self._list_record_ids = set()
+            self._list_record_ids_for_stream = self.name
+
+        if self._list_record_ids:
+            return self._list_record_ids
+
+        for list_id in list_ids:
+            params = {"limit": 250}
+            while True:
+                response = requests.get(
+                    f"{self.url_base}crm/v3/lists/{list_id}/memberships",
+                        headers=self.authenticator.auth_headers or {},
+                        params=params,
+                    )
+
+                if response.status_code != 200:
+                    raise Exception(f"Error fetching list memberships for list {list_id}: {response.status_code} {response.text}")
+
+                list_memberships = response.json()
+                self._list_record_ids.update([membership["recordId"] for membership in list_memberships["results"]])
+                if list_memberships.get("paging", {}).get("next", {}).get("after"):
+                    params["after"] = list_memberships.get("paging", {}).get("next", {}).get("after")
+                else:
+                    break
+        return self._list_record_ids
 
 class hubspotStreamSchema(hubspotStream):
 
