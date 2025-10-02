@@ -170,7 +170,7 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
                 
     def parse_response(self, response) -> Iterable[dict]:
         # if the stream has a list id config mapping, fetch the list memberships
-        if self._list_id_config_mapping.get(self.name):
+        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
             list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
             if list_ids:
                 list_memberships = self.fetch_list_memberships(list_ids)
