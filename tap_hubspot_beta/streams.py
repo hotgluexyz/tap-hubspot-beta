@@ -1994,7 +1994,13 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         th.Property("processingType", th.StringType),
         th.Property("objectTypeId", th.StringType),
         th.Property("name", th.StringType),
-        th.Property("additionalProperties", th.CustomType({"type": ["object", "string"]})),
+        th.Property("additionalProperties", th.ObjectType(
+            th.Property("hs_list_size", th.StringType),
+            th.Property("hs_last_record_added_at", th.StringType),
+            th.Property("hs_last_record_removed_at", th.StringType),
+            th.Property("hs_folder_name", th.StringType),
+            th.Property("hs_list_reference_count", th.StringType),
+        )),
     ).to_dict()
 
     def apply_catalog(self, catalog) -> None:
@@ -2006,9 +2012,53 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
                 self.forced_replication_method = catalog_entry.replication_method
 
     def get_child_context(self, record, context):
+        additional = record.get("additionalProperties") or {}
         return {
             "list_id": record["listId"],
+            "list_last_added_at": additional.get("hs_last_record_added_at"),
+            "list_last_removed_at": additional.get("hs_last_record_removed_at"),
+            "list_updated_at": int(record.get("updatedAt").timestamp())
         }
+
+    def _sync_children(self, child_context: dict) -> None:
+        """Only sync child memberships if list timestamps changed since last run.
+
+        We track per-list markers in this stream's state under the key
+        'list_change_markers' with structure:
+            { list_id: { 'added': str|None, 'removed': str|None, 'updated': str|None } }
+        """
+        if not child_context:
+            return
+
+        list_id = child_context.get("list_id")
+        if not list_id:
+            return
+
+        if not self.config.get('list_memberships_fullsync', True):
+            current_markers = {
+                "added": child_context.get("list_last_added_at"),
+                "removed": child_context.get("list_last_removed_at"),
+                "updated": child_context.get("list_updated_at"),
+            }
+
+            state = self.stream_state
+            markers_by_list = state.setdefault("list_change_markers", {})
+            previous_markers = markers_by_list.get(list_id)
+
+            # If markers have not changed, skip syncing the child stream
+            if previous_markers is not None and previous_markers == current_markers:
+                return
+
+            # Otherwise, sync children and update saved markers
+            super()._sync_children(child_context)
+            markers_by_list[list_id] = current_markers
+        else:
+            super()._sync_children(child_context)
+    
+    def prepare_request_payload(self, context: Optional[dict], next_page_token: Optional[Any]) -> Optional[dict]:
+        payload = super().prepare_request_payload(context, next_page_token)
+        payload["additional_properties"] = ["hs_last_record_added_at", "hs_last_record_removed_at"]
+        return payload
 
 
 

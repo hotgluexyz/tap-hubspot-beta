@@ -273,6 +273,7 @@ class Taphubspot(Tap):
         th.Property("access_token", th.StringType),
         th.Property("enable_list_selection", th.BooleanType, default=False),
         th.Property("use_legacy_streams", th.BooleanType, default=True),
+        th.Property("list_memberships_fullsync", th.BooleanType, default=True),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
