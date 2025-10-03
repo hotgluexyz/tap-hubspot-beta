@@ -2034,23 +2034,26 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         if not list_id:
             return
 
-        current_markers = {
-            "added": child_context.get("list_last_added_at"),
-            "removed": child_context.get("list_last_removed_at"),
-            "updated": child_context.get("list_updated_at"),
-        }
+        if not self.config.get('list_memberships_fullsync', True):
+            current_markers = {
+                "added": child_context.get("list_last_added_at"),
+                "removed": child_context.get("list_last_removed_at"),
+                "updated": child_context.get("list_updated_at"),
+            }
 
-        state = self.stream_state
-        markers_by_list = state.setdefault("list_change_markers", {})
-        previous_markers = markers_by_list.get(list_id)
+            state = self.stream_state
+            markers_by_list = state.setdefault("list_change_markers", {})
+            previous_markers = markers_by_list.get(list_id)
 
-        # If markers have not changed, skip syncing the child stream
-        if previous_markers is not None and previous_markers == current_markers:
-            return
+            # If markers have not changed, skip syncing the child stream
+            if previous_markers is not None and previous_markers == current_markers:
+                return
 
-        # Otherwise, sync children and update saved markers
-        super()._sync_children(child_context)
-        markers_by_list[list_id] = current_markers
+            # Otherwise, sync children and update saved markers
+            super()._sync_children(child_context)
+            markers_by_list[list_id] = current_markers
+        else:
+            super()._sync_children(child_context)
     
     def prepare_request_payload(self, context: Optional[dict], next_page_token: Optional[Any]) -> Optional[dict]:
         payload = super().prepare_request_payload(context, next_page_token)
