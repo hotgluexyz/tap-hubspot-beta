@@ -135,13 +135,14 @@ class hubspotStream(RESTStream):
             # only use companies stream for incremental syncs
             if self.name == "companies":
                 fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
-                fullsync_on = False
+                fullsync_companies_selected = False
                 try:
                     # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
+                    fullsync_companies_selected = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
                 except:
                     pass
-                if fullsync_on and not fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                companies_list_ids = self.config.get("companies_list_ids")
+                if fullsync_companies_selected and not fullsync_companies_state.get("replication_key") and self.is_first_sync() and not companies_list_ids:
                     finished = True
                     yield from []
                     break
@@ -171,7 +172,8 @@ class hubspotStream(RESTStream):
             
             if self.name == contacts_v3_name:
                 fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
-                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
+                contacts_list_ids = self.config.get("contacts_list_ids")
+                if not contacts_list_ids and not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
                     finished = True
                     yield from []
                     break
@@ -417,7 +419,7 @@ class hubspotStream(RESTStream):
 
                 state_partition_context = self._get_state_partition_context(context)
 
-                if state_partition_context:
+                if state_partition_context and stream_state_partitions:
                     index, found = next(((i, partition_state) for i, partition_state in enumerate(stream_state_partitions) if partition_state["context"] == state_partition_context), (None, None))
                     if found:
                         state = found

@@ -158,7 +158,25 @@ class hubspotV3SearchStream(hubspotStream):
                     payload["properties"] = self.selected_properties
             else:
                 payload["properties"] = []
+        if context and context.get("object_id_filters"):
+            payload["filters"].append({
+                "propertyName": "hs_object_id",
+                "operator": "IN",
+                "values": context["object_id_filters"]
+            })
         return payload
+
+
+    @property
+    def partitions(self) -> Optional[List[dict]]:
+        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
+            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
+            if list_ids:
+                object_ids = list(self.fetch_list_memberships(list_ids))
+                # Partition into groups of 100
+                return [{"object_id_filters": object_ids[i:i+100]} for i in range(0, len(object_ids), 100)] or [{"object_id_filters": []}]
+        return super().partitions
+
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
@@ -179,6 +197,8 @@ class hubspotV3SearchStream(hubspotStream):
         selected = self.selected
 
         for current_context in context_list or [{}]:
+            if current_context.get("object_id_filters") == []:
+                continue
             partition_record_count = 0
             current_context = current_context or None
             state = self.get_context_state(current_context)
@@ -237,11 +257,15 @@ class hubspotV3SearchStream(hubspotStream):
 
                 record_count += 1
                 partition_record_count += 1
+            
+            
             if len(child_context_bulk):
                 self._sync_children(child_context_bulk)
             if current_context == state_partition_context:
                 # Finalize per-partition state only if 1:1 with context
                 finalize_state_progress_markers(state)
+        
+
         if not context:
             # Finalize total stream only if we have the full full context.
             # Otherwise will be finalized by tap at end of sync.
