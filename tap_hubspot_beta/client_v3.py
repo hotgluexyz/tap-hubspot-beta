@@ -1,5 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 
+import time
 from typing import Any, Dict, Optional, List
 import copy
 
@@ -28,6 +29,7 @@ class hubspotV3SearchStream(hubspotStream):
     page_size = 100
     special_replication = False
     bulk_child_size = 1000
+    stream_start_time = int(time.time() * 1000)
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -82,13 +84,18 @@ class hubspotV3SearchStream(hubspotStream):
         if next_page_token and next_page_token!="0":
             payload["after"] = next_page_token
         if self.replication_key and starting_time or self.special_replication:
-            payload["filters"].append(
+            payload["filters"].extend([
                 {
                     "propertyName": self.replication_key_filter,
                     "operator": "GT",
                     "value": starting_time,
+                },
+                {
+                    "propertyName": self.replication_key_filter,
+                    "operator": "LTE",
+                    "value": self.stream_start_time
                 }
-            )
+            ])
             payload["sorts"] = [{
                 "propertyName": self.replication_key_filter,
                 "direction": "ASCENDING"
