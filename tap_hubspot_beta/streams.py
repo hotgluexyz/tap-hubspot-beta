@@ -152,12 +152,13 @@ class EngagementStream(hubspotV1Stream):
         return row
 
 
-class ContactsStream(hubspotV1Stream):
+class ContactsStream(hubspotV1SplitUrlStream):
     """Contacts Stream"""
 
     name = "contacts"
     path = "contacts/v1/lists/all/contacts/all"
     records_jsonpath = "$.contacts[*]"
+    merge_pk = "vid"
     primary_keys = ["vid"]
     replication_key = None
     additional_prarams = dict(showListMemberships=True)
