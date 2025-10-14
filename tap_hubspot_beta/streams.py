@@ -1002,6 +1002,9 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         if not self._tap.catalog.get("fullsync_contacts_v3"):
             return False
 
+        if self.config.get("contacts_list_ids"):
+            return False
+
         contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
         contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
         # if contacts_v3 and fullsync_contacts_v3 have no state select this stream if contacts_v3 is selected
@@ -1244,6 +1247,9 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         """
         # It has to be in the catalog or it will cause issues
         if not self._tap.catalog.get("fullsync_companies"):
+            return False
+
+        if self.config.get("companies_list_ids"):
             return False
 
         try:
