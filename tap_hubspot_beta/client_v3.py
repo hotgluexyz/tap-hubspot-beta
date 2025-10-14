@@ -29,7 +29,7 @@ class hubspotV3SearchStream(hubspotStream):
     page_size = 100
     special_replication = False
     bulk_child_size = 1000
-    stream_start_time = int(time.time() * 1000)
+    stream_init_time = int(time.time() * 1000)
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -93,7 +93,7 @@ class hubspotV3SearchStream(hubspotStream):
                 {
                     "propertyName": self.replication_key_filter,
                     "operator": "LTE",
-                    "value": self.stream_start_time
+                    "value": self.stream_init_time
                 }
             ])
             payload["sorts"] = [{
