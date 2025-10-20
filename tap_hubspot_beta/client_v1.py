@@ -96,7 +96,7 @@ class hubspotV1Stream(hubspotStream):
             # fetch associations for all records in the response
             parsed_response = self.get_associations_data(parsed_response)
 
-            yield from self.parse_response(resp)
+            yield from parsed_response
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
                 response=resp, previous_token=previous_token
