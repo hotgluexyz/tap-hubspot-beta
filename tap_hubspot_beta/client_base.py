@@ -1,5 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 import copy
+from dataclasses import field
 import logging
 import urllib3
 
@@ -15,6 +16,7 @@ from singer_sdk.streams import RESTStream
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
 from singer_sdk import Stream
+from tap_hubspot_beta.utils import deep_merge_dicts
 import time
 
 from pendulum import parse
@@ -121,6 +123,79 @@ class hubspotStream(RESTStream):
                 return parse(last_job.get("value"))
         return
 
+    def build_injected_records(self, record, fields_to_inject, primary_key: str):
+        """
+        Build a list of dicts where:
+        - Each key from fields_to_inject is present.
+        - The value is record['to_id'] if its associationTypeId matches
+            any of record['associationTypes'].
+        - Includes the 'from_id' from the original record.
+        """
+        injected = {}
+        assoc_type_ids = {str(a["typeId"]) for a in record.get("associationTypes", [])}
+
+        for field, info in fields_to_inject.items():
+            if str(info.get("associationTypeId")) in assoc_type_ids:
+                injected[field] = record.get("to_id")
+
+        return {record["from_id"]: injected}
+
+    
+    def fetch_associations(self, associated_object: str, fields_to_inject: dict, ids: list, merge_pk: str):
+        #fetch associations for the associated_object and fields_to_inject
+        # Import here to avoid circular imports
+        from tap_hubspot_beta.client_v4 import DynamicAssociationsStream
+        
+        dynamic_associations_stream = DynamicAssociationsStream(
+            tap=self._tap,
+            from_object_type=self.name,
+            to_object_type=associated_object,
+            ids=ids,
+        )
+        
+        records_with_associations = {}
+        for record in dynamic_associations_stream.get_records({}):
+            record_with_associations = self.build_injected_records(record, fields_to_inject, merge_pk)
+            records_with_associations = deep_merge_dicts(records_with_associations, record_with_associations)
+
+        return records_with_associations
+
+
+    def get_association_fields(self):
+        associated_objects = set()
+        fields_to_inject = {}
+        stream_catalog_metadata = [stream for stream in self._tap.catalog_dict.get("streams", []) if stream.get("tap_stream_id") == self.name][0]
+
+        for field_meta in stream_catalog_metadata.get("metadata", []):
+            breadcrumb = field_meta.get("breadcrumb", [])
+            _field_meta = field_meta.get("metadata", {})
+            if _field_meta.get("toObjectTypeId") and _field_meta.get("selected"):
+                associated_objects.add(_field_meta.get("toObjectTypeId"))
+                fields_to_inject[breadcrumb[-1]] = {
+                    "toObjectTypeId": _field_meta.get("toObjectTypeId"),
+                    "associationTypeId": _field_meta.get("associationTypeId"),
+                    }
+        return associated_objects, fields_to_inject
+    
+    def get_associations_data(self, parsed_response: list):
+        associations_to_fetch = [assoc.lower() for assoc in self.config.get("add_associations_to_schema", [])]
+        if self.name.lower() in associations_to_fetch:
+            associated_objects, fields_to_inject = self.get_association_fields()
+
+            ids = [row.get(self.primary_keys[0]) for row in parsed_response]
+            merge_pk = self.merge_pk if hasattr(self, "merge_pk") else self.primary_keys[0]
+
+            parsed_response_dict = {str(row.get(merge_pk)): row for row in parsed_response}
+            # fetch data per each association combination
+            for associated_object in associated_objects:
+                association_data = self.fetch_associations(associated_object, fields_to_inject, ids, merge_pk)
+                # make a dict of the parsed_response records to merge with the association_data
+                parsed_response_dict = deep_merge_dicts(parsed_response_dict, association_data)
+            
+            return list(parsed_response_dict.values())
+                            
+        return parsed_response
+
     def request_records(self, context):
         """Request records from REST endpoint(s), returning response records."""
         next_page_token = None
@@ -181,7 +256,13 @@ class hubspotStream(RESTStream):
                 context, next_page_token=next_page_token
             )
             resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
+
+            # read data
+            parsed_response = list(self.parse_response(resp))
+
+            # fetch associations for objects in add_associations_to_schema
+            parsed_response = self.get_associations_data(parsed_response)
+            for row in parsed_response:
                 yield row
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
