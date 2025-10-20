@@ -142,8 +142,18 @@ class hubspotStream(RESTStream):
 
     
     def fetch_associations(self, associated_object: str, fields_to_inject: dict, ids: list, merge_pk: str):
-        #fetch associations for the associated_object and fields_to_inject
-        # Import here to avoid circular imports
+        """Fetch associations between objects and merge them with original records.
+
+        Args:
+            associated_object (str): The type of object to fetch associations for (e.g. "contacts", "companies")
+            fields_to_inject (dict): Mapping of field names to association metadata containing toObjectTypeId and associationTypeId
+            ids (list): List of IDs to fetch associations for
+            merge_pk (str): Primary key field name to use when merging associations with original records
+
+        Returns:
+            dict: Records with their associations merged in, keyed by the merge_pk value
+        """
+        # import here to avoid circular imports
         from tap_hubspot_beta.client_v4 import DynamicAssociationsStream
         
         dynamic_associations_stream = DynamicAssociationsStream(
@@ -162,6 +172,16 @@ class hubspotStream(RESTStream):
 
 
     def get_association_fields(self):
+        """Get the association fields and metadata for this stream.
+
+        Extracts association fields from the stream's catalog metadata that are marked as selected.
+        For each selected association field, captures the target object type ID and association type ID.
+
+        Returns:
+            Tuple containing:
+            - Set of associated object type IDs
+            - Dict mapping field names to their association metadata (toObjectTypeId and associationTypeId)
+        """
         associated_objects = set()
         fields_to_inject = {}
         stream_catalog_metadata = [stream for stream in self._tap.catalog_dict.get("streams", []) if stream.get("tap_stream_id") == self.name][0]
@@ -178,6 +198,18 @@ class hubspotStream(RESTStream):
         return associated_objects, fields_to_inject
     
     def get_associations_data(self, parsed_response: list):
+        """Get associations data for parsed response records.
+
+        Fetches association data for records if associations are configured in the schema.
+        Merges the association data with the original records.
+
+        Args:
+            parsed_response: List of parsed response records to get associations for
+
+        Returns:
+            List of records with association data merged in if associations are configured,
+            otherwise returns original parsed_response unchanged
+        """
         associations_to_fetch = [assoc.lower() for assoc in self.config.get("add_associations_to_schema", [])]
         if self.name.lower() in associations_to_fetch:
             associated_objects, fields_to_inject = self.get_association_fields()

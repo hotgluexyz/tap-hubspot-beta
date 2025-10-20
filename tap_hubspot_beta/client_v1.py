@@ -92,11 +92,11 @@ class hubspotV1Stream(hubspotStream):
                 break
             resp = decorated_request(prepared_request, context)
 
-            # fetch associations from 
             parsed_response = list(self.parse_response(resp))
+            # fetch associations for all records in the response
             parsed_response = self.get_associations_data(parsed_response)
 
-            yield from parsed_response
+            yield from self.parse_response(resp)
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
                 response=resp, previous_token=previous_token
