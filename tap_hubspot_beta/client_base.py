@@ -47,6 +47,18 @@ class hubspotStream(RESTStream):
     is_first_sync = False
     visible_in_catalog = True
 
+    @cached_property
+    def stream_object_type(self):
+        """Get the object type for the stream.
+
+        Returns:
+            The object type for the stream
+        """
+        stream_object_type = self.object_type if hasattr(self, "object_type") and self.object_type is not None else self.stream_alias if hasattr(self, "stream_alias") and self.stream_alias is not None else self.name
+        if "_v3" in stream_object_type:
+            stream_object_type = stream_object_type.replace("_v3", "")
+        return stream_object_type.lower()
+
     def get_associations(self, from_current_object: str, to_current_object: str) -> list:
         # request associations for the from_current_object and to_current_object
         associations = requests.get(
@@ -58,7 +70,7 @@ class hubspotStream(RESTStream):
     def get_crm_associations_metadata(self) -> dict:
         # request all associations for the stream
         associations_objects = self.config.get("add_associations_to_schema", [])
-        from_current_object = next((obj for obj in associations_objects if obj.lower() == self.name.lower()), None)
+        from_current_object = next((obj for obj in associations_objects if obj.lower() == self.stream_object_type), None)
 
         associations_metadata = {}
         # get assoaciations for all permutations of from_current_object and to_current_object
@@ -66,7 +78,7 @@ class hubspotStream(RESTStream):
             # get associations for the object
             associations = self.get_associations(from_current_object, object)
             for association in associations:
-                default_association_label = f"{self.name}_to_{object}"
+                default_association_label = f"{self.stream_object_type}_to_{object}"
                 association_label = association.get("label") or default_association_label
                 associations_metadata[association_label] = {
                     "toObjectTypeId": object,
@@ -158,7 +170,7 @@ class hubspotStream(RESTStream):
         
         dynamic_associations_stream = DynamicAssociationsStream(
             tap=self._tap,
-            from_object_type=self.name,
+            from_object_type=self.stream_object_type,
             to_object_type=associated_object,
             ids=ids,
         )
@@ -211,11 +223,12 @@ class hubspotStream(RESTStream):
             otherwise returns original parsed_response unchanged
         """
         associations_to_fetch = [assoc.lower() for assoc in self.config.get("add_associations_to_schema", [])]
-        if self.name.lower() in associations_to_fetch:
+
+        if self.stream_object_type in associations_to_fetch:
             associated_objects, fields_to_inject = self.get_association_fields()
 
-            ids = [row.get(self.primary_keys[0]) for row in parsed_response]
             merge_pk = self.merge_pk if hasattr(self, "merge_pk") else self.primary_keys[0]
+            ids = [row.get(merge_pk) for row in parsed_response]
 
             parsed_response_dict = {str(row.get(merge_pk)): row for row in parsed_response}
             # fetch data per each association combination
@@ -474,7 +487,7 @@ class hubspotStream(RESTStream):
                     properties.append(property)
         
         # get crm objects associations metadata
-        if self.config.get("add_associations_to_schema") and self.name.lower() in [col.lower() for col in self.config.get("add_associations_to_schema")]:
+        if self.config.get("add_associations_to_schema") and self.stream_object_type in [col.lower() for col in self.config.get("add_associations_to_schema")]:
             associations = self.get_crm_associations_metadata()
             for association in associations:
                 properties.append(th.Property(association, th.StringType))
