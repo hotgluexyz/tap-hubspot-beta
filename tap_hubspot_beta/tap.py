@@ -251,6 +251,7 @@ class Taphubspot(Tap):
     name = "tap-hubspot"
     legacy_streams_mapping = {}
     associations_metadata = {}
+    custom_objects_streams = set()
 
     def __init__(
         self,
@@ -279,14 +280,8 @@ class Taphubspot(Tap):
         """Return a list of discovered streams."""
         stream_types = list(STREAM_TYPES)
 
-        # If enable_list_selection is false, remove ContactListsStream and ContactListData from the list
-        if not self.config.get("enable_list_selection"):
-            stream_types = [
-                st for st in stream_types
-                if st.__name__ != "ContactListsStream" and st.__name__ != "ContactListData"
-            ]
-        
-        streams = [stream_class(tap=self) for stream_class in stream_types]
+        streams = []
+        custom_objects_streams = set()
 
         # flag only used for testing purposes
         if self.config.get("discover_custom_objects", True):
@@ -295,8 +290,21 @@ class Taphubspot(Tap):
                 for record in discover_stream.get_records(context={}):
                     stream_class = self.generate_stream_class(record)
                     streams.append(stream_class(tap=self))
+                    # add custom objects streams to the list to use it for associations
+                    custom_objects_streams.add(record.get("fullyQualifiedName"))
+                # add custom objects to tap
+                self.custom_objects_streams = custom_objects_streams
             except FatalAPIError as exc:
                 self.logger.info(f"failed to discover custom objects. Error={exc}")
+
+        # If enable_list_selection is false, remove ContactListsStream and ContactListData from the list
+        if not self.config.get("enable_list_selection"):
+            stream_types = [
+                st for st in stream_types
+                if st.__name__ != "ContactListsStream" and st.__name__ != "ContactListData"
+            ]
+        
+        streams.extend([stream_class(tap=self) for stream_class in stream_types])
 
         return streams
     
@@ -415,7 +423,8 @@ class Taphubspot(Tap):
                 "is_custom_stream": True,
                 "object_id": custom_object.get("id"),
                 "fullyQualifiedName": custom_object.get("fullyQualifiedName"),
-                "associations_metadata": associations_metadata
+                "associations_metadata": associations_metadata,
+                "stream_object_type": custom_object.get("fullyQualifiedName")
             },
         )
     
