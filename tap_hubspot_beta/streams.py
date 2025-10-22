@@ -18,7 +18,7 @@ from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
-from tap_hubspot_beta.client_v4 import hubspotV4Stream
+from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 import pytz
@@ -32,16 +32,6 @@ from singer_sdk.helpers._state import (
     log_sort_error
 )
 import calendar
-
-association_schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
-
 
 class AccountStream(hubspotV1Stream):
     """Account Stream"""
@@ -2041,15 +2031,8 @@ class AssociationDealsStream(hubspotV4Stream):
 
     primary_keys = ["from_id", "to_id"]
     parent_stream_type = DealsAssociationParent
+    schema = association_schema
 
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
 
 class AssociationContactsStream(hubspotV4Stream):
     """Association Base Stream"""
@@ -2067,14 +2050,8 @@ class AssociationContactsStream(hubspotV4Stream):
             return "fullsync_contacts_v3"
         return contacts_v3_name
 
-    schema = th.PropertiesList(
-        th.Property("from_id", th.StringType),
-        th.Property("to_id", th.StringType),
-        th.Property("typeId", th.NumberType),
-        th.Property("category", th.StringType),
-        th.Property("label", th.StringType),
-        th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
-    ).to_dict()
+    schema = association_schema
+
 
 class AssociationDealsCompaniesStream(AssociationDealsStream):
     """Association Deals -> Companies Stream"""

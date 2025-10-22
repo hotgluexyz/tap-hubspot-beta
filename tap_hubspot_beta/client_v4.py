@@ -10,7 +10,7 @@ from singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
-
+from singer_sdk import typing as th
 from tap_hubspot_beta.client_base import hubspotStream
 
 
@@ -113,3 +113,36 @@ class hubspotV4Stream(hubspotStream):
             # Otherwise will be finalized by tap at end of sync.
             finalize_state_progress_markers(self.stream_state)
         self._write_record_count_log(record_count=record_count, context=context)
+
+
+association_schema = th.PropertiesList(
+    th.Property("from_id", th.StringType),
+    th.Property("to_id", th.StringType),
+    th.Property("typeId", th.NumberType),
+    th.Property("category", th.StringType),
+    th.Property("label", th.StringType),
+    th.Property("associationTypes", th.CustomType({"type": ["array", "object"]})),
+).to_dict()
+
+class DynamicAssociationsStream(hubspotV4Stream):
+    """Dynamic Associations Stream"""
+
+    def __init__(
+        self,
+        **kwargs
+    ) -> None:
+        self.from_object_type = kwargs.pop("from_object_type")
+        self.to_object_type = kwargs.pop("to_object_type")
+        self.ids = kwargs.pop("ids")
+        super().__init__(**kwargs)
+
+    name = "dynamic_associations"
+    @property
+    def path(self):
+        return f"crm/v4/associations/{self.from_object_type}/{self.to_object_type}/batch/read"
+    primary_keys = ["from_id", "to_id"]
+    schema = association_schema
+
+    def prepare_request_payload(self, context, next_page_token):
+        ids = [{"id": id} for id in self.ids]
+        return {"inputs": ids}
