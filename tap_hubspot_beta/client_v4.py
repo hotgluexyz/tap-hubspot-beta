@@ -35,9 +35,9 @@ class hubspotV4Stream(hubspotStream):
     def parse_response(self, response: requests.Response):
         """Parse the response and return an iterator of result rows."""
         for row in extract_jsonpath(self.records_jsonpath, input=response.json()):
-            output = {}
-            output["from_id"] = row["from"]["id"]
             for to in row["to"]:
+                output = {}
+                output["from_id"] = row["from"]["id"]
                 output["to_id"] = str(to["toObjectId"])
                 if "associationTypes" in to:
                     output['associationTypes'] = to['associationTypes']
