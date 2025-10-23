@@ -3478,3 +3478,75 @@ class OrdersStream(ObjectSearchV3):
     path = "crm/v3/objects/orders/search"
     properties_url = "properties/v2/orders/properties"
     replication_key_filter = "hs_lastmodifieddate"
+
+class CampaignsStream(hubspotV3Stream):
+    """Campaigns Stream"""
+
+    name = "campaigns"
+    path = "marketing/v3/campaigns"
+    # properties_url = "crm/v3/properties/campaigns"
+    replication_key = None
+    
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+    ).to_dict()
+    
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"campaign_id": record["id"]}
+
+class CampaignAssetsStream(hubspotV3Stream):
+    """Assets Stream"""
+
+    name = "campaign_assets"
+    parent_stream_type = CampaignsStream
+    path = "marketing/v3/campaigns/{campaign_id}/assets/{asset_type}"
+    primary_keys = ["id"]
+    replication_key = None
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("campaign_id", th.StringType),
+        th.Property("asset_type", th.StringType),
+        th.Property("metrics", th.CustomType({"type": "object"})),
+    ).to_dict()
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params = super().get_url_params(context, next_page_token)
+        
+        start_date = self.get_starting_timestamp(context)
+        if start_date:
+            params["startDate"] = start_date.strftime("%Y-%m-%d")
+        else:
+            start_date = datetime.now() - timedelta(days=30)
+            params["startDate"] = start_date.strftime("%Y-%m-%d")
+
+        end_date = self.config.get("end_date")
+        if end_date:
+            if isinstance(end_date, str):
+                end_date = parse(end_date)
+            params["endDate"] = end_date.strftime("%Y-%m-%d")
+        else:
+            params["endDate"] = datetime.now().strftime("%Y-%m-%d")
+        
+        return params
+    
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Request records for all asset types from HubSpot API."""
+        ASSET_TYPES = [
+            'MARKETING_EMAIL', 'AUTOMATION_PLATFORM_FLOW', 'BLOG_POST', 'SOCIAL_BROADCAST', 'WEB_INTERACTIVE',
+            'CTA', 'EXTERNAL_WEB_URL', 'FORM', 'LANDING_PAGE', 'AD_CAMPAIGN', 'MARKETING_EVENT',
+            'MARKETING_SMS', 'OBJECT_LIST', 'SITE_PAGE', 'SEQUENCE', 'FEEDBACK_SURVEY', 'MEETING_EVENT',
+            'EMAIL', 'CALL', 'PLAYBOOK', 'SALES_DOCUMENT', 'PODCAST_EPISODE', 'CASE_STUDY', 'KNOWLEDGE_ARTICLE'
+        ]
+
+        for asset_type in ASSET_TYPES:
+            context["asset_type"] = asset_type
+            for record in super().request_records(context):
+                yield record
+        
