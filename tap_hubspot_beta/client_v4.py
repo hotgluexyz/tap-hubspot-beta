@@ -20,6 +20,7 @@ class hubspotV4Stream(hubspotStream):
     rest_method = "POST"
     records_jsonpath = "$.results[*]"
     bulk_child = True
+    association_set = set()
 
     def get_url(self, context: Optional[dict]) -> str:
         """Get stream entity URL. """
@@ -46,6 +47,9 @@ class hubspotV4Stream(hubspotStream):
                         output['typeId'] = to['associationTypes'][0]['typeId']
                         output['label'] = to['associationTypes'][0]['label']
 
+                if (output["from_id"], output["to_id"], output["typeId"]) in self.association_set:
+                    continue
+                self.association_set.add((output["from_id"], output["to_id"], output["typeId"]))
                 yield output
 
     def _sync_records(  # noqa C901  # too complex
