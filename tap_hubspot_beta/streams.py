@@ -3549,4 +3549,3 @@ class CampaignAssetsStream(hubspotV3Stream):
             context["asset_type"] = asset_type
             for record in super().request_records(context):
                 yield record
-        
