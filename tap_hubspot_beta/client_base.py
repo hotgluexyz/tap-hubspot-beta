@@ -213,7 +213,8 @@ class hubspotStream(RESTStream):
             breadcrumb = field_meta.get("breadcrumb", [])
             _field_meta = field_meta.get("metadata", {})
             if _field_meta.get("toObjectTypeId") and _field_meta.get("selected"):
-                associated_objects.add(_field_meta.get("toObjectTypeId"))
+                associated_object = _field_meta.get("fullyQualifiedName") or _field_meta.get("toObjectTypeId")
+                associated_objects.add(associated_object)
                 fields_to_inject[breadcrumb[-1]] = {
                     "toObjectTypeId": _field_meta.get("toObjectTypeId"),
                     "associationTypeId": _field_meta.get("associationTypeId"),

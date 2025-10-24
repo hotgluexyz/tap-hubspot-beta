@@ -325,6 +325,7 @@ class Taphubspot(Tap):
                 field["metadata"]["associationTypeId"] = associations_metadata.get(field_name).get("associationTypeId")
                 field["metadata"]["toObjectTypeId"] = associations_metadata.get(field_name).get("toObjectTypeId")
                 field["metadata"]["associationCategory"] = associations_metadata.get(field_name).get("associationCategory")
+                field["metadata"]["fullyQualifiedName"] = associations_metadata.get(field_name).get("fullyQualifiedName") or associations_metadata.get(field_name).get("toObjectTypeId")
         
         return stream_dict
     
@@ -464,6 +465,7 @@ class Taphubspot(Tap):
                 # add metadata for the association field
                 associations_metadata[association_name] = {
                     "toObjectTypeId": association.get("toObjectTypeId").split("-")[-1],
+                    "fullyQualifiedName": association.get("toObjectTypeId"),
                     "associationTypeId": association.get("id")
                 }
         return th.PropertiesList(*properties_list).to_dict(), associations_metadata
