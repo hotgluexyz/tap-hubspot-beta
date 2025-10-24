@@ -3484,7 +3484,6 @@ class CampaignsStream(hubspotV3Stream):
 
     name = "campaigns"
     path = "marketing/v3/campaigns"
-    # properties_url = "crm/v3/properties/campaigns"
     replication_key = None
     
     schema = th.PropertiesList(
