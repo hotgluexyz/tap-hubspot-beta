@@ -3523,8 +3523,7 @@ class CampaignAssetsStream(hubspotV3Stream):
         if start_date:
             params["startDate"] = start_date.strftime("%Y-%m-%d")
         else:
-            start_date = datetime.now() - timedelta(days=30)
-            params["startDate"] = start_date.strftime("%Y-%m-%d")
+            params["startDate"] = "2000-01-01"
 
         end_date = self.config.get("end_date")
         if end_date:
