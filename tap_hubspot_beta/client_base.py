@@ -67,9 +67,20 @@ class hubspotStream(RESTStream):
         )
         return associations.json().get("results", [])
     
+    def get_associations_to_fetch(self) -> list:
+        add_associations_to_schema = self.config.get("add_associations_to_schema", []).copy()
+        if add_associations_to_schema:
+            # add custom objects streams to the list to use it for associations
+            add_associations_to_schema.extend(list(self._tap.custom_objects_streams))
+            # remove custom objects streams from the list
+            if "CustomObjects" in add_associations_to_schema:
+                del add_associations_to_schema[add_associations_to_schema.index("CustomObjects")]
+            return [assoc.lower() for assoc in add_associations_to_schema]
+        return []
+    
     def get_crm_associations_metadata(self) -> dict:
         # request all associations for the stream
-        associations_objects = self.config.get("add_associations_to_schema", [])
+        associations_objects = self.get_associations_to_fetch()
         from_current_object = next((obj for obj in associations_objects if obj.lower() == self.stream_object_type), None)
 
         associations_metadata = {}
@@ -202,7 +213,8 @@ class hubspotStream(RESTStream):
             breadcrumb = field_meta.get("breadcrumb", [])
             _field_meta = field_meta.get("metadata", {})
             if _field_meta.get("toObjectTypeId") and _field_meta.get("selected"):
-                associated_objects.add(_field_meta.get("toObjectTypeId"))
+                associated_object = _field_meta.get("fullyQualifiedName") or _field_meta.get("toObjectTypeId")
+                associated_objects.add(associated_object)
                 fields_to_inject[breadcrumb[-1]] = {
                     "toObjectTypeId": _field_meta.get("toObjectTypeId"),
                     "associationTypeId": _field_meta.get("associationTypeId"),
@@ -222,7 +234,11 @@ class hubspotStream(RESTStream):
             List of records with association data merged in if associations are configured,
             otherwise returns original parsed_response unchanged
         """
-        associations_to_fetch = [assoc.lower() for assoc in self.config.get("add_associations_to_schema", [])]
+
+        add_associations_to_schema = self.config.get("add_associations_to_schema", [])
+        # add custom objects streams to the list to use it for associations
+        add_associations_to_schema.extend(self._tap.custom_objects_streams)
+        associations_to_fetch = [assoc.lower() for assoc in add_associations_to_schema]
 
         if self.stream_object_type in associations_to_fetch:
             associated_objects, fields_to_inject = self.get_association_fields()
@@ -487,7 +503,8 @@ class hubspotStream(RESTStream):
                     properties.append(property)
         
         # get crm objects associations metadata
-        if self.config.get("add_associations_to_schema") and self.stream_object_type in [col.lower() for col in self.config.get("add_associations_to_schema")]:
+        associations_to_fetch = self.get_associations_to_fetch()
+        if associations_to_fetch and self.stream_object_type in associations_to_fetch:
             associations = self.get_crm_associations_metadata()
             for association in associations:
                 properties.append(th.Property(association, th.StringType))
