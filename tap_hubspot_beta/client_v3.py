@@ -385,6 +385,7 @@ class DynamicDiscoveredHubspotV3Stream(hubspotV3Stream):
         for name, value in row["properties"].items():
             row[name] = value
         del row["properties"]
+        row = super().post_process(row, context)
         return row
 
 
