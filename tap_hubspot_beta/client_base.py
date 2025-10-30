@@ -693,7 +693,7 @@ class hubspotStream(RESTStream):
                     row[name] = value["value"]
                 else:
                     row[name] = value
-            del row["properties"]
+        row.pop("properties", None)
         return row
     
     def parse_datetimes(self, row):
