@@ -72,6 +72,8 @@ class hubspotStream(RESTStream):
         if add_associations_to_schema:
             # add custom objects streams to the list to use it for associations
             add_associations_to_schema.extend(list(self._tap.custom_objects_streams))
+            # drop dupes
+            add_associations_to_schema = list(set(add_associations_to_schema))
             # remove custom objects streams from the list
             if "CustomObjects" in add_associations_to_schema:
                 del add_associations_to_schema[add_associations_to_schema.index("CustomObjects")]
@@ -238,6 +240,8 @@ class hubspotStream(RESTStream):
         add_associations_to_schema = self.config.get("add_associations_to_schema", [])
         # add custom objects streams to the list to use it for associations
         add_associations_to_schema.extend(self._tap.custom_objects_streams)
+        # drop dupes
+        add_associations_to_schema = list(set(add_associations_to_schema))
         associations_to_fetch = [assoc.lower() for assoc in add_associations_to_schema]
 
         if self.stream_object_type in associations_to_fetch:
