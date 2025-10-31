@@ -27,6 +27,7 @@ from singer import StateMessage
 from datetime import datetime
 import pytz
 import requests
+import http.client
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
 
@@ -237,7 +238,7 @@ class hubspotStream(RESTStream):
             otherwise returns original parsed_response unchanged
         """
 
-        add_associations_to_schema = self.config.get("add_associations_to_schema", [])
+        add_associations_to_schema = self.config.get("add_associations_to_schema", []).copy()
         # add custom objects streams to the list to use it for associations
         add_associations_to_schema.extend(self._tap.custom_objects_streams)
         # drop dupes
@@ -581,8 +582,11 @@ class hubspotStream(RESTStream):
             backoff.expo,
             (
                 RetriableAPIError,
-                requests.exceptions.RequestException,
-                urllib3.exceptions.HTTPError
+                requests.exceptions.RequestException,  # everything from requests
+                urllib3.exceptions.HTTPError,          # everything from urllib3
+                http.client.RemoteDisconnected,        # stdlib disconnections
+                ConnectionResetError,                  # socket reset
+                ConnectionAbortedError,                # socket aborted
             ),
             max_tries=8,
             factor=3,
