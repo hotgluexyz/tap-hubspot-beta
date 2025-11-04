@@ -489,7 +489,7 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
+        response = self.request_decorator(self.request_schema, backoff_max_tries_override=10)(url, headers=headers)
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []
@@ -580,7 +580,7 @@ class hubspotStream(RESTStream):
             return
         finalize_state_progress_markers(state)
 
-    def request_decorator(self, func):
+    def request_decorator(self, func, backoff_max_tries_override=None):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
             backoff.expo,
@@ -592,7 +592,7 @@ class hubspotStream(RESTStream):
                 ConnectionResetError,                  # socket reset
                 ConnectionAbortedError,                # socket aborted
             ),
-            max_tries=8,
+            max_tries=backoff_max_tries_override or self.backoff_max_tries,
             factor=3,
             on_backoff=self.backoff_handler,
         )(func)
