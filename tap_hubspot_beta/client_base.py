@@ -237,7 +237,7 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
+        response = self.request_decorator(self.request_schema, backoff_max_tries_override=10)(url, headers=headers)
 
         fields = response.json()
         for field in fields:
@@ -313,7 +313,7 @@ class hubspotStream(RESTStream):
     def backoff_max_tries(self):
         return 10
 
-    def request_decorator(self, func):
+    def request_decorator(self, func, backoff_max_tries_override=None):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
             backoff.expo,
@@ -324,7 +324,7 @@ class hubspotStream(RESTStream):
                 urllib3.exceptions.HTTPError,
             ),
             factor=3,
-            max_tries=self.backoff_max_tries,
+            max_tries=backoff_max_tries_override or self.backoff_max_tries,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
