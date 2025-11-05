@@ -563,7 +563,6 @@ def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Even
         interval: Time interval in seconds between memory logs (default: 30)
         stop_event: Event to signal when to stop logging
     """
-    logger = logging.getLogger(__name__)
     start_time = time.time()
     
     while stop_event is None or not stop_event.is_set():
@@ -576,7 +575,7 @@ def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Even
             elapsed_time = time.time() - start_time
             
             # Log summary
-            logger.info(
+            logging.info(
                 f"[Memory Usage] Current: {current / 1024 / 1024:.2f} MB, "
                 f"Peak: {peak / 1024 / 1024:.2f} MB, "
                 f"Elapsed: {elapsed_time:.1f}s"
@@ -584,14 +583,14 @@ def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Even
             
             # Log top 5 memory-consuming lines
             if top_stats:
-                logger.info("[Memory Usage] Top 15 memory-consuming lines:")
+                logging.info("[Memory Usage] Top 15 memory-consuming lines:")
                 for idx, stat in enumerate(top_stats[:15], 1):
-                    logger.info(
+                    logging.info(
                         f"  {idx}. {stat.traceback[0].filename}:{stat.traceback[0].lineno} - "
                         f"{stat.size / 1024 / 1024:.2f} MB"
                     )
         else:
-            logger.warning("[Memory Usage] tracemalloc is not tracing")
+            logging.warning("[Memory Usage] tracemalloc is not tracing")
         
         # Wait for interval or until stop event is set
         if stop_event:
