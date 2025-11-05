@@ -38,6 +38,8 @@ class hubspotV3SearchStream(hubspotStream):
     starting_times = []
     bulk_child = True
     query_end_time = None
+    ids = set()  # Track IDs to handle deduplication when using GTE
+    operator = "GT"
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -109,6 +111,7 @@ class hubspotV3SearchStream(hubspotStream):
                         return None
                 self.previous_starting_time = self.starting_time    
             next_page_token = "0"
+            self.operator = "GTE"
         return next_page_token
     
     def get_end_time(self):
@@ -138,7 +141,7 @@ class hubspotV3SearchStream(hubspotStream):
             payload["filters"].extend([
                 {
                     "propertyName": self.replication_key_filter,
-                    "operator": "GT",
+                    "operator": self.operator,  # Use GTE to include records with the same timestamp
                     "value": starting_time,
                 },
                 {
@@ -181,9 +184,11 @@ class hubspotV3SearchStream(hubspotStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context, skip_id=True)
-        # store archived value in _hg_archived
-        row["_hg_archived"] = False
-        return row
+        if row.get("id") not in self.ids:
+            self.ids.add(row["id"])
+            # store archived value in _hg_archived
+            row["_hg_archived"] = False
+            return row
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
@@ -349,6 +354,7 @@ class AssociationsV3ParentStream(hubspotV3Stream):
                 None if current_context is None else copy.copy(current_context)
             )
             child_context_bulk = {"ids": []}
+            # Reset seen_ids at the start of each context
             for record_result in self.get_records(current_context):
                 if isinstance(record_result, tuple):
                     # Tuple items should be the record and the child context
@@ -402,6 +408,9 @@ class AssociationsV3ParentStream(hubspotV3Stream):
         self._write_record_count_log(record_count=record_count, context=context)
         # Reset interim bookmarks before emitting final STATE message:
         self._write_state_message()
+        # Clear seen_ids after sync completes
+        self.seen_ids = set()
+        self.operator = "GT"
 
 class DynamicDiscoveredHubspotV3Stream(hubspotV3Stream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
