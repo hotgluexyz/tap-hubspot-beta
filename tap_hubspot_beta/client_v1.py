@@ -1,7 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 
 import logging
-from memory_profiler import profile
 import pendulum
 from datetime import datetime
 from typing import Any, Dict, Optional, Iterable
@@ -158,7 +157,6 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
         self.logger.debug("Response received successfully.")
         return response
 
-    @profile
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
     ) -> requests.Response:

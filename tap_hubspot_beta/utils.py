@@ -2,7 +2,6 @@ import json
 import requests
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
-from memory_profiler import profile
 
 def deep_merge(dict1, dict2):
     for key, value in dict2.items():
@@ -12,7 +11,6 @@ def deep_merge(dict1, dict2):
             dict1[key] = value
     return dict1
 
-@profile
 def merge_responses(responses, pk, jsonpath=None):
     merged_records = {}
 

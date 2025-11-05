@@ -1,6 +1,9 @@
 """hubspot tap class."""
 
 import os
+import tracemalloc
+import threading
+import time
 from typing import List, Dict, Type, Any, cast
 import logging
 from singer_sdk.helpers._compat import final
@@ -553,5 +556,67 @@ class Taphubspot(Tap):
         )
 
 
+def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Event = None):
+    """Log memory usage periodically in a background thread.
+    
+    Args:
+        interval: Time interval in seconds between memory logs (default: 30)
+        stop_event: Event to signal when to stop logging
+    """
+    logger = logging.getLogger(__name__)
+    start_time = time.time()
+    
+    while stop_event is None or not stop_event.is_set():
+        if tracemalloc.is_tracing():
+            snapshot = tracemalloc.take_snapshot()
+            top_stats = snapshot.statistics('lineno')
+            
+            # Get current memory usage
+            current, peak = tracemalloc.get_traced_memory()
+            elapsed_time = time.time() - start_time
+            
+            # Log summary
+            logger.info(
+                f"[Memory Usage] Current: {current / 1024 / 1024:.2f} MB, "
+                f"Peak: {peak / 1024 / 1024:.2f} MB, "
+                f"Elapsed: {elapsed_time:.1f}s"
+            )
+            
+            # Log top 5 memory-consuming lines
+            if top_stats:
+                logger.info("[Memory Usage] Top 15 memory-consuming lines:")
+                for idx, stat in enumerate(top_stats[:15], 1):
+                    logger.info(
+                        f"  {idx}. {stat.traceback[0].filename}:{stat.traceback[0].lineno} - "
+                        f"{stat.size / 1024 / 1024:.2f} MB"
+                    )
+        else:
+            logger.warning("[Memory Usage] tracemalloc is not tracing")
+        
+        # Wait for interval or until stop event is set
+        if stop_event:
+            if stop_event.wait(timeout=interval):
+                break
+        else:
+            time.sleep(interval)
+
+
 if __name__ == "__main__":
-    Taphubspot.cli()
+    tracemalloc.start()
+    
+    # Set up periodic memory logging
+    stop_event = threading.Event()
+    memory_logger_thread = threading.Thread(
+        target=log_memory_usage_periodically,
+        args=(5, stop_event),  # Log every 30 seconds
+        daemon=True
+    )
+    memory_logger_thread.start()
+    
+    try:
+        Taphubspot.cli()
+    finally:
+        # Stop memory logging thread
+        stop_event.set()
+        memory_logger_thread.join(timeout=1)
+        tracemalloc.stop()
