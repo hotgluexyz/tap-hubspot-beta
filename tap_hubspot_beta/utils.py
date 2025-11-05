@@ -12,7 +12,7 @@ def deep_merge(dict1, dict2):
             dict1[key] = value
     return dict1
 
-@profile(stream=open('memlog.txt', 'w+'))
+@profile
 def merge_responses(responses, pk, jsonpath=None):
     merged_records = {}
 

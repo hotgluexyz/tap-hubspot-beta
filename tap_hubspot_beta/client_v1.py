@@ -158,7 +158,7 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
         self.logger.debug("Response received successfully.")
         return response
 
-    @profile(stream=open('memlog.txt', 'w+'))
+    @profile
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
     ) -> requests.Response:
