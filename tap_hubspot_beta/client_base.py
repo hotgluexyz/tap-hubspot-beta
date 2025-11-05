@@ -7,7 +7,7 @@ import urllib3
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List, Callable, Generator
+from typing import Any, Dict, Iterable, Optional, cast, List, Callable, Generator
 
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
@@ -27,6 +27,7 @@ from singer import StateMessage
 from datetime import datetime
 import pytz
 import requests
+import http.client
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
 
@@ -46,6 +47,8 @@ class hubspotStream(RESTStream):
     bulk_child_size = 1000
     is_first_sync = False
     visible_in_catalog = True
+    _list_record_ids = set()
+    _list_record_ids_for_stream = ""
 
     @cached_property
     def stream_object_type(self):
@@ -67,9 +70,22 @@ class hubspotStream(RESTStream):
         )
         return associations.json().get("results", [])
     
+    def get_associations_to_fetch(self) -> list:
+        add_associations_to_schema = self.config.get("add_associations_to_schema", []).copy()
+        if add_associations_to_schema:
+            # add custom objects streams to the list to use it for associations
+            add_associations_to_schema.extend(list(self._tap.custom_objects_streams))
+            # drop dupes
+            add_associations_to_schema = list(set(add_associations_to_schema))
+            # remove custom objects streams from the list
+            if "CustomObjects" in add_associations_to_schema:
+                del add_associations_to_schema[add_associations_to_schema.index("CustomObjects")]
+            return [assoc.lower() for assoc in add_associations_to_schema]
+        return []
+    
     def get_crm_associations_metadata(self) -> dict:
         # request all associations for the stream
-        associations_objects = self.config.get("add_associations_to_schema", [])
+        associations_objects = self.get_associations_to_fetch()
         from_current_object = next((obj for obj in associations_objects if obj.lower() == self.stream_object_type), None)
 
         associations_metadata = {}
@@ -202,7 +218,8 @@ class hubspotStream(RESTStream):
             breadcrumb = field_meta.get("breadcrumb", [])
             _field_meta = field_meta.get("metadata", {})
             if _field_meta.get("toObjectTypeId") and _field_meta.get("selected"):
-                associated_objects.add(_field_meta.get("toObjectTypeId"))
+                associated_object = _field_meta.get("fullyQualifiedName") or _field_meta.get("toObjectTypeId")
+                associated_objects.add(associated_object)
                 fields_to_inject[breadcrumb[-1]] = {
                     "toObjectTypeId": _field_meta.get("toObjectTypeId"),
                     "associationTypeId": _field_meta.get("associationTypeId"),
@@ -222,7 +239,13 @@ class hubspotStream(RESTStream):
             List of records with association data merged in if associations are configured,
             otherwise returns original parsed_response unchanged
         """
-        associations_to_fetch = [assoc.lower() for assoc in self.config.get("add_associations_to_schema", [])]
+
+        add_associations_to_schema = self.config.get("add_associations_to_schema", []).copy()
+        # add custom objects streams to the list to use it for associations
+        add_associations_to_schema.extend(self._tap.custom_objects_streams)
+        # drop dupes
+        add_associations_to_schema = list(set(add_associations_to_schema))
+        associations_to_fetch = [assoc.lower() for assoc in add_associations_to_schema]
 
         if self.stream_object_type in associations_to_fetch:
             associated_objects, fields_to_inject = self.get_association_fields()
@@ -253,13 +276,14 @@ class hubspotStream(RESTStream):
             # only use companies stream for incremental syncs
             if self.name == "companies":
                 fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
-                fullsync_on = False
+                fullsync_companies_selected = False
                 try:
                     # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
+                    fullsync_companies_selected = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
                 except:
                     pass
-                if fullsync_on and not fullsync_companies_state.get("replication_key") and self.is_first_sync():
+                companies_list_ids = self.config.get("companies_list_ids")
+                if fullsync_companies_selected and not fullsync_companies_state.get("replication_key") and self.is_first_sync() and not companies_list_ids:
                     finished = True
                     yield from []
                     break
@@ -289,7 +313,8 @@ class hubspotStream(RESTStream):
             
             if self.name == contacts_v3_name:
                 fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
-                if not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
+                contacts_list_ids = self.config.get("contacts_list_ids")
+                if not contacts_list_ids and not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
                     finished = True
                     yield from []
                     break
@@ -464,7 +489,7 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
+        response = self.request_decorator(self.request_schema, backoff_max_tries_override=10)(url, headers=headers)
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []
@@ -487,7 +512,8 @@ class hubspotStream(RESTStream):
                     properties.append(property)
         
         # get crm objects associations metadata
-        if self.config.get("add_associations_to_schema") and self.stream_object_type in [col.lower() for col in self.config.get("add_associations_to_schema")]:
+        associations_to_fetch = self.get_associations_to_fetch()
+        if associations_to_fetch and self.stream_object_type in associations_to_fetch:
             associations = self.get_crm_associations_metadata()
             for association in associations:
                 properties.append(th.Property(association, th.StringType))
@@ -541,7 +567,7 @@ class hubspotStream(RESTStream):
 
                 state_partition_context = self._get_state_partition_context(context)
 
-                if state_partition_context:
+                if state_partition_context and stream_state_partitions:
                     index, found = next(((i, partition_state) for i, partition_state in enumerate(stream_state_partitions) if partition_state["context"] == state_partition_context), (None, None))
                     if found:
                         state = found
@@ -554,16 +580,19 @@ class hubspotStream(RESTStream):
             return
         finalize_state_progress_markers(state)
 
-    def request_decorator(self, func):
+    def request_decorator(self, func, backoff_max_tries_override=None):
         """Instantiate a decorator for handling request failures."""
         decorator = backoff.on_exception(
             backoff.expo,
             (
                 RetriableAPIError,
-                requests.exceptions.RequestException,
-                urllib3.exceptions.HTTPError
+                requests.exceptions.RequestException,  # everything from requests
+                urllib3.exceptions.HTTPError,          # everything from urllib3
+                http.client.RemoteDisconnected,        # stdlib disconnections
+                ConnectionResetError,                  # socket reset
+                ConnectionAbortedError,                # socket aborted
             ),
-            max_tries=8,
+            max_tries=backoff_max_tries_override or self.backoff_max_tries,
             factor=3,
             on_backoff=self.backoff_handler,
         )(func)
@@ -676,7 +705,7 @@ class hubspotStream(RESTStream):
                     row[name] = value["value"]
                 else:
                     row[name] = value
-            del row["properties"]
+            row.pop("properties", None)
         return row
     
     def parse_datetimes(self, row):
@@ -698,6 +727,49 @@ class hubspotStream(RESTStream):
         row = self.parse_datetimes(row)
         row = self.process_row_types(row)
         return row
+    
+    _list_id_config_mapping = {
+        "fullsync_contacts_v3": "contacts_list_ids",
+        "contacts": "contacts_list_ids",
+        "contacts_v3_archived": "contacts_list_ids",
+        "fullsync_companies": "companies_list_ids",
+        "companies": "companies_list_ids",
+        "companies_archived": "companies_list_ids",
+        "fullsync_deals": "deals_list_ids",
+        "deals": "deals_list_ids",
+        "deals_archived": "deals_list_ids",
+        "tickets": "tickets_list_ids",
+        "orders": "orders_list_ids",
+    }
+    
+    def fetch_list_memberships(self, list_ids) -> Iterable[dict]:
+        # reset the list record ids for each stream
+        if self._list_record_ids_for_stream != self.name:
+            self._list_record_ids = set()
+            self._list_record_ids_for_stream = self.name
+
+        if self._list_record_ids:
+            return self._list_record_ids
+
+        for list_id in list_ids:
+            params = {"limit": 250}
+            while True:
+                response = requests.get(
+                    f"{self.url_base}crm/v3/lists/{list_id}/memberships",
+                        headers=self.authenticator.auth_headers or {},
+                        params=params,
+                    )
+
+                if response.status_code != 200:
+                    raise Exception(f"Error fetching list memberships for list {list_id}: {response.status_code} {response.text}")
+
+                list_memberships = response.json()
+                self._list_record_ids.update([membership["recordId"] for membership in list_memberships["results"]])
+                if list_memberships.get("paging", {}).get("next", {}).get("after"):
+                    params["after"] = list_memberships.get("paging", {}).get("next", {}).get("after")
+                else:
+                    break
+        return self._list_record_ids
 
 class hubspotStreamSchema(hubspotStream):
 
