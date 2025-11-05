@@ -1,7 +1,9 @@
+import os
 import json
 import requests
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
+import psutil
 
 def deep_merge(dict1, dict2):
     for key, value in dict2.items():
@@ -95,3 +97,7 @@ def deep_merge_dicts(a, b):
             merged[key] = b_val
 
     return merged
+
+def get_memory_usage():
+    used_memory = psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2
+    return f"Memory {round(used_memory)}MB"

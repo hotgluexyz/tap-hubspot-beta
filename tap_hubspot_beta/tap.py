@@ -590,7 +590,7 @@ def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Even
                         f"{stat.size / 1024 / 1024:.2f} MB"
                     )
         else:
-            logging.warning("[Memory Usage] tracemalloc is not tracing")
+            logging.info("[Memory Usage] tracemalloc is not tracing")
         
         # Wait for interval or until stop event is set
         if stop_event:
