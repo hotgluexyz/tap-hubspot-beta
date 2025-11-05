@@ -15,6 +15,7 @@ requests = "^2.25.1"
 singer-sdk = "^0.4.4"
 "backports.cached-property" = "^1.0.1"
 curlify = "^2.2.1"
+memory-profiler = "0.61.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
