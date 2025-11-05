@@ -1161,6 +1161,9 @@ class ArchivedStream(hubspotV3Stream):
     def post_process(self, row, context):
         row = super().post_process(row, context)
 
+        if row.get("hs_object_id") and not row.get("id"):
+            row["id"] = row["hs_object_id"]
+
         # add archived value to _hg_archived
         row["_hg_archived"] = True
         rep_key = self.get_starting_timestamp(context)
@@ -1393,7 +1396,7 @@ class ArchivedContactsStream(ArchivedStream):
     def get_url_params(self, context, next_page_token):
         params = super().get_url_params(context, next_page_token)
         if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email"
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email,hs_object_id"
         return params
 
 class ArchivedProductsStream(ArchivedStream):
