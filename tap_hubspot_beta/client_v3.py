@@ -112,6 +112,7 @@ class hubspotV3SearchStream(hubspotStream):
                 self.previous_starting_time = self.starting_time    
             next_page_token = "0"
             self.operator = "GTE"
+            self.logger.info(f"Stream {self.name}: New starting time: {self.starting_time}, restarting pagination from 0")
         return next_page_token
     
     def get_end_time(self):
