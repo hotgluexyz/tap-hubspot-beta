@@ -916,13 +916,6 @@ class ContactsV3Stream(ObjectSearchV3):
             return "createdate"
         return "lastmodifieddate"
 
-    def post_process(self, row, context):
-        """As needed, append or transform raw data to match expected structure."""
-        row = super().post_process(row, context)
-        if row.get("hs_object_id"):
-            row["id"] = row.get("hs_object_id")
-        return row
-
     def apply_catalog(self, catalog) -> None:
         self._tap_input_catalog = catalog
         catalog_entry = catalog.get_stream(self.name)
@@ -987,8 +980,8 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
         row["archived"] = row.get("archived") if row.get("archived") is not None else False
-        if row.get("hs_object_id"):
-            row["id"] = row.get("hs_object_id")
+        if row.get("canonical-vid"):
+            row["id"] = str(row.get("canonical-vid"))
         return row
 
     @property
@@ -1168,11 +1161,12 @@ class ArchivedStream(hubspotV3Stream):
     visible_in_catalog = False
 
     def post_process(self, row, context):
+        canonical_id = row.pop("id", None)
         row = super().post_process(row, context)
-
-        if row.get("hs_object_id") and not row.get("id"):
-            row["id"] = row["hs_object_id"]
-
+        if canonical_id and not row.get("id"):
+            # The non-canonical id is technically nullable
+            # So we fallback to canonical id
+            row["id"] = str(canonical_id)
         # add archived value to _hg_archived
         row["_hg_archived"] = True
         rep_key = self.get_starting_timestamp(context)
@@ -1405,7 +1399,7 @@ class ArchivedContactsStream(ArchivedStream):
     def get_url_params(self, context, next_page_token):
         params = super().get_url_params(context, next_page_token)
         if len(urlencode(params)) > 3000:
-            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email,hs_object_id"
+            params["properties"] = "id,createdAt,updatedAt,archived,archivedAt,email"
         return params
 
 class ArchivedProductsStream(ArchivedStream):
