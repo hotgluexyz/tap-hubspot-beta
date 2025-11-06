@@ -113,6 +113,7 @@ class hubspotV3SearchStream(hubspotStream):
                         self.logger.warn("Date based pagination loop detected")
                         return None
                 self.previous_starting_time = self.starting_time    
+            self.logger.info(f"Stream {self.name}: New starting time: {self.starting_time}, restarting pagination from 0")
             next_page_token = "0"
             self.operator = "GTE"
         return next_page_token
