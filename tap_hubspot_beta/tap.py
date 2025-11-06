@@ -601,21 +601,4 @@ def log_memory_usage_periodically(interval: int = 30, stop_event: threading.Even
 
 
 if __name__ == "__main__":
-    tracemalloc.start()
-    
-    # Set up periodic memory logging
-    stop_event = threading.Event()
-    memory_logger_thread = threading.Thread(
-        target=log_memory_usage_periodically,
-        args=(5, stop_event),  # Log every 30 seconds
-        daemon=True
-    )
-    memory_logger_thread.start()
-    
-    try:
-        Taphubspot.cli()
-    finally:
-        # Stop memory logging thread
-        stop_event.set()
-        memory_logger_thread.join(timeout=1)
-        tracemalloc.stop()
+    Taphubspot.cli()

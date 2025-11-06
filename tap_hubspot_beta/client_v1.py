@@ -15,7 +15,25 @@ import urllib
 import backoff
 from singer_sdk.exceptions import RetriableAPIError
 import copy
+from pympler import tracker, summary
 
+class MemoryTracker(tracker.SummaryTracker):
+    def __init__(self):
+        super().__init__()
+    
+    def print_diff(self, summary1=None, summary2=None):
+        """Print the rows as a summary.
+
+        Keyword arguments:
+        limit -- the maximum number of elements to be listed
+        sort  -- sort elements by 'size', 'type', or '#'
+        order -- sort 'ascending' or 'descending'
+
+        """
+        for line in summary.format_(self.diff(summary1=summary1, summary2=summary2)):
+            logging.info(line)
+
+t = MemoryTracker()
 
 class hubspotV1Stream(hubspotStream):
     """hubspot stream class."""
@@ -164,21 +182,20 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
         authenticator = self.authenticator
         if authenticator:
             prepared_request.headers.update(authenticator.auth_headers or {})
-
-        MAX_LEN_URL = 3000
-        if len(prepared_request.url) > MAX_LEN_URL:
-            self.logger.info("Before respones")
-            self.logger.info(get_memory_usage())
-            responses = []
-            for req in self.split_request_generator(prepared_request, context):
-                responses.append(self._handle_request(req, context))
-            self.logger.info("Before merge requests")
-            self.logger.info(get_memory_usage())
-            ans = merge_responses(responses, self.merge_pk, self.records_jsonpath)
-            self.logger.info("After merge requests")
-            self.logger.info(get_memory_usage())
-            return ans
-        return self._handle_request(prepared_request, context)
+            MAX_LEN_URL = 3000
+            if len(prepared_request.url) > MAX_LEN_URL:
+                logging.info("Before respones")
+                t.print_diff()
+                responses = []
+                for req in self.split_request_generator(prepared_request, context):
+                    responses.append(self._handle_request(req, context))
+                logging.info("Before merge requests")
+                t.print_diff()
+                ans = merge_responses(responses, self.merge_pk, self.records_jsonpath)
+                logging.info("After merge requests")
+                t.print_diff()
+                return ans
+            return self._handle_request(prepared_request, context)
                 
     def parse_response(self, response) -> Iterable[dict]:
         # if the stream has a list id config mapping, fetch the list memberships
