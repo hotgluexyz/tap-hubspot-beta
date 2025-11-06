@@ -187,10 +187,7 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
                 responses = []
                 for req in self.split_request_generator(prepared_request, context):
                     responses.append(self._handle_request(req, context))
-                ans = merge_responses(responses, self.merge_pk, self.records_jsonpath)
-                # t.print_diff()
-                logging.info(f"Total Mem Usage: {get_memory_usage()}")
-                return ans
+                return merge_responses(responses, self.merge_pk, self.records_jsonpath)
             return self._handle_request(prepared_request, context)
 
     def parse_response(self, response) -> Iterable[dict]:

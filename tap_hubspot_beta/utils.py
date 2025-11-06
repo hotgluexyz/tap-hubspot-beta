@@ -3,6 +3,7 @@ import json
 import requests
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
+import logging
 import psutil
 
 def deep_merge(dict1, dict2):
@@ -48,7 +49,9 @@ def merge_responses(responses, pk, jsonpath=None):
 
     # Build the merged response
     merged_response = requests.Response()
+    logging.info(f"Total Mem Usage: {get_memory_usage()}")
     merged_response._content = json.dumps(merged_data).encode("utf-8")
+    logging.info(f"Total Mem Usage: {get_memory_usage()}")
     merged_response.status_code = responses[0].status_code
     merged_response.headers = responses[0].headers
 
