@@ -184,16 +184,12 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
             prepared_request.headers.update(authenticator.auth_headers or {})
             MAX_LEN_URL = 3000
             if len(prepared_request.url) > MAX_LEN_URL:
-                logging.info("Before respones")
-                t.print_diff()
                 responses = []
                 for req in self.split_request_generator(prepared_request, context):
                     responses.append(self._handle_request(req, context))
-                logging.info("Before merge requests")
-                t.print_diff()
                 ans = merge_responses(responses, self.merge_pk, self.records_jsonpath)
-                logging.info("After merge requests")
                 t.print_diff()
+                logging.info("Total Mem Usage: ", get_memory_usage())
                 return ans
             return self._handle_request(prepared_request, context)
                 
