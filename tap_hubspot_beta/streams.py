@@ -980,6 +980,8 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         row = super().post_process(row, context)
         row["updatedAt"] = row.get("lastmodifieddate")
         row["archived"] = row.get("archived") if row.get("archived") is not None else False
+        if row.get("canonical-vid"):
+            row["id"] = str(row.get("canonical-vid"))
         return row
 
     @property
@@ -1159,8 +1161,12 @@ class ArchivedStream(hubspotV3Stream):
     visible_in_catalog = False
 
     def post_process(self, row, context):
+        canonical_id = row.pop("id", None)
         row = super().post_process(row, context)
-
+        if canonical_id and not row.get("id"):
+            # The non-canonical id is technically nullable
+            # So we fallback to canonical id
+            row["id"] = str(canonical_id)
         # add archived value to _hg_archived
         row["_hg_archived"] = True
         rep_key = self.get_starting_timestamp(context)
