@@ -26,6 +26,8 @@ from urllib.parse import urlencode
 import json
 from itertools import groupby
 
+import random
+
 from singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
@@ -1965,7 +1967,10 @@ class CurrenciesStream(hubspotV3Stream):
     name = "currencies_exchange_rate"
     path = "settings/v3/currencies/exchange-rates"
     primary_keys = ["id"]
-    page_size = 50
+
+    @property
+    def page_size(self):
+        return random.randint(50, 200)
 
     schema = th.PropertiesList(
         th.Property("createdAt", th.DateTimeType),
