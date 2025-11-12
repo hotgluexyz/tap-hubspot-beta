@@ -664,6 +664,9 @@ class hubspotStream(RESTStream):
             field_type = field_info.get("type", ["null"])[0]
 
             if field_type == "boolean":
+                # this is to make the singer sdk logic here work: https://github.com/meltano/sdk/blob/v0.4.4/singer_sdk/helpers/_typing.py#L218
+                if value == "":
+                    row[field] = None
                 if isinstance(value, str):
                     if value.lower() == "true":
                         row[field] = True
