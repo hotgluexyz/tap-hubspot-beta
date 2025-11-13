@@ -307,6 +307,7 @@ class hubspotV3SearchStream(hubspotStream):
         
         # reset current object id filter
         self.current_object_id_filter = None
+        self.object_id_filters = None
         if not context:
             # Finalize total stream only if we have the full full context.
             # Otherwise will be finalized by tap at end of sync.
