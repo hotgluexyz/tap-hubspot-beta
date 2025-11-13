@@ -39,6 +39,7 @@ class hubspotV3SearchStream(hubspotStream):
     bulk_child = True
     query_end_time = None
     object_id_filters = None
+    current_object_id_filter = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
