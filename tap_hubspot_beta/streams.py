@@ -2039,6 +2039,12 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             "list_id": record["listId"],
         }
 
+    def request_records(self, context):
+        for record in super().request_records(context):
+            if not record.get("objectTypeId") == '0-1':
+                continue
+            yield record
+
 
 
 class ListMembershipV3Stream(hubspotV3Stream):
