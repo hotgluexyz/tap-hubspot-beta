@@ -1,6 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Set, Iterable
 import copy
 
 import requests
@@ -38,6 +38,8 @@ class hubspotV3SearchStream(hubspotStream):
     starting_times = []
     bulk_child = True
     query_end_time = None
+    object_id_filters = None
+    current_object_id_filter = None
 
     def get_starting_time(self, context):
         start_date = self.get_starting_timestamp(context)
@@ -158,25 +160,25 @@ class hubspotV3SearchStream(hubspotStream):
                     payload["properties"] = self.selected_properties
             else:
                 payload["properties"] = []
-        if context and context.get("object_id_filters"):
+        if self.current_object_id_filter:
             payload["filters"].append({
                 "propertyName": "hs_object_id",
                 "operator": "IN",
-                "values": context["object_id_filters"]
+                "values": self.current_object_id_filter["object_id_filters"]
             })
         return payload
 
-
-    @property
-    def partitions(self) -> Optional[List[dict]]:
-        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
-            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
-            if list_ids:
-                object_ids = list(self.fetch_list_memberships(list_ids))
-                # Partition into groups of 100
-                return [{"object_id_filters": object_ids[i:i+100]} for i in range(0, len(object_ids), 100)] or [{"object_id_filters": []}]
-        return super().partitions
-
+    def get_object_id_filters(self) -> Optional[List[str]]:
+        if self.object_id_filters is None:
+            if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
+                list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
+                if list_ids:
+                    object_ids = list(self.fetch_list_memberships(list_ids))
+                    # Partition into groups of 100
+                    self.object_id_filters = [{"object_id_filters": object_ids[i:i+100]} for i in range(0, len(object_ids), 100)] or [{"object_id_filters": []}]
+            else:
+                self.object_id_filters = []
+        return self.object_id_filters
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
@@ -184,6 +186,69 @@ class hubspotV3SearchStream(hubspotStream):
         # store archived value in _hg_archived
         row["_hg_archived"] = False
         return row
+
+    def _get_records(
+        self,
+        current_context: Optional[dict],
+        child_context: Optional[dict] = None,
+        child_context_bulk: Optional[dict] = {"ids": []},
+        partition_record_count: int = 0,
+        record_id_set: Optional[Set[str]] = None,
+        state_partition_context: Optional[dict] = None,
+        selected: Optional[bool] = None,
+        object_id_filter: Optional[dict] = None,
+        record_count: int = 0,
+    ) -> Iterable[dict]:
+        if object_id_filter == []:
+            return
+
+        for record_result in self.get_records(current_context):
+            if isinstance(record_result, tuple):
+                # Tuple items should be the record and the child context
+                record, child_context = record_result
+            else:
+                record = record_result
+
+            # Skip duplicate records
+            if record["id"] in record_id_set:
+                continue
+            record_id_set.add(record["id"])
+
+            child_context = copy.copy(
+                self.get_child_context(record=record, context=child_context)
+            )
+            for key, val in (state_partition_context or {}).items():
+                # Add state context to records if not already present
+                if key not in record:
+                    record[key] = val
+
+            # Sync children, except when primary mapper filters out the record
+            if self.stream_maps[0].get_filter_result(record):
+                child_context_bulk["ids"].append(child_context)
+            if len(child_context_bulk["ids"])>=self.bulk_child_size:
+                self._sync_children(child_context_bulk)
+                child_context_bulk = {"ids": []}
+            self._check_max_record_limit(record_count)
+            if selected:
+                if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
+                    self._write_state_message()
+                self._write_record_message(record)
+                try:
+                    self._increment_stream_state(record, context=current_context)
+                except InvalidStreamSortException as ex:
+                    log_sort_error(
+                        log_fn=self.logger.error,
+                        ex=ex,
+                        record_count=record_count + 1,
+                        partition_record_count=partition_record_count + 1,
+                        current_context=current_context,
+                        state_partition_context=state_partition_context,
+                        stream_name=self.name,
+                    )
+                    raise ex
+
+            record_count += 1
+            partition_record_count += 1
 
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
@@ -197,8 +262,6 @@ class hubspotV3SearchStream(hubspotStream):
         selected = self.selected
 
         for current_context in context_list or [{}]:
-            if current_context.get("object_id_filters") == []:
-                continue
             partition_record_count = 0
             current_context = current_context or None
             state = self.get_context_state(current_context)
@@ -210,62 +273,42 @@ class hubspotV3SearchStream(hubspotStream):
             child_context_bulk = {"ids": []}
 
             record_id_set = set()
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-
-                # Skip duplicate records
-                if record["id"] in record_id_set:
-                    continue
-                record_id_set.add(record["id"])
-
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
+            object_id_filters = self.get_object_id_filters()
+            if object_id_filters:
+                for object_id_filter in self.object_id_filters:
+                    self.current_object_id_filter = object_id_filter
+                    _ = self._get_records(
+                        current_context,
+                        child_context,
+                        child_context_bulk,
+                        partition_record_count,
+                        record_id_set,
+                        state_partition_context,
+                        selected,
+                        object_id_filter,
+                        record_count,
+                    )
+            else:
+                _ = self._get_records(
+                    current_context,
+                    child_context,
+                    child_context_bulk,
+                    partition_record_count,
+                    record_id_set,
+                    state_partition_context,
+                    selected,
+                    record_count,
                 )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
 
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    child_context_bulk["ids"].append(child_context)
-                if len(child_context_bulk["ids"])>=self.bulk_child_size:
-                    self._sync_children(child_context_bulk)
-                    child_context_bulk = {"ids": []}
-                self._check_max_record_limit(record_count)
-                if selected:
-                    if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
-                        self._write_state_message()
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                record_count += 1
-                partition_record_count += 1
-            
-            
             if len(child_context_bulk):
                 self._sync_children(child_context_bulk)
             if current_context == state_partition_context:
                 # Finalize per-partition state only if 1:1 with context
                 finalize_state_progress_markers(state)
         
-
+        # reset current object id filter
+        self.current_object_id_filter = None
+        self.object_id_filters = None
         if not context:
             # Finalize total stream only if we have the full full context.
             # Otherwise will be finalized by tap at end of sync.
@@ -274,7 +317,6 @@ class hubspotV3SearchStream(hubspotStream):
         # Reset interim bookmarks before emitting final STATE message:
         self._write_state_message()
 
-    
     def _sync_children(self, child_context: dict) -> None:
         for child_stream in self.child_streams:
             if child_stream.selected or child_stream.has_selected_descendents:
