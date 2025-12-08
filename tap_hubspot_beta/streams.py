@@ -1481,7 +1481,12 @@ class DealsStream(ObjectSearchV3):
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
-    
+
+class ProjectsStream(ObjectSearchV3):
+    name = "projects"
+    path = "crm/v3/objects/projects/search"
+    replication_key_filter = "hs_lastmodifieddate"
+    properties_url = "properties/v2/projects/properties"
 
 class FullsyncDealsStream(hubspotV1SplitUrlStream):
     """Fullsync Deals Stream"""
@@ -2056,6 +2061,17 @@ class ListMembershipV3Stream(hubspotV3Stream):
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
         th.Property("list_id", th.StringType),
     ).to_dict()
+
+    def validate_response(self, response: requests.Response):
+        if response.status_code == 400 and "INVALID_OBJECT_TYPE_FOR_LIST" in response.text:
+            return
+        super().validate_response(response)
+    
+    def parse_response(self, response: requests.Response):
+        if response.status_code == 400 and "INVALID_OBJECT_TYPE_FOR_LIST" in response.text:
+            yield from []
+        else:
+            yield from super().parse_response(response)
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
