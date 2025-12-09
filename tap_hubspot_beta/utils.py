@@ -1,6 +1,6 @@
 import json
 import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
 import re
 
 

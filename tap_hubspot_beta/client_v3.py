@@ -4,19 +4,19 @@ from typing import Any, Dict, Optional, List
 import copy
 
 import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
 from datetime import datetime
-from singer_sdk import typing as th
+from hotglue_tap_sdk import typing as th
 import singer
 from tap_hubspot_beta.utils import merge_responses
-from singer_sdk.exceptions import RetriableAPIError
+from hotglue_tap_sdk.exceptions import RetriableAPIError
 
 
-from singer_sdk.exceptions import InvalidStreamSortException
-from singer_sdk.helpers._state import (
+from hotglue_tap_sdk.exceptions import InvalidStreamSortException
+from hotglue_tap_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
@@ -167,15 +167,15 @@ class hubspotV3SearchStream(hubspotStream):
         return payload
 
 
-    @property
-    def partitions(self) -> Optional[List[dict]]:
+
+    def get_paging_windows(self, context):
         if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
             list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
             if list_ids:
                 object_ids = list(self.fetch_list_memberships(list_ids))
                 # Partition into groups of 100
                 return [{"object_id_filters": object_ids[i:i+100]} for i in range(0, len(object_ids), 100)] or [{"object_id_filters": []}]
-        return super().partitions
+        return []
 
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:

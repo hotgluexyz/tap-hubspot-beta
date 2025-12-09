@@ -10,12 +10,12 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Optional, cast, List, Callable, Generator
 
 from backports.cached_property import cached_property
-from singer_sdk import typing as th
-from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
-from singer_sdk.streams import RESTStream
-from singer_sdk.mapper import  SameRecordTransform, StreamMap
-from singer_sdk.helpers._flattening import get_flattening_options
-from singer_sdk import Stream
+from hotglue_tap_sdk import typing as th
+from hotglue_tap_sdk.exceptions import FatalAPIError, RetriableAPIError
+from hotglue_tap_sdk.streams import RESTStream
+from hotglue_tap_sdk.mapper import  SameRecordTransform, StreamMap
+from hotglue_tap_sdk.helpers._flattening import get_flattening_options
+from hotglue_tap_sdk import Stream
 from tap_hubspot_beta.utils import deep_merge_dicts
 import time
 
@@ -664,7 +664,7 @@ class hubspotStream(RESTStream):
             field_type = field_info.get("type", ["null"])[0]
 
             if field_type == "boolean":
-                # this is to make the singer sdk logic here work: https://github.com/meltano/sdk/blob/v0.4.4/singer_sdk/helpers/_typing.py#L218
+                # this is to make the singer sdk logic here work: https://github.com/meltano/sdk/blob/v0.4.4/hotglue_tap_sdk/helpers/_typing.py#L218
                 if value == "":
                     row[field] = None
                 if isinstance(value, str):

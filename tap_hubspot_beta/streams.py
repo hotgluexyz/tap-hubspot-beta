@@ -5,15 +5,15 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
-from singer_sdk.exceptions import InvalidStreamSortException
-from singer_sdk.helpers.jsonpath import extract_jsonpath
-from singer_sdk.exceptions import FatalAPIError
+from hotglue_tap_sdk.exceptions import InvalidStreamSortException
+from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_tap_sdk.exceptions import FatalAPIError
 import singer
 import logging
 
 import requests
 from backports.cached_property import cached_property
-from singer_sdk import typing as th
+from hotglue_tap_sdk import typing as th
 from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
@@ -27,7 +27,7 @@ from urllib.parse import urlencode, quote
 import json
 from itertools import groupby
 
-from singer_sdk.helpers._state import (
+from hotglue_tap_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
