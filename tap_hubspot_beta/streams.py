@@ -1481,7 +1481,12 @@ class DealsStream(ObjectSearchV3):
 
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
-    
+
+class ProjectsStream(ObjectSearchV3):
+    name = "projects"
+    path = "crm/v3/objects/projects/search"
+    replication_key_filter = "hs_lastmodifieddate"
+    properties_url = "properties/v2/projects/properties"
 
 class FullsyncDealsStream(hubspotV1SplitUrlStream):
     """Fullsync Deals Stream"""
