@@ -5,9 +5,9 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
-from singer_sdk.authenticators import APIAuthenticatorBase
-from singer_sdk.streams import Stream as RESTStreamBase
-from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
+from hotglue_tap_sdk.authenticators import APIAuthenticatorBase
+from hotglue_tap_sdk.streams import Stream as RESTStreamBase
+from hotglue_tap_sdk.exceptions import FatalAPIError, RetriableAPIError
 import backoff
 
 

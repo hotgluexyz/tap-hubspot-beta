@@ -6,14 +6,14 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Iterable
 
 import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from tap_hubspot_beta.utils import merge_responses
 import copy
 import urllib
 import backoff
-from singer_sdk.exceptions import RetriableAPIError
+from hotglue_tap_sdk.exceptions import RetriableAPIError
 import copy
 
 
