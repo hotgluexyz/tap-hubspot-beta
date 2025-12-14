@@ -189,7 +189,7 @@ class hubspotV3SearchStream(hubspotStream):
         row["_hg_archived"] = False
 
         if self.use_list_filtering:
-            row["_hg_member_of_lists"] = self._list_record_ids.get(row["id"], [])
+            row["_hg_list_memberships"] = self._list_record_ids.get(row["id"], [])
         return row
 
     def _sync_records(  # noqa C901  # too complex

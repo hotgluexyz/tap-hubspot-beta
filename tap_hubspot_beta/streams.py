@@ -877,7 +877,7 @@ class ObjectSearchV3(hubspotV3SearchStream):
             th.Property("archivedAt", th.DateTimeType),
         ]
         if self.use_list_filtering:
-            standard_fields.append(th.Property("_hg_member_of_lists", th.CustomType({"type": ["array", "string"]})))
+            standard_fields.append(th.Property("_hg_list_memberships", th.CustomType({"type": ["array", "string"]})))
         return standard_fields
 
 
