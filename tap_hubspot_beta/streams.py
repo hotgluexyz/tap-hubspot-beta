@@ -866,29 +866,20 @@ class ObjectSearchV3(hubspotV3SearchStream):
     primary_keys = ["id"]
     replication_key = "updatedAt"
 
-    base_properties = [
-        th.Property("id", th.StringType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("archived", th.BooleanType),
-        th.Property("_hg_archived", th.BooleanType),
-        th.Property("archivedAt", th.DateTimeType),
-    ]
+    @property
+    def base_properties(self):
+        standard_fields = [
+            th.Property("id", th.StringType),
+            th.Property("createdAt", th.DateTimeType),
+            th.Property("updatedAt", th.DateTimeType),
+            th.Property("archived", th.BooleanType),
+            th.Property("_hg_archived", th.BooleanType),
+            th.Property("archivedAt", th.DateTimeType),
+        ]
+        if self.use_list_filtering:
+            standard_fields.append(th.Property("_hg_member_of_lists", th.CustomType({"type": ["array", "string"]})))
+        return standard_fields
 
-    def parse_response(self, response) -> Iterable[dict]:
-        # if the stream has a list id config mapping, fetch the list memberships
-        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
-            list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
-            if list_ids:
-                list_memberships = self.fetch_list_memberships(list_ids)
-                for record in extract_jsonpath(self.records_jsonpath, input=response.json()):
-                    pk = self.merge_pk if hasattr(self, "merge_pk") else "id"
-                    if record[pk] in list_memberships or str(record[pk]) in list_memberships:
-                        yield record
-            else:
-                yield from extract_jsonpath(self.records_jsonpath, input=response.json())
-        else:
-            yield from extract_jsonpath(self.records_jsonpath, input=response.json())
 
 
 class ContactsV3Stream(ObjectSearchV3):
@@ -982,6 +973,7 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         row["archived"] = row.get("archived") if row.get("archived") is not None else False
         if row.get("canonical-vid"):
             row["id"] = str(row.get("canonical-vid"))
+
         return row
 
     @property
