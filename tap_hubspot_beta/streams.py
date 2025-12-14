@@ -973,7 +973,6 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
         row["archived"] = row.get("archived") if row.get("archived") is not None else False
         if row.get("canonical-vid"):
             row["id"] = str(row.get("canonical-vid"))
-
         return row
 
     @property
