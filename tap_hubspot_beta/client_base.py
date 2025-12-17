@@ -734,6 +734,7 @@ class hubspotStream(RESTStream):
     _list_id_config_mapping = {
         "fullsync_contacts_v3": "contacts_list_ids",
         "contacts": "contacts_list_ids",
+        "contacts_v3": "contacts_list_ids",
         "contacts_v3_archived": "contacts_list_ids",
         "fullsync_companies": "companies_list_ids",
         "companies": "companies_list_ids",
@@ -748,7 +749,7 @@ class hubspotStream(RESTStream):
     def fetch_list_memberships(self, list_ids) -> Iterable[dict]:
         # reset the list record ids for each stream
         if self._list_record_ids_for_stream != self.name:
-            self._list_record_ids = set()
+            self._list_record_ids = dict()
             self._list_record_ids_for_stream = self.name
 
         if self._list_record_ids:
@@ -767,7 +768,12 @@ class hubspotStream(RESTStream):
                     raise Exception(f"Error fetching list memberships for list {list_id}: {response.status_code} {response.text}")
 
                 list_memberships = response.json()
-                self._list_record_ids.update([membership["recordId"] for membership in list_memberships["results"]])
+                for membership in list_memberships["results"]:
+                    if membership["recordId"] not in self._list_record_ids:
+                        self._list_record_ids[membership["recordId"]] = [list_id]
+                    else:
+                        self._list_record_ids[membership["recordId"]].append(list_id)
+
                 if list_memberships.get("paging", {}).get("next", {}).get("after"):
                     params["after"] = list_memberships.get("paging", {}).get("next", {}).get("after")
                 else:

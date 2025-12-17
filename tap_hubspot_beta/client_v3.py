@@ -167,9 +167,13 @@ class hubspotV3SearchStream(hubspotStream):
         return payload
 
 
+    @property
+    def use_list_filtering(self):
+        config_field_name = self._list_id_config_mapping.get(self.name)
+        return config_field_name and config_field_name in self._tap.config
 
     def get_paging_windows(self, context):
-        if self._list_id_config_mapping.get(self.name) and not self._tap.config.get("use_legacy_streams"):
+        if self.use_list_filtering:
             list_ids = self._tap.config.get(self._list_id_config_mapping[self.name])
             if list_ids:
                 object_ids = list(self.fetch_list_memberships(list_ids))
@@ -183,6 +187,9 @@ class hubspotV3SearchStream(hubspotStream):
         row = super().post_process(row, context, skip_id=True)
         # store archived value in _hg_archived
         row["_hg_archived"] = False
+
+        if self.use_list_filtering:
+            row["_hg_list_memberships"] = self._list_record_ids.get(row["id"], [])
         return row
 
     def _sync_records(  # noqa C901  # too complex
