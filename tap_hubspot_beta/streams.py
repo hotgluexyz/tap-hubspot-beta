@@ -2138,6 +2138,15 @@ class MarketingEmailsStream(hubspotV3Stream):
     path = "marketing/v3/emails"
     records_jsonpath = "$.results[*]"
     primary_keys = ["id"]
+    replication_key = "updatedAt"
+
+
+    def get_url_params(self, context, next_page_token):
+        params = super().get_url_params(context, next_page_token)
+        rep_value = self.get_starting_replication_key_value(context)
+        if rep_value:
+            params["updatedAfter"] = rep_value
+        return params
 
     schema = th.PropertiesList(
         th.Property("activeDomain", th.StringType),
@@ -2175,7 +2184,7 @@ class MarketingEmailsStream(hubspotV3Stream):
         th.Property("subscriptionDetails", th.CustomType({"type": "object"})),
         th.Property("to", th.CustomType({"type": "object"})),
         th.Property("type", th.StringType),
-        th.Property("updatedAt", th.StringType),
+        th.Property("updatedAt", th.DateTimeType),
         th.Property("updatedById", th.StringType),
         th.Property("webversion", th.CustomType({"type": "object"})),
     ).to_dict()
