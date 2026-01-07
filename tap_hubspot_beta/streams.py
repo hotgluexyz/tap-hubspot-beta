@@ -520,6 +520,16 @@ class EmailEventsStream(hubspotV1Stream):
     replication_key = "created"
     page_size = 250
 
+    @property
+    def additional_params(self):
+        current_params = super().additional_params
+        last_timestamp = self.get_starting_timestamp({})
+        if last_timestamp:
+            last_timestamp_unix_ms = int(last_timestamp.timestamp() * 1000)+1
+            current_params["startTimestamp"] = last_timestamp_unix_ms # 1 week ago today
+
+        return current_params
+
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
         th.Property("emailCampaignId", th.IntegerType),
