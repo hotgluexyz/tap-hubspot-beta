@@ -549,6 +549,7 @@ class EmailEventsStream(hubspotV1Stream):
         th.Property("subscriptions", th.CustomType({"type": ["array", "string"]})),
         th.Property("portalSubscriptionStatus", th.StringType),
         th.Property("source", th.StringType),
+        th.Property("dropReason", th.StringType),
     ).to_dict()
 
 
