@@ -112,10 +112,6 @@ class hubspotV1Stream(hubspotStream):
 
 class hubspotV1SplitUrlStream(hubspotV1Stream):
 
-    # the response validation happens in _handle_request, having backoff in _request as well hides errors
-    def backoff_max_tries(self) -> int:
-        return 1
-
     def get_params_from_url(self, url):
         parsed_url = urllib.parse.urlparse(url)
         return urllib.parse.parse_qs(parsed_url.query)
@@ -138,28 +134,13 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
 
         # yield last split request, or the normal request if it's less than the MAX_LEN_URL
         yield prepared_request
-        
 
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=7, max_value=320, base=2, factor=10)
-    def _handle_request(self, prepared_request: requests.PreparedRequest, context: Optional[dict]) -> requests.Response:
-        response = self.requests_session.send(prepared_request, timeout=self.timeout)
-        if self._LOG_REQUEST_METRICS:
-            extra_tags = {}
-            if self._LOG_REQUEST_METRIC_URLS:
-                extra_tags["url"] = prepared_request.path_url
-            self._write_request_duration_log(
-                endpoint=self.path,
-                response=response,
-                context=context,
-                extra_tags=extra_tags,
-            )
-        self.validate_response(response)
-        self.logger.debug("Response received successfully.")
-        return response
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
     ) -> requests.Response:
+
+        decorated_request = self.request_decorator(super()._request)
 
         authenticator = self.authenticator
         if authenticator:
@@ -169,6 +150,6 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
         if len(prepared_request.url) > MAX_LEN_URL:
             responses = []
             for req in self.split_request_generator(prepared_request, context):
-                responses.append(self._handle_request(req, context))
+                responses.append(decorated_request(req, context))
             return merge_responses(responses, self.merge_pk, self.records_jsonpath)
-        return self._handle_request(prepared_request, context)
+        return decorated_request(prepared_request, context)
