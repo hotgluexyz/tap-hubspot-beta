@@ -94,57 +94,6 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
-            
-            # only use companies stream for incremental syncs
-            if self.name == "companies":
-                fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
-                fullsync_on = False
-                try:
-                    # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
-                except:
-                    pass
-                if fullsync_on and not fullsync_companies_state.get("replication_key") and self.is_first_sync():
-                    finished = True
-                    yield from []
-                    break
-                elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
-                    self.stream_state.update(fullsync_companies_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
-            
-            # only use deals stream for incremental syncs
-            if self.name == "deals":
-                fullsync_deals_state = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
-                fullsync_on = False
-                try:
-                    # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_deals"][0][1].selected
-                except:
-                    pass
-                if fullsync_on and not fullsync_deals_state.get("replication_key") and self.is_first_sync():
-                    finished = True
-                    yield from []
-                    break
-                elif fullsync_deals_state.get("replication_key") and self.is_first_sync():
-                    self.stream_state.update(fullsync_deals_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
-
-            # only use invoices stream for incremental syncs
-            if self.name == "invoices":
-                fullsync_invoices_state = self.tap_state.get("bookmarks", {}).get("fullsync_invoices", {})
-                fullsync_on = False
-                try:
-                    # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_invoices"][0][1].selected
-                except:
-                    pass
-                if fullsync_on and not fullsync_invoices_state.get("replication_key") and self.is_first_sync():
-                    finished = True
-                    yield from []
-                    break
-                elif fullsync_invoices_state.get("replication_key") and self.is_first_sync():
-                    self.stream_state.update(fullsync_invoices_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
 
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
