@@ -477,10 +477,6 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
     properties_param = "propertiesWithHistory"
     merge_pk = "id"
 
-    # the response validation happens in _handle_request, having backoff in _request as well hides errors
-    def backoff_max_tries(self) -> int:
-        return 1
-
     def post_process(self, row: dict, context) -> dict:
         row = super().post_process(row, context)
         props = row.get("propertiesWithHistory") or dict()
