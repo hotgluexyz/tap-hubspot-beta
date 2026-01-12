@@ -560,6 +560,10 @@ class EmailEventsStream(hubspotV1Stream):
         th.Property("portalSubscriptionStatus", th.StringType),
         th.Property("source", th.StringType),
         th.Property("dropReason", th.StringType),
+        th.Property("url", th.StringType),
+        th.Property("referer", th.StringType),
+        th.Property("status", th.StringType),
+        th.Property("category", th.StringType),
     ).to_dict()
 
 
