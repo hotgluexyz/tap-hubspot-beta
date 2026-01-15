@@ -177,11 +177,16 @@ class hubspotStream(RESTStream):
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
             _log_and_raise(RetriableAPIError, msg)
         
-        elif response.status_code == 400 and "Invalid JSON input" in json_response.get('message', ''):
-            msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
-            _log_and_raise(RetriableAPIError, msg)
+        RETRIABLE_ERROR_MESSAGES = [
+            "Invalid JSON input", 
+            "There was a problem with the request."
+        ]
+        for msg_pattern in RETRIABLE_ERROR_MESSAGES:
+            if response.status_code == 400 and msg_pattern in json_response.get('message', ''):
+                msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
+                _log_and_raise(RetriableAPIError, msg)
 
-        elif 400 <= response.status_code < 500:
+        if 400 <= response.status_code < 500:
             msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
             _log_and_raise(FatalAPIError, msg)
 
