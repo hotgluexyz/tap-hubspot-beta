@@ -160,22 +160,28 @@ class hubspotStream(RESTStream):
         headers = " -H ".join(headers)
         return command.format(method=method, headers=headers, data=data, uri=uri)
 
+    def _log_and_raise(self, exception_class, response, message):
+        """Log and raise an exception with the response information."""
+        curl_command = self.curlify_request(response.request)
+        logging.info(f"Response code: {response.status_code}, info: {response.text}")
+        logging.info(f"CURL command for failed request: {curl_command}")
+
+        try:
+            error_message = response.json().get("message")
+        except:
+            error_message = response.text
+        raise exception_class(f'Msg {message}, response "{error_message}"')
+
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
         try:
             json_response = response.json()
         except ValueError:
             json_response = {}
-            
-        def _log_and_raise(exception_class, message):
-            curl_command = self.curlify_request(response.request)
-            logging.info(f"Response code: {response.status_code}, info: {response.text}")
-            logging.info(f"CURL command for failed request: {curl_command}")
-            raise exception_class(f"Msg {message}, response {response.text}")
 
         if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
-            _log_and_raise(RetriableAPIError, msg)
+            self._log_and_raise(RetriableAPIError, response, msg)
         
         RETRIABLE_ERROR_MESSAGES = [
             "Invalid JSON input", 
@@ -184,11 +190,11 @@ class hubspotStream(RESTStream):
         for msg_pattern in RETRIABLE_ERROR_MESSAGES:
             if response.status_code == 400 and msg_pattern in json_response.get('message', ''):
                 msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
-                _log_and_raise(RetriableAPIError, msg)
+                self._log_and_raise(RetriableAPIError, response, msg)
 
         if 400 <= response.status_code < 500:
             msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
-            _log_and_raise(FatalAPIError, msg)
+            self._log_and_raise(FatalAPIError, response, msg)
 
     @staticmethod
     def extract_type(field):
