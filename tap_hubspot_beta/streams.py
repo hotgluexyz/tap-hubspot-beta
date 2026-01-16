@@ -299,7 +299,7 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
     @property
     def parent(self):
         # the parent stream can be contacts v1 or v3 based on the config (HGI-9527)
-        if self.config.get("subscription_contacts_v3", False):
+        if self.config.get("use_incremental_contact_subscriptions", False):
             # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
             contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
             contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
