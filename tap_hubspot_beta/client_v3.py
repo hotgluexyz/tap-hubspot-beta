@@ -88,7 +88,9 @@ class hubspotV3SearchStream(hubspotStream):
         # we've reached the end of this time bucket
         if not next_page_token:
             if len(self.buckets) > 0:
+                self.logger.info(f"Popping bucket {self.current_bucket}")
                 self.current_bucket = self.buckets.pop(0)
+                self.logger.info(f"Beginning syncing of next bucket {self.current_bucket}")
                 next_page_token = "-1" if previous_token == "0" else "0"
             else:
                 self.logger.warning(f"No more buckets to process")
@@ -205,10 +207,6 @@ class hubspotV3SearchStream(hubspotStream):
         self.logger.info(f"Merging small adjacent buckets")
         self.merge_small_adjacent_buckets(buckets)
 
-        end_time = self.get_end_time(curr_date_fallback=False)
-        if len(buckets) > 0 and buckets[-1]["end_time"] is not None:
-            bucket_size = self.get_time_bucket_size(context, buckets[-1]["end_time"], end_time)
-            buckets += [{"starting_time": buckets[-1]["end_time"], "end_time": end_time, "bucket_size": bucket_size}]
 
         for bucket in buckets:
             filter_by_id = False
