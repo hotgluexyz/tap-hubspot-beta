@@ -278,6 +278,7 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
     parent_stream_type = ContactsStream
     ignore_parent_replication_keys = True
     schema_writed = False
+    bulk_child = False
 
     schema = th.PropertiesList(
         th.Property("recipient", th.StringType),
@@ -295,6 +296,19 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
         ))
     ).to_dict()
 
+    @property
+    def parent(self):
+        # the parent stream can be contacts v1 or v3 based on the config (HGI-9527)
+        if self.config.get("use_incremental_contact_subscriptions", False):
+            # if it's a contacts fullsync use fullsync_contacts_v3 as parent else use contacts_v3
+            contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
+            contacts_v3_state = self.tap_state.get("bookmarks", {}).get(contacts_v3_name, {})
+            fullsync_contacts_v3 = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})
+            if not contacts_v3_state.get("replication_key_value") and not fullsync_contacts_v3.get("replication_key_value"):
+                return "fullsync_contacts_v3"
+            return contacts_v3_name
+        return "contacts"
+
     def get_url(self, context: Optional[dict]) -> str:
         if context and context.get("subscriber_email"):
             encoded_email = quote(context["subscriber_email"], safe='')
@@ -309,10 +323,17 @@ class ContactSubscriptionStatusStream(hubspotV3Stream):
         record_count = 0
         current_context: Optional[dict]
         context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
+        # get context_list from possible context formats
+        if context is not None and "ids" in context:
+            context_list = context["ids"]
+        else:
+            context_list = [context] if context is not None else self.partitions
         selected = self.selected
 
         for current_context in context_list or [{}]:
+            # skip if subscriber_email is not present
+            if current_context.get("subscriber_email") is None:
+                continue
             partition_record_count = 0
             current_context = current_context or None
             state = self.get_context_state(current_context)
@@ -931,7 +952,10 @@ class ContactsV3Stream(ObjectSearchV3):
                 self.forced_replication_method = catalog_entry.replication_method
 
     def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
+        return {
+            "id": record["id"],
+            "subscriber_email": record["email"]
+        }
 
 
 
@@ -1056,7 +1080,12 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
-        return {"id": record["id"]}
+        context = {"id": record["id"]}
+        for identity_profile in record["identity-profiles"]:
+            for identity in identity_profile["identities"]:
+                if identity["type"] == "EMAIL":
+                    context["subscriber_email"] = identity["value"]
+        return context
     
     def _sync_records(  # noqa C901  # too complex
         self, context: Optional[dict] = None
