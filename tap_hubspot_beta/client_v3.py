@@ -207,10 +207,6 @@ class hubspotV3SearchStream(hubspotStream):
         self.logger.info(f"Merging small adjacent buckets")
         self.merge_small_adjacent_buckets(buckets)
 
-        end_time = self.get_end_time(curr_date_fallback=True)
-        if len(buckets) > 0 and buckets[-1]["end_time"] is not None:
-            bucket_size = self.get_time_bucket_size(context, buckets[-1]["end_time"], end_time)
-            buckets += [{"starting_time": buckets[-1]["end_time"], "end_time": end_time, "bucket_size": bucket_size}]
 
         for bucket in buckets:
             filter_by_id = False
