@@ -675,7 +675,7 @@ class DealsPipelinesStream(hubspotV1Stream):
         # Try to parse JSON and raise RetriableAPIError if invalid
         try:
             return response.json()
-        except requests.exceptions.JSONDecodeError as e:
+        except ValueError as e:
             raise RetriableAPIError(f"Invalid JSON response for pipeline {pipeline_id}: {str(e)}")
 
     def get_deleted_stages(self, row):
