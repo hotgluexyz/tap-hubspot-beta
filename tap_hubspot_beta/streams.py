@@ -5,7 +5,7 @@ import copy
 
 from singer_sdk.exceptions import InvalidStreamSortException
 from singer_sdk.helpers.jsonpath import extract_jsonpath
-from singer_sdk.exceptions import FatalAPIError
+from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 import singer
 import logging
 
@@ -665,20 +665,33 @@ class DealsPipelinesStream(hubspotV1Stream):
         ))),
     ).to_dict()
 
+    def _fetch_stages_history(self, pipeline_id: str) -> dict:
+        response = requests.get(
+            f"{self.url_base}crm/v3/pipelines/deals/{pipeline_id}/audit",
+            headers=self.authenticator.auth_headers or {},
+        )
+        self.validate_response(response)
+        
+        # Try to parse JSON and raise RetriableAPIError if invalid
+        try:
+            return response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            raise RetriableAPIError(f"Invalid JSON response for pipeline {pipeline_id}: {str(e)}")
+
     def get_deleted_stages(self, row):
         if not "stages" in row:
             row["stages"] = []
 
         # get stages ids to not send dups
         row_stages = [stage["stageId"] for stage in row.get("stages")]
-        # get audit history of each pipeline
-        stages_history = requests.get(
-            f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit",
-            headers=self.authenticator.auth_headers or {},
-        )
+
+        # get audit history of each pipeline with backoff retry logic
+        decorated_fetch = self.request_decorator(self._fetch_stages_history)
+        stages_history_data = decorated_fetch(row['pipelineId'])
+
         # join all stages from history
         stages_ = []
-        for obj in stages_history.json().get("results", []):
+        for obj in stages_history_data.get("results", []):
             obj_stages = json.loads(obj.get("rawObject", "{}")).get("stages") or []
             stages_.extend(obj_stages)
 
