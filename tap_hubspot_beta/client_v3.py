@@ -1,6 +1,6 @@
 """REST client handling, including hubspotStream base class."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, List
 import copy
 
@@ -42,7 +42,7 @@ class hubspotV3SearchStream(hubspotStream):
     starting_times = []
     bulk_child = True
     query_end_time = None
-    max_bucket_size = 10000
+    max_bucket_size = 8000
     buckets = None
     current_bucket = None
 
@@ -59,7 +59,7 @@ class hubspotV3SearchStream(hubspotStream):
         if end_date:
             return int(parse(end_date).timestamp() * 1000)
         if curr_date_fallback:
-            end_date = datetime.now()
+            end_date = datetime.now() - timedelta(minutes=30)
             self.query_end_time = int(end_date.timestamp() * 1000)
             return int(end_date.timestamp() * 1000)
         else:
