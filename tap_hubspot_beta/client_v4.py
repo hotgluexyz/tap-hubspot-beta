@@ -4,13 +4,13 @@ import copy
 from typing import Any, List, Optional
 
 import requests
-from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
-from hotglue_tap_sdk.exceptions import InvalidStreamSortException
-from hotglue_tap_sdk.helpers._state import (
+from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_singer_sdk.exceptions import InvalidStreamSortException
+from hotglue_singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )
-from hotglue_tap_sdk import typing as th
+from hotglue_singer_sdk import typing as th
 from tap_hubspot_beta.client_base import hubspotStream
 
 

@@ -4,19 +4,19 @@ from typing import Any, Dict, Optional, List
 import copy
 
 import requests
-from hotglue_tap_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from tap_hubspot_beta.client_base import hubspotStream
 from pendulum import parse
 from datetime import datetime
-from hotglue_tap_sdk import typing as th
+from hotglue_singer_sdk import typing as th
 import singer
 from tap_hubspot_beta.utils import merge_responses
-from hotglue_tap_sdk.exceptions import RetriableAPIError
+from hotglue_singer_sdk.exceptions import RetriableAPIError
 
 
-from hotglue_tap_sdk.exceptions import InvalidStreamSortException
-from hotglue_tap_sdk.helpers._state import (
+from hotglue_singer_sdk.exceptions import InvalidStreamSortException
+from hotglue_singer_sdk.helpers._state import (
     finalize_state_progress_markers,
     log_sort_error
 )

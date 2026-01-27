@@ -5,11 +5,10 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
-from hotglue_tap_sdk.authenticators import APIAuthenticatorBase
-from hotglue_tap_sdk.streams import Stream as RESTStreamBase
-from hotglue_tap_sdk.exceptions import FatalAPIError, RetriableAPIError
+from hotglue_singer_sdk.authenticators import APIAuthenticatorBase
+from hotglue_singer_sdk.streams import Stream as RESTStreamBase
+from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 import backoff
-
 
 class OAuth2Authenticator(APIAuthenticatorBase):
     """API Authenticator for OAuth 2.0 flows."""
@@ -20,10 +19,10 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         config_file: Optional[str] = None,
         auth_endpoint: Optional[str] = None,
     ) -> None:
-        super().__init__(stream=stream)
         self._auth_endpoint = auth_endpoint
         self._config_file = config_file
         self._tap = stream._tap
+        super().__init__(stream=stream)
 
     @property
     def auth_headers(self) -> dict:
@@ -34,8 +33,9 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         Returns:
             HTTP headers for authentication.
         """
-        if not self.is_token_valid():
-            self.update_access_token()
+        self.update_access_token()
+        # if not self.is_token_valid():
+        #     self.update_access_token()
         result = super().auth_headers
         result["Authorization"] = f"Bearer {self._tap._config.get('access_token')}"
         return result
