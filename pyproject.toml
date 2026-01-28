@@ -38,3 +38,4 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 # CLI declaration
 tap-hubspot-beta = 'tap_hubspot_beta.tap:Taphubspot.cli'
+tap-hubspot = 'tap_hubspot_beta.tap:Taphubspot.cli'
