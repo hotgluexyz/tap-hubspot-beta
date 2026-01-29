@@ -259,8 +259,12 @@ class Taphubspot(Tap):
     legacy_streams_mapping = {}
     associations_metadata = {}
     custom_objects_streams = set()
-    authenticator = OAuth2Authenticator
-    auth_endpoint = "https://api.hubapi.com/oauth/v1/token"
+
+    @classmethod
+    def access_token_support(self):
+        authenticator = OAuth2Authenticator
+        auth_endpoint = "https://api.hubapi.com/oauth/v1/token"
+        return authenticator, auth_endpoint
 
     def __init__(
         self,

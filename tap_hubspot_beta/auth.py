@@ -33,9 +33,8 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         Returns:
             HTTP headers for authentication.
         """
-        self.update_access_token()
-        # if not self.is_token_valid():
-        #     self.update_access_token()
+        if not self.is_token_valid():
+            self.update_access_token()
         result = super().auth_headers
         result["Authorization"] = f"Bearer {self._tap._config.get('access_token')}"
         return result
