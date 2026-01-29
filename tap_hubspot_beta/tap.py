@@ -261,7 +261,8 @@ class Taphubspot(Tap):
     custom_objects_streams = set()
 
     @classmethod
-    def access_token_support(cls):
+    def access_token_support(cls, connector=None):
+        """Return authenticator class and auth endpoint for token refresh."""
         authenticator = OAuth2Authenticator
         auth_endpoint = "https://api.hubapi.com/oauth/v1/token"
         return authenticator, auth_endpoint
