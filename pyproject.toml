@@ -12,7 +12,7 @@ license = "Apache 2.0"
 [tool.poetry.dependencies]
 python = "<3.11,>=3.7.1"
 requests = "^2.25.1"
-hotglue-tap-sdk = "1.0.4"
+hotglue-singer-sdk = "^1.0.8"
 "backports.cached-property" = "^1.0.1"
 curlify = "^2.2.1"
 

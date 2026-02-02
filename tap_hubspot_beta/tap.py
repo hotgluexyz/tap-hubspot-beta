@@ -3,12 +3,13 @@
 import os
 from typing import List, Dict, Type, Any, cast
 import logging
-from hotglue_tap_sdk.helpers._compat import final
+from hotglue_singer_sdk.helpers._compat import final
 
-from hotglue_tap_sdk import Stream, Tap
-from hotglue_tap_sdk import typing as th
-from hotglue_tap_sdk.exceptions import FatalAPIError
+from hotglue_singer_sdk import Stream, Tap
+from hotglue_singer_sdk import typing as th
+from hotglue_singer_sdk.exceptions import FatalAPIError
 
+from tap_hubspot_beta.auth import OAuth2Authenticator
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
 from tap_hubspot_beta.streams import (
     AccountStream,
@@ -258,6 +259,13 @@ class Taphubspot(Tap):
     legacy_streams_mapping = {}
     associations_metadata = {}
     custom_objects_streams = set()
+
+    @classmethod
+    def access_token_support(cls, connector=None):
+        """Return authenticator class and auth endpoint for token refresh."""
+        authenticator = OAuth2Authenticator
+        auth_endpoint = "https://api.hubapi.com/oauth/v1/token"
+        return authenticator, auth_endpoint
 
     def __init__(
         self,
