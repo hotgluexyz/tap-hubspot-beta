@@ -78,6 +78,7 @@ from tap_hubspot_beta.streams import (
     ArchivedProductsStream,
     TeamsStream,
     InvoicesStream,
+    CommerceSubscriptionsStream,
     AssociationQuotesLineItemsStream,
     AssociationInvoicesLineItemsStream,
 )
@@ -169,6 +170,7 @@ STREAM_TYPES = add_streams([
     ArchivedProductsStream,
     TeamsStream,
     InvoicesStream,
+    CommerceSubscriptionsStream,
     AssociationQuotesLineItemsStream,
     AssociationInvoicesLineItemsStream,
 ])
