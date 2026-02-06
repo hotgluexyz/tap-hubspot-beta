@@ -1828,6 +1828,10 @@ class CommerceSubscriptionsStream(ObjectSearchV3):
     path = "crm/v3/objects/subscriptions/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/subscriptions/properties"
+    bulk_child_size = 50
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
 
 
 # Get associations for engagements streams in v3
@@ -2080,3 +2084,20 @@ class AssociationInvoicesLineItemsStream(AssociationInvoicesStream):
 
     name = "associations_invoices_line_items"
     path = "crm/v4/associations/invoices/line_items/batch/read"
+
+
+class AssociationSubscriptionsStream(hubspotV4Stream):
+    """Association Base Stream for Subscriptions"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = CommerceSubscriptionsStream
+    name = "associations_subscriptions"
+
+    schema = association_schema
+
+
+class AssociationSubscriptionsLineItemsStream(AssociationSubscriptionsStream):
+    """Association Subscriptions -> Line Items Stream"""
+
+    name = "associations_subscriptions_line_items"
+    path = "crm/v4/associations/subscriptions/line_items/batch/read"
