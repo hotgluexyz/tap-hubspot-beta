@@ -248,6 +248,7 @@ class hubspotV3SearchStream(hubspotStream):
                     if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
                         self._write_state_message()
                     self._write_record_message(record)
+                if selected or self.replication_key:
                     try:
                         self._increment_stream_state(record, context=current_context)
                     except InvalidStreamSortException as ex:
@@ -381,6 +382,7 @@ class AssociationsV3ParentStream(hubspotV3Stream):
                     if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
                         self._write_state_message()
                     self._write_record_message(record)
+                if selected or self.replication_key:
                     try:
                         self._increment_stream_state(record, context=current_context)
                     except InvalidStreamSortException as ex:

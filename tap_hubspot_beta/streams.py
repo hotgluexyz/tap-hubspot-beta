@@ -2406,7 +2406,7 @@ class AssociationMeetingsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = MeetingsAssociationStream
+    parent_stream_type = MeetingsStream
     name = "associations_meetings"
 
     schema = association_schema
@@ -2444,7 +2444,7 @@ class AssociationCallsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CallsAssociationStream
+    parent_stream_type = CallsStream
     name = "associations_calls"
 
     schema = association_schema
@@ -2521,7 +2521,7 @@ class AssociationEmailsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = EmailsAssociationStream
+    parent_stream_type = EmailsStream
     name = "associations_emails"
 
     schema = association_schema
@@ -2560,7 +2560,7 @@ class AssociationNotesStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = NotesAssociationStream
+    parent_stream_type = NotesStream
     name = "associations_notes"
 
     schema = association_schema
@@ -2638,7 +2638,7 @@ class AssociationTasksStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = TasksAssociationStream
+    parent_stream_type = TasksStream
     name = "associations_notes"
 
     schema = association_schema
