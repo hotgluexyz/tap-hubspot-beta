@@ -2101,3 +2101,10 @@ class AssociationSubscriptionsLineItemsStream(AssociationSubscriptionsStream):
 
     name = "associations_subscriptions_line_items"
     path = "crm/v4/associations/subscriptions/line_items/batch/read"
+
+
+class AssociationSubscriptionsDealsStream(AssociationSubscriptionsStream):
+    """Association Subscriptions -> Deals Stream"""
+
+    name = "associations_subscriptions_deals"
+    path = "crm/v4/associations/subscriptions/deals/batch/read"
