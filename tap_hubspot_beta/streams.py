@@ -7,6 +7,7 @@ import copy
 
 from hotglue_singer_sdk.exceptions import InvalidStreamSortException
 from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_singer_sdk.helpers._classproperty import classproperty
 from hotglue_singer_sdk.exceptions import FatalAPIError
 import singer
 import logging
@@ -2406,8 +2407,15 @@ class AssociationMeetingsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = MeetingsStream
     name = "associations_meetings"
+    parent_stream_type = MeetingsAssociationStream
+
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return MeetingsStream.name
+        return MeetingsAssociationStream.name
+        
 
     schema = association_schema
 
@@ -2444,9 +2452,15 @@ class AssociationCallsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CallsStream
     name = "associations_calls"
+    parent_stream_type = CallsAssociationStream
 
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return CallsStream.name
+        return CallsAssociationStream.name
+        
     schema = association_schema
 
 class AssociationCallsCompaniesStream(AssociationCallsStream):
@@ -2482,9 +2496,14 @@ class AssociationCommunicationsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = CommunicationsAssociationStream
     name = "associations_communications"
-
+    parent_stream_type = CommunicationsAssociationStream
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return CommunicationsStream.name
+        return CommunicationsAssociationStream.name
+        
     schema = association_schema
 
 
@@ -2521,9 +2540,15 @@ class AssociationEmailsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = EmailsStream
     name = "associations_emails"
+    parent_stream_type = EmailsAssociationStream
 
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return EmailsStream.name
+        return EmailsAssociationStream.name
+        
     schema = association_schema
 
 
@@ -2560,9 +2585,15 @@ class AssociationNotesStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = NotesStream
     name = "associations_notes"
-
+    parent_stream_type = NotesAssociationStream
+    
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return NotesStream.name
+        return NotesAssociationStream.name
+        
     schema = association_schema
 
 
@@ -2638,10 +2669,16 @@ class AssociationTasksStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    parent_stream_type = TasksStream
-    name = "associations_notes"
+    parent_stream_type = TasksAssociationStream
+    name = "associations_tasks"
 
     schema = association_schema
+
+    @property
+    def parent(self):
+        if self.config.get("use_incremental_associations_streams", False):
+            return TasksStream.name
+        return TasksAssociationStream.name
 
 
 class AssociationTasksCompaniesStream(AssociationTasksStream):
