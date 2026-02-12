@@ -2407,8 +2407,8 @@ class AssociationMeetingsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    name = "associations_meetings"
     parent_stream_type = MeetingsAssociationStream
+    name = "associations_meetings"
 
     @property
     def parent(self):
@@ -2452,8 +2452,8 @@ class AssociationCallsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    name = "associations_calls"
     parent_stream_type = CallsAssociationStream
+    name = "associations_calls"
 
     @property
     def parent(self):
@@ -2496,8 +2496,9 @@ class AssociationCommunicationsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    name = "associations_communications"
     parent_stream_type = CommunicationsAssociationStream
+    name = "associations_communications"
+
     @property
     def parent(self):
         if self.config.get("use_incremental_associations_streams", False):
@@ -2540,8 +2541,8 @@ class AssociationEmailsStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    name = "associations_emails"
     parent_stream_type = EmailsAssociationStream
+    name = "associations_emails"
 
     @property
     def parent(self):
@@ -2585,15 +2586,15 @@ class AssociationNotesStream(hubspotV4Stream):
     """Association Base Stream"""
 
     primary_keys = ["from_id", "to_id"]
-    name = "associations_notes"
     parent_stream_type = NotesAssociationStream
-    
+    name = "associations_notes"
+
     @property
     def parent(self):
         if self.config.get("use_incremental_associations_streams", False):
             return NotesStream.name
         return NotesAssociationStream.name
-        
+
     schema = association_schema
 
 
