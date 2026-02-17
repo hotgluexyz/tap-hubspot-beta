@@ -1264,7 +1264,7 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
         row["id"] = str(row["companyId"])
         row = super().post_process(row, context)
         # add archived value to _hg_archived
-        row["updatedAt"] = row.get("hs_lastmodifieddate")
+        row["updatedAt"] = row["hs_lastmodifieddate"]
         row["createdAt"] = row.get("createdate")
         row["_hg_archived"] = row.get("isDeleted") or False # incremental sync always uses _hg_archived as false, archived is fetched in a different stream
         row["archived"] = row.get("archived") if row.get("archived") is not None else row.get("isDeleted") or False
