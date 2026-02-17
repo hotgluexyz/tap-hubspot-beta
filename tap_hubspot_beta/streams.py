@@ -1038,13 +1038,13 @@ class FullsyncContactsV3Stream(hubspotV1SplitUrlStream):
             return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
         else:
             return self.mask.get((), False)
-
+        
     def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.stream = self.stream_alias
-            schema_message.schema = self.schema
-            singer.write_message(schema_message)
+        """
+        We need to skip writing the schema message for this stream
+        because we're using the contacts_v3 stream schema.
+        """
+        pass
 
     def _write_record_message(self, record: dict) -> None:
         """Write out a RECORD message.
@@ -1544,6 +1544,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
     properties_param = "properties"
     merge_pk = "dealId"
     bulk_child_size = 50 # max allowed in the API
+    visible_in_catalog = False
 
     base_properties = [
         th.Property("id", th.StringType),
@@ -1667,13 +1668,13 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
                 return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
         except:
             return self.mask.get((), False)
-
+        
     def _write_schema_message(self) -> None:
-        """Write out a SCHEMA message with the stream schema."""
-        for schema_message in self._generate_schema_messages():
-            schema_message.stream = self.stream_alias
-            schema_message.schema = self.schema
-            singer.write_message(schema_message)
+        """
+        We need to skip writing the schema message for this stream
+        because we're using the deals stream schema.
+        """
+        pass
 
     def _write_record_message(self, record: dict) -> None:
         """Write out a RECORD message.
