@@ -248,6 +248,7 @@ class hubspotV3SearchStream(hubspotStream):
                     if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
                         self._write_state_message()
                     self._write_record_message(record)
+                if selected:
                     try:
                         self._increment_stream_state(record, context=current_context)
                     except InvalidStreamSortException as ex:
@@ -261,6 +262,8 @@ class hubspotV3SearchStream(hubspotStream):
                             stream_name=self.name,
                         )
                         raise ex
+                elif self.has_selected_descendents and self.replication_key:
+                    self._increment_child_replication_state(record, context=current_context)
 
                 record_count += 1
                 partition_record_count += 1
