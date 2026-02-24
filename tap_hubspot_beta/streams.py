@@ -3631,3 +3631,51 @@ class CampaignAssetsStream(hubspotV3Stream):
             context["asset_type"] = asset_type
             for record in super().request_records(context):
                 yield record
+
+class ThreadsStream(hubspotV3Stream):
+    """Threads Stream"""
+
+    name = "threads"
+    path = "conversations/v3/conversations/threads"
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("archived", th.BooleanType),
+        th.Property("associatedContactId", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("inboxId", th.StringType),
+        th.Property("originalChannelAccountId", th.StringType),
+        th.Property("originalChannelId", th.StringType),
+        th.Property("spam", th.BooleanType),
+        th.Property("status", th.StringType),
+        th.Property("assignedTo", th.StringType),
+        th.Property("closedAt", th.DateTimeType),
+        th.Property("latestMessageReceivedTimestamp", th.DateTimeType),
+        th.Property("latestMessageSentTimestamp", th.DateTimeType),
+        th.Property("latestMessageTimestamp", th.DateTimeType),
+        th.Property(
+            "threadAssociations",
+            th.ObjectType(
+                th.Property("associatedTicketId", th.StringType),
+            ),
+        ),
+    ).to_dict()
+
+    primary_keys = ["id"]
+
+    replication_key = "latestMessageTimestamp" 
+    replication_key_filter = "latestMessageTimestampAfter" 
+
+    def get_url_params(self, context: Optional[dict], next_page_token: Optional[Any]) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        rep_key = self.get_starting_time(context, is_inclusive=True).replace(tzinfo=pytz.utc)
+        params[self.replication_key_filter] = rep_key.isoformat()
+        params["sort"] = self.replication_key
+        return params
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        if not response.json().get("results"):
+            return None
+        return super().get_next_page_token(response, previous_token)
