@@ -2051,3 +2051,28 @@ class ThreadsStream(hubspotV3Stream):
         if not response.json().get("results"):
             return None
         return super().get_next_page_token(response, previous_token)
+
+class InboxesStream(hubspotV3Stream):
+    """Inboxes Stream"""
+
+    name = "inboxes"
+    path = "conversations/v3/conversations/inboxes"
+    schema = th.PropertiesList(
+        th.Property("archived", th.BooleanType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("id", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("type", th.StringType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archivedAt", th.DateTimeType),
+    ).to_dict()
+
+    primary_keys = ["id"]
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        if not response.json().get("results"):
+            return None
+        return super().get_next_page_token(response, previous_token)
