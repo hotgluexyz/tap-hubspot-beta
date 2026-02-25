@@ -1,5 +1,5 @@
 """Stream type classes for tap-hubspot."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
@@ -2023,10 +2023,25 @@ class ThreadsStream(hubspotV3Stream):
     replication_key = "latestMessageTimestamp" 
     replication_key_filter = "latestMessageTimestampAfter" 
 
+    def _get_starting_time(self, context, is_inclusive=False):
+        start_date = self.config.get("start_date")
+        if start_date:
+            start_date = parse(self.config.get("start_date"))
+        rep_key = self.get_starting_timestamp(context)
+
+        if is_inclusive:
+            rep_key = rep_key + timedelta(seconds=1)
+
+        # if stream has a minimum start time and start date or replication key is less than the minimum start time, return the minimum start time
+        if hasattr(self, "minimum_start_time") and self.minimum_start_time and (rep_key or start_date) < self.minimum_start_time:
+            return self.minimum_start_time
+        return rep_key or start_date
+
     def get_url_params(self, context: Optional[dict], next_page_token: Optional[Any]) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        rep_key = self.get_starting_timestamp(context).replace(tzinfo=pytz.utc)
+        rep_key = self._get_starting_time(context, is_inclusive=True).replace(tzinfo=pytz.utc)
         params[self.replication_key_filter] = rep_key.isoformat()
+        params["sort"] = self.replication_key
         return params
 
     def get_next_page_token(
