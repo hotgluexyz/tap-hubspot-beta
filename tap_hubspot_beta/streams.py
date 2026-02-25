@@ -1,5 +1,5 @@
 """Stream type classes for tap-hubspot."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 import copy
 
@@ -1990,7 +1990,6 @@ class UsersStream(ObjectSearchV3):
     properties_url = "properties/v2/users/properties"
     replication_key_filter = "hs_lastmodifieddate"
 
-
 class ThreadsStream(hubspotV3Stream):
     """Threads Stream"""
 
@@ -2044,28 +2043,6 @@ class ThreadsStream(hubspotV3Stream):
         params[self.replication_key_filter] = rep_key.isoformat()
         params["sort"] = self.replication_key
         return params
-
-    def get_next_page_token(
-        self, response: requests.Response, previous_token: Optional[Any]
-    ) -> Optional[Any]:
-        """Return a token for identifying next page or None if no more pages."""
-        if not response.json().get("results"):
-            return None
-        return super().get_next_page_token(response, previous_token)
-
-
-class ChannelsStream(hubspotV3Stream):
-    """Channels Stream"""
-
-    name = "channels"
-    path = "conversations/v3/conversations/channels"
-
-    schema = th.PropertiesList(
-        th.Property("id", th.StringType),
-        th.Property("name", th.StringType)
-    ).to_dict()
-
-    primary_keys = ["id"]
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
