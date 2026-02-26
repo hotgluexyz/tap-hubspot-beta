@@ -79,6 +79,7 @@ from tap_hubspot_beta.streams import (
     MarketingEmailsV3Stream,
     ArchivedMarketingEmailsV3Stream,
     ThreadsStream,
+    InboxesStream,
     ChannelsStream,
 )
 
@@ -168,6 +169,7 @@ STREAM_TYPES = add_streams([
     MarketingEmailsV3Stream,
     ArchivedMarketingEmailsV3Stream,
     ThreadsStream,
+    InboxesStream,
     ChannelsStream,
 ])
 
