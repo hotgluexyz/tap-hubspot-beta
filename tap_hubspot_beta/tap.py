@@ -80,6 +80,7 @@ from tap_hubspot_beta.streams import (
     ArchivedMarketingEmailsV3Stream,
     ThreadsStream,
     InboxesStream,
+    ChannelsStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -169,6 +170,7 @@ STREAM_TYPES = add_streams([
     ArchivedMarketingEmailsV3Stream,
     ThreadsStream,
     InboxesStream,
+    ChannelsStream,
 ])
 
 class Taphubspot(Tap):
