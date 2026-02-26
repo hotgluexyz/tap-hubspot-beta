@@ -3718,11 +3718,3 @@ class InboxesStream(hubspotV3Stream):
     ).to_dict()
 
     primary_keys = ["id"]
-
-    def get_next_page_token(
-        self, response: requests.Response, previous_token: Optional[Any]
-    ) -> Optional[Any]:
-        """Return a token for identifying next page or None if no more pages."""
-        if not response.json().get("results"):
-            return None
-        return super().get_next_page_token(response, previous_token)
