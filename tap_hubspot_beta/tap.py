@@ -117,6 +117,7 @@ from tap_hubspot_beta.streams import (
     CampaignAssetsStream,
     ProjectsStream,
     ThreadsStream,
+    InboxesStream,
     ChannelsStream,
 )
 
@@ -252,6 +253,7 @@ STREAM_TYPES = add_streams([
     CampaignAssetsStream,
     ProjectsStream,
     ThreadsStream,
+    InboxesStream,
     ChannelsStream,
 ])
 
