@@ -118,6 +118,7 @@ from tap_hubspot_beta.streams import (
     ProjectsStream,
     ThreadsStream,
     InboxesStream,
+    ChannelsStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -253,6 +254,7 @@ STREAM_TYPES = add_streams([
     ProjectsStream,
     ThreadsStream,
     InboxesStream,
+    ChannelsStream,
 ])
 
 
