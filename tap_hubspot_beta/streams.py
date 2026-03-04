@@ -604,6 +604,14 @@ class OwnersStream(hubspotV3Stream):
         th.Property("updatedAt", th.DateTimeType),
     ).to_dict()
 
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """HG-5819: Intentionally write an list to a date-time column for QA.
+        Reproduces schema/data mismatch so target-csv and target-parquet fail validation.
+        """
+        row = super().post_process(row, context)
+        row["updatedAt"] = [1, 2, 3]  # schema says date-time, we send list -> target validation error
+        return row
+
 
 class ListsStream(hubspotV1Stream):
     """Lists Stream"""
