@@ -7,7 +7,6 @@ import copy
 
 from hotglue_singer_sdk.exceptions import InvalidStreamSortException
 from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
-from hotglue_singer_sdk.helpers._classproperty import classproperty
 from hotglue_singer_sdk.exceptions import FatalAPIError
 import singer
 import logging
@@ -23,7 +22,6 @@ from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream, hubspotV2SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
 import pytz
-from pendulum import parse
 from urllib.parse import urlencode, quote
 import json
 from itertools import groupby
@@ -189,7 +187,6 @@ class ContactsStream(hubspotV1SplitUrlStream):
             "contact_id": record["vid"],
             "contact_date": record.get("lastmodifieddate"),
             "subscriber_email": record.get("subscriber_email"),
-            "subscriber_email": record.get("subscriber_email"),
             "row": record
         }
 
@@ -210,7 +207,7 @@ class ContactsStream(hubspotV1SplitUrlStream):
             return parse(state_date)
         return state_date
 
-    def _sync_children(self, child_context: dict) -> None:
+    def _sync_children(self, child_context: dict) -> None: # noqa: C901
         for child_stream in self.child_streams:
             # sync fullsync contacts child stream normally
             if child_stream.name == "fullsync_contacts_v3" and (child_stream.selected or child_stream.has_selected_descendents):
@@ -736,7 +733,7 @@ class DealsPipelinesStream(hubspotV1Stream):
     ).to_dict()
 
     def get_deleted_stages(self, row):
-        if not "stages" in row:
+        if "stages" not in row:
             row["stages"] = []
 
         # get stages ids to not send dups
@@ -1294,7 +1291,7 @@ class FullsyncCompaniesStream(hubspotV2SplitUrlStream):
                 self._metadata = self._tap.catalog["companies"].metadata
                 return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
             
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -1349,7 +1346,7 @@ class ArchivedCompaniesStream(ArchivedStream):
             # populate metadata to fetch all fields selected in companies
             self._metadata = self._tap.catalog["companies"].metadata
             return self.mask.get((), False) or self._tap.catalog["companies"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -1411,7 +1408,7 @@ class ArchivedContactsStream(ArchivedStream):
             # populate metadata to fetch all fields selected in contacts_v3
             self._metadata = self._tap.catalog[contacts_v3_name].metadata
             return self.mask.get((), False) or self._tap.catalog[contacts_v3_name].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -1472,7 +1469,7 @@ class ArchivedProductsStream(ArchivedStream):
             # populate metadata to fetch all fields selected in contacts_v3
             self._metadata = self._tap.catalog["products"].metadata
             return self.mask.get((), False) or self._tap.catalog["products"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -1667,7 +1664,7 @@ class FullsyncDealsStream(hubspotV1SplitUrlStream):
                 # populate metadata to fetch all fields selected in deals
                 self._metadata = self._tap.catalog["deals"].metadata
                 return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
         
     def _write_schema_message(self) -> None:
@@ -1890,7 +1887,7 @@ class ArchivedDealsStream(ArchivedStream):
             # populate metadata to fetch all fields selected in deals
             self._metadata = self._tap.catalog["deals"].metadata
             return self.mask.get((), False) or self._tap.catalog["deals"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -2024,7 +2021,7 @@ class ArchivedLineItemsStream(ArchivedStream):
             # populate metadata to fetch all fields selected in lineitems
             self._metadata = self._tap.catalog["lineitems"].metadata
             return self.mask.get((), False) or self._tap.catalog["lineitems"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -2367,7 +2364,7 @@ class ArchivedOwnersStream(ArchivedStream):
             # populate metadata to fetch all fields selected in contacts_v3
             self._metadata = self._tap.catalog["owners"].metadata
             return self.mask.get((), False) or self._tap.catalog["owners"].metadata.get(()).selected
-        except:
+        except Exception:
             return self.mask.get((), False)
 
     def _write_record_message(self, record: dict) -> None:
@@ -2912,7 +2909,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
             if self.is_d2_stream and d2:
                 additional_params["d2"] = d2
 
-    def get_url_params(self, context, next_page_token):
+    def get_url_params(self, context, next_page_token):  # noqa: F811
         params = super().get_url_params(context, next_page_token)
         if context and context.get("populate_d2_breakdowns"):
             params["d1"] = context.get("d1_breakdown")
@@ -2991,7 +2988,7 @@ class BreakdownsAnalyticsReportsBaseStream(hubspotV2Stream, ABC):
             if d2_breakdown.get("breakdown") is not None
         ]
 
-    def populate_params(self, context):
+    def populate_params(self, context):  # noqa: F811
         self.populate_d1_breakdowns(context)
 
     def prepare_request(self, context, next_page_token):
@@ -3148,21 +3145,6 @@ class FormsSummaryMonthlyStream(hubspotV1Stream):
         row["start_date"] = self.start_date
         row["end_date"] = self.end_date
         return row
-
-
-class TeamsStream(hubspotV3Stream):
-    """Teams Stream"""
-
-    name = "teams"
-    path = "settings/v3/users/teams"
-    primary_keys = ["id"]
-
-    schema = th.PropertiesList(
-        th.Property("userIds", th.CustomType({"type": ["array", "string"]})),
-        th.Property("name", th.StringType),
-        th.Property("id", th.StringType),
-        th.Property("secondaryUserIds", th.CustomType({"type": ["array", "string"]})),
-    ).to_dict()
 
 class FormsAllStream(hubspotV3Stream):
     """

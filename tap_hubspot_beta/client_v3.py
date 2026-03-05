@@ -11,8 +11,6 @@ from pendulum import parse
 from datetime import datetime
 from hotglue_singer_sdk import typing as th
 import singer
-from tap_hubspot_beta.utils import merge_responses
-from hotglue_singer_sdk.exceptions import RetriableAPIError
 
 
 from hotglue_singer_sdk.exceptions import InvalidStreamSortException
@@ -339,7 +337,7 @@ class AssociationsV3ParentStream(hubspotV3Stream):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-    def _sync_records(
+    def _sync_records(  # noqa: C901
         self, context: Optional[dict] = None
     ) -> None:
         """Sync records, emitting RECORD and STATE messages. """
@@ -508,4 +506,3 @@ class hubspotHistoryV3Stream(hubspotV3Stream):
         payload["propertiesWithHistory"] = self.selected_properties
         payload["inputs"] = context["ids"]
         return payload
-

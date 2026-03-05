@@ -1,6 +1,5 @@
 """REST client handling, including hubspotStream base class."""
 import copy
-from dataclasses import field
 import logging
 import urllib3
 
@@ -15,7 +14,6 @@ from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from hotglue_singer_sdk.streams import RESTStream
 from hotglue_singer_sdk.mapper import  SameRecordTransform, StreamMap
 from hotglue_singer_sdk.helpers._flattening import get_flattening_options
-from hotglue_singer_sdk import Stream
 from tap_hubspot_beta.utils import deep_merge_dicts
 import time
 
@@ -26,7 +24,6 @@ import singer
 from singer import StateMessage
 from datetime import datetime
 import pytz
-import requests
 import http.client
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
@@ -264,7 +261,7 @@ class hubspotStream(RESTStream):
                             
         return parsed_response
 
-    def request_records(self, context):
+    def request_records(self, context): # noqa: C901
         """Request records from REST endpoint(s), returning response records."""
         next_page_token = None
         finished = False
@@ -280,7 +277,7 @@ class hubspotStream(RESTStream):
                 try:
                     # Check if the fullsync stream is selected or not
                     fullsync_companies_selected = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
-                except:
+                except Exception:
                     pass
                 companies_list_ids = self.config.get("companies_list_ids")
                 if fullsync_companies_selected and not fullsync_companies_state.get("replication_key") and self.is_first_sync() and not companies_list_ids:
@@ -298,7 +295,7 @@ class hubspotStream(RESTStream):
                 try:
                     # Check if the fullsync stream is selected or not
                     fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_deals"][0][1].selected
-                except:
+                except Exception:
                     pass
                 if fullsync_on and not fullsync_deals_state.get("replication_key") and self.is_first_sync():
                     finished = True
@@ -401,7 +398,7 @@ class hubspotStream(RESTStream):
         
         try:
             error_message = response.json().get("message")
-        except:
+        except Exception:
             error_message = response.text
         raise exception_class(f'Msg {message}, response "{error_message}"')
 
@@ -526,7 +523,7 @@ class hubspotStream(RESTStream):
 
         return th.PropertiesList(*properties).to_dict()
 
-    def finalize_state_progress_markers(self, state: Optional[dict] = None) -> None:
+    def finalize_state_progress_markers(self, state: Optional[dict] = None) -> None: # noqa: C901
 
         def finalize_state_progress_markers(stream_or_partition_state: dict) -> Optional[dict]:
             """Promote or wipe progress markers once sync is complete."""
@@ -681,7 +678,7 @@ class hubspotStream(RESTStream):
 
         return row
 
-    def is_first_sync(self):
+    def is_first_sync(self):  # noqa: F811
         if self.stream_state.get("replication_key"):
             return False
         return True
