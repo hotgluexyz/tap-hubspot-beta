@@ -1,6 +1,4 @@
 
-import logging
-from datetime import datetime
 from typing import Any, Dict, Optional, Iterable
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema

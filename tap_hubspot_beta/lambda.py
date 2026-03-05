@@ -1,4 +1,8 @@
-import json, pathlib, uuid, subprocess, os
+import json
+import pathlib
+import uuid
+import subprocess
+import os
 from logging import Logger
 from typing import Union, Optional
 
@@ -51,7 +55,7 @@ class RealTime:
             lines = f.readlines()
             try:
                 return json.loads(lines[-1].strip())
-            except:
+            except Exception:
                 return "".join(lines)
 
     def clean_up(self):
@@ -67,7 +71,7 @@ def real_time_handler(
     cli_cmd = cli_cmd or os.environ.get("CLI_CMD")
 
     if not cli_cmd:
-        logger.info(f"Parameter cli_cmd or CLI_CMD env var are not set. This target does not support real time")
+        logger.info("Parameter cli_cmd or CLI_CMD env var are not set. This target does not support real time")
         raise Exception("This target does not support real time")
 
     logger.info(f"Entering \"real_time_handler\": cli_cmd={cli_cmd}, config={config}, discover={discover}")
@@ -80,23 +84,23 @@ def real_time_handler(
 
     response = {"discoverCatalog": None, "metrics": dict()}
 
-    logger.info(f"Preparing files...")
+    logger.info("Preparing files...")
 
     real_time.prepare()
 
     if discover:
-        logger.info(f"Running discover...")
+        logger.info("Running discover...")
         discover_metrics = real_time.discover()
-        logger.info(f"Getting catalog...")
+        logger.info("Getting catalog...")
         response["discoverCatalog"] = real_time.get_catalog()
         response["discoverMetrics"] = discover_metrics
         response["metrics"]["tracebackInLogs"] = discover_metrics["tracebackInLogs"]
         response["metrics"]["logs"] = discover_metrics["logs"]
 
-    logger.info(f"Cleaning up...")
+    logger.info("Cleaning up...")
 
     real_time.clean_up()
 
-    logger.info(f"Done")
+    logger.info("Done")
 
     return response

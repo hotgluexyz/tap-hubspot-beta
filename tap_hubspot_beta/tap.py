@@ -125,11 +125,11 @@ from tap_hubspot_beta.streams import (
 # By allowing caller to ignore the stream we are able ensure existing tests continue to pass.
 # 1. Get the environment variable IGNORE_STREAMS and split by commas
 ignore_streams = os.environ.get('IGNORE_STREAMS', '').split(',')
-logging.info(f"IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
+logging.info("IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
 
 # 2. Get the environment variable INCLUDE_STREAMS and split by commas
 include_streams = os.environ.get('INCLUDE_STREAMS', "").split(',') if os.environ.get('INCLUDE_STREAMS', "") else []
-logging.info(f"INCLUDE_STREAMS: "+ os.environ.get('INCLUDE_STREAMS', ''))
+logging.info("INCLUDE_STREAMS: "+ os.environ.get('INCLUDE_STREAMS', ''))
 
 # Function to add streams to STREAM_TYPES if INCLUDE_STREAMS is set, otherwise add streams to STREAM_TYPES if not in IGNORE_STREAMS
 def add_streams(stream_classes):
@@ -462,10 +462,10 @@ class Taphubspot(Tap):
         for property in properties:
             field_name = property.get("name")
             if field_name in main_properties:
-                self.logger.info(f"Skipping field, it is a default field and already included.")
+                self.logger.info("Skipping field, it is a default field and already included.")
                 continue
             if not field_name:
-                self.logger.info(f"Skipping field without name.")
+                self.logger.info("Skipping field without name.")
                 continue
             th_type = hubspotV3Stream.extract_type(property)
             properties_list.append(th.Property(field_name, th_type))
@@ -492,7 +492,7 @@ class Taphubspot(Tap):
         return th.PropertiesList(*properties_list).to_dict(), associations_metadata
     
     @final
-    def load_streams(self) -> List[Stream]:
+    def load_streams(self) -> List[Stream]:  # noqa: C901
         """Load streams from discovery and initialize DAG.
 
         Return the output of `self.discover_streams()` to enumerate
