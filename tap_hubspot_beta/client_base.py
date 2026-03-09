@@ -113,7 +113,7 @@ class hubspotStream(RESTStream):
             decorated_request = self.request_decorator(self._request)
             resp = decorated_request(prepared_request, None)
             self.fields_metadata = {v["name"]: v for v in resp.json()}
-        except FatalAPIError:
+        except Exception:
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
