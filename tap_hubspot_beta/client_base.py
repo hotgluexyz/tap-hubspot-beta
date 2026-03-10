@@ -106,16 +106,16 @@ class hubspotStream(RESTStream):
             self.logger.info(f"Skipping fields_meta for {self.name} stream, because there is no properties_url set")
             return
 
-        req = requests.get(
-            f"{self.url_base}{self.properties_url}",
-            headers = self.authenticator.auth_headers or {},
-        )
-
-        if req.status_code != 200:
+        try:
+            prepared_request = self.build_prepared_request(
+                "GET", f"{self.url_base}{self.properties_url}"
+            )
+            decorated_request = self.request_decorator(self._request)
+            resp = decorated_request(prepared_request, None)
+            self.fields_metadata = {v["name"]: v for v in resp.json()}
+        except (FatalAPIError, RetriableAPIError):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
-
-        self.fields_metadata = {v["name"]: v for v in req.json()}
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
