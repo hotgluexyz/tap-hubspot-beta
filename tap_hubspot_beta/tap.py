@@ -4,7 +4,7 @@ import os
 from typing import List, Dict, Type, Any, cast
 import logging
 from hotglue_singer_sdk.helpers._compat import final
-
+from backports.cached_property import cached_property
 from hotglue_singer_sdk import Stream, Tap
 from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.exceptions import FatalAPIError
@@ -350,7 +350,7 @@ class Taphubspot(Tap):
         
         return stream_dict
     
-    @property
+    @cached_property
     def catalog_dict(self) -> dict:
         """Get catalog dictionary.
 
