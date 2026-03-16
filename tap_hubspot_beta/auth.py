@@ -2,27 +2,14 @@
 
 import json
 from datetime import datetime
-from typing import Optional
 
 import requests
-from hotglue_singer_sdk.authenticators import APIAuthenticatorBase
-from hotglue_singer_sdk.streams import Stream as RESTStreamBase
+from hotglue_singer_sdk.authenticators import OAuthAuthenticator
 from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 import backoff
 
-class OAuth2Authenticator(APIAuthenticatorBase):
+class OAuth2Authenticator(OAuthAuthenticator):
     """API Authenticator for OAuth 2.0 flows."""
-
-    def __init__(
-        self,
-        stream: RESTStreamBase,
-        config_file: Optional[str] = None,
-        auth_endpoint: Optional[str] = None,
-    ) -> None:
-        self._auth_endpoint = auth_endpoint
-        self._config_file = config_file
-        self._tap = stream._tap
-        super().__init__(stream=stream)
 
     @property
     def auth_headers(self) -> dict:
@@ -68,7 +55,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         # used for testing, so if vcr didn't record an auth request we can return True
         if self._tap._config.get("is_token_valid"):
             return True
-        
+
         access_token = self._tap._config.get("access_token")
         now = round(datetime.utcnow().timestamp())
         expires_in = self._tap._config.get("expires_in")
@@ -96,7 +83,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         return token_response
 
     # Authentication and refresh
-    def update_access_token(self) -> None:
+    def update_access_token_locally(self) -> None:
         """Update `access_token` along with: `last_refreshed` and `expires_in`.
 
         Raises:
