@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime
-from typing import Optional
 
 import requests
 from hotglue_singer_sdk.authenticators import OAuthAuthenticator
