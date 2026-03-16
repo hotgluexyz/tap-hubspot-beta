@@ -4,6 +4,7 @@ import os
 from typing import List, Dict, Type, Any, cast
 import logging
 from hotglue_singer_sdk.helpers._compat import final
+from hotglue_singer_sdk.helpers.capabilities import AlertingLevel
 from backports.cached_property import cached_property
 from hotglue_singer_sdk import Stream, Tap
 from hotglue_singer_sdk import typing as th
@@ -262,6 +263,7 @@ class Taphubspot(Tap):
     """hubspot tap class."""
 
     name = "tap-hubspot"
+    alerting_level = AlertingLevel.WARNING
     legacy_streams_mapping = {}
     associations_metadata = {}
     custom_objects_streams = set()
