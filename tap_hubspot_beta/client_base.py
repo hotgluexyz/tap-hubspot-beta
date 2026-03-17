@@ -114,7 +114,7 @@ class hubspotStream(RESTStream):
             decorated_request = self.request_decorator(self._request)
             resp = decorated_request(prepared_request, None)
             self.fields_metadata = {v["name"]: v for v in resp.json()}
-        except (FatalAPIError, RetriableAPIError):
+        except (FatalAPIError, RetriableAPIError, InvalidCredentialsError):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
@@ -482,6 +482,9 @@ class hubspotStream(RESTStream):
         response = requests.get(url, headers=headers)
         try:
             self.validate_response(response)
+        except InvalidCredentialsError as e:
+            self.logger.error(f"Insufficient permissions for {self.name}: {e}")
+            return None
         except Exception as e:
             if "You do not have permissions" in str(e):
                 self.logger.error(f"Insufficient permissions for {self.name}: {e}")
