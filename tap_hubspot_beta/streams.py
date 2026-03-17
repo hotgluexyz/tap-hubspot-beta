@@ -733,6 +733,11 @@ class DealsPipelinesStream(hubspotV1Stream):
         ))),
     ).to_dict()
 
+    def _fetch_pipeline_audit(self, url, headers):
+        """Fetch pipeline audit history with centralized retry logic."""
+        response = requests.get(url, headers=headers)
+        return response
+
     def get_deleted_stages(self, row):
         if "stages" not in row:
             row["stages"] = []
@@ -740,10 +745,9 @@ class DealsPipelinesStream(hubspotV1Stream):
         # get stages ids to not send dups
         row_stages = [stage["stageId"] for stage in row.get("stages")]
         # get audit history of each pipeline
-        stages_history = requests.get(
-            f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit",
-            headers=self.authenticator.auth_headers or {},
-        )
+        url = f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit"
+        headers = self.authenticator.auth_headers or {}
+        stages_history = self.request_decorator(self._fetch_pipeline_audit)(url, headers)
         # join all stages from history
         stages_ = []
         for obj in stages_history.json().get("results", []):
