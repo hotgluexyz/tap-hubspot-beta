@@ -13,6 +13,7 @@ import singer
 import logging
 
 import requests
+import backoff
 from backports.cached_property import cached_property
 from hotglue_singer_sdk import typing as th
 from pendulum import parse
@@ -740,10 +741,23 @@ class DealsPipelinesStream(hubspotV1Stream):
         # get stages ids to not send dups
         row_stages = [stage["stageId"] for stage in row.get("stages")]
         # get audit history of each pipeline
-        stages_history = requests.get(
-            f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit",
-            headers=self.authenticator.auth_headers or {},
+        @backoff.on_exception(
+            backoff.expo,
+            (
+                requests.exceptions.ConnectionError,
+                ConnectionResetError,
+                ConnectionAbortedError,
+            ),
+            max_tries=5,
+            factor=2,
         )
+        def _fetch_stages_history():
+            return requests.get(
+                f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit",
+                headers=self.authenticator.auth_headers or {},
+            )
+        
+        stages_history = _fetch_stages_history()
         # join all stages from history
         stages_ = []
         for obj in stages_history.json().get("results", []):
