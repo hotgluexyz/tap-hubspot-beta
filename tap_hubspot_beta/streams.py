@@ -8,7 +8,6 @@ import copy
 from hotglue_singer_sdk.exceptions import InvalidStreamSortException
 from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 from hotglue_singer_sdk.exceptions import FatalAPIError
-from hotglue_etl_exceptions import InvalidCredentialsError
 import singer
 import logging
 
@@ -809,7 +808,7 @@ class ContactListsStream(hubspotStreamSchema):
         """Request and return a page of records from the API."""
         try:
             records = list(super().request_records(params))
-        except (FatalAPIError, InvalidCredentialsError):
+        except FatalAPIError:
             logging.info("Couldn't get schema for path: /contacts/v1/lists")
             return []
 
@@ -825,7 +824,7 @@ class ContactListsStream(hubspotStreamSchema):
         # Get the data from Hubspot
         try:
             records = self._request_records(dict())
-        except (FatalAPIError, InvalidCredentialsError):
+        except FatalAPIError:
             self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
             records = []
 

@@ -5,8 +5,7 @@ from datetime import datetime
 
 import requests
 from hotglue_singer_sdk.authenticators import OAuthAuthenticator
-from hotglue_singer_sdk.exceptions import RetriableAPIError
-from hotglue_etl_exceptions import InvalidCredentialsError
+from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 import backoff
 
 class OAuth2Authenticator(OAuthAuthenticator):
@@ -80,7 +79,7 @@ class OAuth2Authenticator(OAuthAuthenticator):
         if 500 <= token_response.status_code <= 600:
             raise RetriableAPIError(f"Auth error: {token_response.text}")
         elif 400 <= token_response.status_code < 500:
-            raise InvalidCredentialsError(f"Auth error: {token_response.text}")
+            raise FatalAPIError(f"Auth error: {token_response.text}")
         return token_response
 
     # Authentication and refresh
