@@ -85,6 +85,7 @@ class hubspotV1Stream(hubspotStream):
                 yield from []
                 break
             resp = decorated_request(prepared_request, context)
+            # NOOP
 
             parsed_response = list(self.parse_response(resp))
             # fetch associations for all records in the response
