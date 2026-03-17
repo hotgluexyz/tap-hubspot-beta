@@ -5,7 +5,7 @@ from datetime import datetime
 
 import requests
 from hotglue_singer_sdk.authenticators import OAuthAuthenticator
-from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
+from hotglue_singer_sdk.exceptions import RetriableAPIError
 from hotglue_etl_exceptions import InvalidCredentialsError
 import backoff
 
