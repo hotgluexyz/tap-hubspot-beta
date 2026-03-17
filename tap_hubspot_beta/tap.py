@@ -9,7 +9,6 @@ from backports.cached_property import cached_property
 from hotglue_singer_sdk import Stream, Tap
 from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.exceptions import FatalAPIError
-from hotglue_etl_exceptions import InvalidCredentialsError
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
@@ -318,7 +317,7 @@ class Taphubspot(Tap):
                     custom_objects_streams.add(record.get("fullyQualifiedName"))
                 # add custom objects to tap
                 self.custom_objects_streams = custom_objects_streams
-            except (FatalAPIError, InvalidCredentialsError) as exc:
+            except FatalAPIError as exc:
                 self.logger.info(f"failed to discover custom objects. Error={exc}")
 
         # If enable_list_selection is false, remove ContactListsStream and ContactListData from the list

@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterable, Optional, cast, List, Callable, Generato
 from backports.cached_property import cached_property
 from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
-from hotglue_etl_exceptions import InvalidCredentialsError
 from hotglue_singer_sdk.streams import RESTStream
 from hotglue_singer_sdk.mapper import  SameRecordTransform, StreamMap
 from hotglue_singer_sdk.helpers._flattening import get_flattening_options
@@ -114,7 +113,7 @@ class hubspotStream(RESTStream):
             decorated_request = self.request_decorator(self._request)
             resp = decorated_request(prepared_request, None)
             self.fields_metadata = {v["name"]: v for v in resp.json()}
-        except (FatalAPIError, RetriableAPIError, InvalidCredentialsError):
+        except (FatalAPIError, RetriableAPIError):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
@@ -458,8 +457,6 @@ class hubspotStream(RESTStream):
                 return
             if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
                 self._log_and_raise(RetriableAPIError, response, msg)
-            if response.status_code == 403 and ("hasn't been granted all required scopes" in response.text or "required scopes" in response.text.lower()):
-                self._log_and_raise(InvalidCredentialsError, response, msg)
             self._log_and_raise(FatalAPIError, response, msg)
 
 
@@ -482,9 +479,6 @@ class hubspotStream(RESTStream):
         response = requests.get(url, headers=headers)
         try:
             self.validate_response(response)
-        except InvalidCredentialsError as e:
-            self.logger.error(f"Insufficient permissions for {self.name}: {e}")
-            return None
         except Exception as e:
             if "You do not have permissions" in str(e):
                 self.logger.error(f"Insufficient permissions for {self.name}: {e}")
