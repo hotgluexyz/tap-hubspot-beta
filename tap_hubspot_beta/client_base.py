@@ -639,7 +639,9 @@ class hubspotStream(RESTStream):
             if self.name == "deals_association_parent" and self.name not in self._tap.mapper.stream_maps:
                 self._tap.mapper.stream_maps.update({"deals_association_parent":self._tap.mapper.stream_maps["deals"]})
                 self._tap.mapper.stream_maps["deals_association_parent"][0].stream_alias = "deals_association_parent"
-            self._stream_maps = self._tap.mapper.stream_maps[self.name]
+            self._stream_maps = self._tap.mapper.stream_maps.get(self.name)
+            if not self._stream_maps:   
+                raise ValueError(f"Stream '{self.name}' does not appear in catalog, is your catalog up to date?")
             self.logger.info(
                 f"Tap has custom mapper. Using {len(self.stream_maps)} provided map(s)."
             )
