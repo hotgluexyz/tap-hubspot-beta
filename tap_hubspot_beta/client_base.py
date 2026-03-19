@@ -270,56 +270,6 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
-            
-            # only use companies stream for incremental syncs
-            if self.name == "companies":
-                fullsync_companies_state = self.tap_state.get("bookmarks", {}).get("fullsync_companies", {})
-                fullsync_companies_selected = False
-                try:
-                    # Check if the fullsync stream is selected or not
-                    fullsync_companies_selected = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_companies"][0][1].selected
-                except Exception:
-                    pass
-                companies_list_ids = self.config.get("companies_list_ids")
-                if fullsync_companies_selected and not fullsync_companies_state.get("replication_key") and self.is_first_sync() and not companies_list_ids:
-                    finished = True
-                    yield from []
-                    break
-                elif fullsync_companies_state.get("replication_key") and self.is_first_sync():
-                    self.stream_state.update(fullsync_companies_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
-            
-            # only use deals stream for incremental syncs
-            if self.name == "deals":
-                fullsync_deals_state = self.tap_state.get("bookmarks", {}).get("fullsync_deals", {})
-                fullsync_on = False
-                try:
-                    # Check if the fullsync stream is selected or not
-                    fullsync_on = [s for s in self._tap.streams.items() if str(s[0]) == "fullsync_deals"][0][1].selected
-                except Exception:
-                    pass
-                if fullsync_on and not fullsync_deals_state.get("replication_key") and self.is_first_sync():
-                    finished = True
-                    yield from []
-                    break
-                elif fullsync_deals_state.get("replication_key") and self.is_first_sync():
-                    self.stream_state.update(fullsync_deals_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]
-            
-            # only use contacts stream for incremental syncs
-            contacts_v3_name = self._tap.legacy_streams_mapping.get("contacts_v3", "contacts_v3")
-            
-            if self.name == contacts_v3_name:
-                fullsync_contacts_v3_state = self.tap_state.get("bookmarks", {}).get("fullsync_contacts_v3", {})                  
-                contacts_list_ids = self.config.get("contacts_list_ids")
-                if not contacts_list_ids and not self.stream_state.get("replication_key_value") and self._tap.streams["fullsync_contacts_v3"].is_first_sync():
-                    finished = True
-                    yield from []
-                    break
-                if not self.stream_state.get("replication_key_value") and fullsync_contacts_v3_state.get("replication_key"):
-                    self.stream_state.update(fullsync_contacts_v3_state)
-                    self.stream_state["starting_replication_value"] = self.stream_state["replication_key_value"]  
-
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -741,14 +691,11 @@ class hubspotStream(RESTStream):
         return row
     
     _list_id_config_mapping = {
-        "fullsync_contacts_v3": "contacts_list_ids",
         "contacts": "contacts_list_ids",
         "contacts_v3": "contacts_list_ids",
         "contacts_v3_archived": "contacts_list_ids",
-        "fullsync_companies": "companies_list_ids",
         "companies": "companies_list_ids",
         "companies_archived": "companies_list_ids",
-        "fullsync_deals": "deals_list_ids",
         "deals": "deals_list_ids",
         "deals_archived": "deals_list_ids",
         "tickets": "tickets_list_ids",

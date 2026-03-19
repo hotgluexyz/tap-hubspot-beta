@@ -55,7 +55,6 @@ from tap_hubspot_beta.streams import (
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
-    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -82,7 +81,6 @@ from tap_hubspot_beta.streams import (
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    FullsyncDealsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -110,7 +108,6 @@ from tap_hubspot_beta.streams import (
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream,
     GoalTargetsStream,
@@ -191,7 +188,6 @@ STREAM_TYPES = add_streams([
     ArchivedCompaniesStream,
     ArchivedDealsStream,
     DealsAssociationParent,
-    FullsyncCompaniesStream,
     CurrenciesStream,
     AssociationMeetingsCompaniesStream,
     AssociationMeetingsContactsStream,
@@ -218,7 +214,6 @@ STREAM_TYPES = add_streams([
     ContactsHistoryPropertiesStream,
     ArchivedOwnersStream,
     ArchivedProductsStream,
-    FullsyncDealsStream,
     SessionAnalyticsDailyReportsStream,
     SessionAnalyticsWeeklyReportsStream,
     SessionAnalyticsMonthlyReportsStream,
@@ -246,7 +241,6 @@ STREAM_TYPES = add_streams([
     UtmCampaignSummaryMonthlyStream,
     GeolocationSummaryMonthlyStream,
     LeadsStream,
-    FullsyncContactsV3Stream,
     DiscoverCustomObjectsStream,
     ArchivedContactsStream,
     GoalTargetsStream,
@@ -542,9 +536,6 @@ class Taphubspot(Tap):
                 self.logger.info(f"Stream name: {stream.name}")
                 base_name = stream.name
                 streams_by_type[base_name].original_name = base_name
-                if stream.name.startswith("fullsync_"):
-                    streams_by_type[base_name].visible_in_catalog = False
-                    continue
                 # rename v3 streams that are visible in the catalog
                 if stream.name.endswith("_v3"):
                     # if stream name has v3 in it remove 'v3' from the stream name 
