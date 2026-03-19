@@ -458,7 +458,7 @@ class hubspotStream(RESTStream):
                 return
             if "invalid json input" in response.text.lower() or "problem with the request" in response.text.lower():
                 self._log_and_raise(RetriableAPIError, response, msg)
-            if response.status_code == 403 and ("hasn't been granted all required scopes" in response.text or "required scopes" in response.text.lower()):
+            if response.status_code == 403:
                 self._log_and_raise(InvalidCredentialsError, response, msg)
             self._log_and_raise(FatalAPIError, response, msg)
 
