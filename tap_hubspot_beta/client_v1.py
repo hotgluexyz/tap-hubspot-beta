@@ -79,11 +79,6 @@ class hubspotV1Stream(hubspotStream):
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            # only use fullsync_deals in the first sync
-            if self.name == "fullsync_deals" and not self.is_first_sync():
-                finished = True
-                yield from []
-                break
             resp = decorated_request(prepared_request, context)
 
             parsed_response = list(self.parse_response(resp))
