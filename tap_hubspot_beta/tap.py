@@ -258,7 +258,7 @@ class Taphubspot(Tap):
     """hubspot tap class."""
 
     name = "tap-hubspot"
-    alerting_level = AlertingLevel.WARNING
+    alerting_level = AlertingLevel.ERROR
     legacy_streams_mapping = {}
     associations_metadata = {}
     custom_objects_streams = set()
