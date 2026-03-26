@@ -410,6 +410,9 @@ class hubspotStream(RESTStream):
                 self._log_and_raise(RetriableAPIError, response, msg)
             if response.status_code == 403:
                 self._log_and_raise(InvalidCredentialsError, response, msg)
+            if not response.text or not response.text.strip():
+                self.logger.warning(f"Received empty response body for {response.status_code} error. Treating as retriable.")
+                self._log_and_raise(RetriableAPIError, response, msg)
             self._log_and_raise(FatalAPIError, response, msg)
 
 
