@@ -38,11 +38,6 @@ class hubspotV2Stream(hubspotStreamSchema):
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
-            # only use fullsync_companies in the first sync
-            if self.name == "fullsync_companies" and not self.is_first_sync():
-                finished = True
-                yield from []
-                break
             resp = decorated_request(prepared_request, context)
             yield from self.parse_response(resp)
             previous_token = copy.deepcopy(next_page_token)
