@@ -382,6 +382,8 @@ class hubspotStream(RESTStream):
         """Validate HTTP response."""
         try:
             json_response = response.json()
+        except requests.exceptions.JSONDecodeError:
+            raise RetriableAPIError("Cannot parse response as JSON, retrying...")
         except ValueError:
             json_response = {}
 
