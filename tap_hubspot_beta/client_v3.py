@@ -241,22 +241,22 @@ class hubspotV3SearchStream(hubspotStream):
                     "operator": "LTE",
                     "value": self.current_bucket["end_time"]
                 })
-            payload["filters"].append({
-                "propertyName": "hs_object_id",
-                "operator": "GT",
-                "value": self.current_bucket["last_record_id"]
-            })
-            payload["sorts"] = [{
-                "propertyName": "hs_object_id",
-                "direction": "ASCENDING"
-            }]
-            if self.properties_url:
-                if self.name == "deals_association_parent":
-                    payload["properties"] = ["id"]
-                else:
-                    payload["properties"] = self.selected_properties
+        payload["filters"].append({
+            "propertyName": "hs_object_id",
+            "operator": "GT",
+            "value": self.current_bucket["last_record_id"]
+        })
+        payload["sorts"] = [{
+            "propertyName": "hs_object_id",
+            "direction": "ASCENDING"
+        }]
+        if self.properties_url:
+            if self.name == "deals_association_parent":
+                payload["properties"] = ["id"]
             else:
-                payload["properties"] = []
+                payload["properties"] = self.selected_properties
+        else:
+            payload["properties"] = []
         if context and context.get("object_id_filters"):
             payload["filters"].append({
                 "propertyName": "hs_object_id",
