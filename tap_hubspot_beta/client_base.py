@@ -380,12 +380,12 @@ class hubspotStream(RESTStream):
             raise RetriableAPIError(f"Response code: {response.status_code}, info: {response.text}")    
             
         """Validate HTTP response."""
+        json_parse_failed = False
         try:
             json_response = response.json()
-        except requests.exceptions.JSONDecodeError:
-            raise RetriableAPIError("Cannot parse response as JSON, retrying...")
         except ValueError:
             json_response = {}
+            json_parse_failed = True
 
         if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
@@ -416,6 +416,10 @@ class hubspotStream(RESTStream):
                 self.logger.warning(f"Received empty response body for {response.status_code} error. Treating as retriable.")
                 self._log_and_raise(RetriableAPIError, response, msg)
             self._log_and_raise(FatalAPIError, response, msg)
+        
+        if json_parse_failed:
+            msg = f"Non-JSON response (status={response.status_code}) for path: {self.path}"
+            self._log_and_raise(RetriableAPIError, response, msg)
 
 
     @staticmethod
