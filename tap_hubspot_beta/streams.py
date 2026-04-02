@@ -1623,12 +1623,32 @@ class CommunicationsStream(ObjectSearchV3):
 
 
 class QuotesStream(ObjectSearchV3):
-    """Products Stream"""
+    """Quotes Stream"""
 
     name = "quotes"
     path = "crm/v3/objects/quotes/search"
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/quotes/properties"
+
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
+
+class AssociationQuotesStream(hubspotV4Stream):
+    """Association Base Stream for Quotes"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = QuotesStream
+    name = "associations_quotes"
+
+    schema = association_schema
+
+
+class AssociationQuotesDealsStream(AssociationQuotesStream):
+    """Association Quotes -> Deals Stream"""
+
+    name = "associations_quotes_deals"
+    path = "crm/v4/associations/quotes/deals/batch/read"
 
 
 class CampaignsStream(hubspotV3Stream):
@@ -1656,13 +1676,6 @@ class CampaignsStream(hubspotV3Stream):
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
     ).to_dict()
-
-
-class AssociationQuotesDealsStream(AssociationDealsStream):
-    """Association Quotes -> Deals Stream"""
-
-    name = "associations_quotes_deals"
-    path = "crm/v4/associations/deals/quotes/batch/read"
 
 
 class CurrenciesStream(hubspotV3Stream):
