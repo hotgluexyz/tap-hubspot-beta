@@ -1712,12 +1712,6 @@ class QuotesStream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {"id": record["id"]}
 
-class AssociationQuotesDealsStream(AssociationDealsStream):
-    """Association Quotes -> Deals Stream"""
-
-    name = "associations_quotes_deals"
-    path = "crm/v4/associations/deals/quotes/batch/read"
-
 
 class CurrenciesStream(hubspotV3Stream):
     """Currencies Stream"""
@@ -2060,6 +2054,13 @@ class AssociationQuotesStream(hubspotV4Stream):
     name = "associations_quotes"
 
     schema = association_schema
+
+
+class AssociationQuotesDealsStream(AssociationQuotesStream):
+    """Association Quotes -> Deals Stream"""
+
+    name = "associations_quotes_deals"
+    path = "crm/v4/associations/quotes/deals/batch/read"
 
 
 class AssociationQuotesLineItemsStream(AssociationQuotesStream):
