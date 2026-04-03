@@ -49,21 +49,26 @@ class hubspotV3SearchStream(hubspotStream):
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
-        all_matches = extract_jsonpath(self.next_page_token_jsonpath, response.json())
-        next_page_token = next(iter(all_matches), None)
+        if not self.current_bucket:
+            return None
 
-        if self.current_bucket and self.current_bucket["filter_by_id"]:
-            data = response.json()
-
-            if len(data["results"]) > 0:
-                new_last_record_id = data["results"][-1]["properties"]["hs_object_id"]
-
-                if self.current_bucket["last_record_id"] == new_last_record_id:
-                    self.logger.warning("Bucket pagination loop detected. Skipping to next bucket")
+        # Id-based cursor pagination: ignore HubSpot's numeric offset and advance
+        # the cursor using the last record's hs_object_id instead.
+        results = response.json().get("results", [])
+        if results:
+            new_last_record_id = results[-1]["properties"]["hs_object_id"]
+            if self.current_bucket["last_record_id"] == new_last_record_id:
+                self.logger.warning("Bucket pagination loop detected. Skipping to next bucket")
+                next_page_token = None
+            else:
+                self.current_bucket["last_record_id"] = new_last_record_id
+                # If the page wasn't full we know this is the last page
+                if len(results) < self.page_size:
                     next_page_token = None
                 else:
-                    self.current_bucket["last_record_id"] = new_last_record_id
                     next_page_token = "-1" if previous_token == "0" else "0"
+        else:
+            next_page_token = None
 
         if not next_page_token:
             if self.buckets and len(self.buckets) > 0:
@@ -201,13 +206,7 @@ class hubspotV3SearchStream(hubspotStream):
         self.merge_small_adjacent_buckets(buckets)
 
         for bucket in buckets:
-            filter_by_id = False
-            last_record_id = None
-            if bucket["bucket_size"] > self.max_bucket_size:
-                filter_by_id = True
-                last_record_id = "0"
-            bucket["filter_by_id"] = filter_by_id
-            bucket["last_record_id"] = last_record_id
+            bucket["last_record_id"] = "0"
 
         self.logger.info(f"Total buckets created: {len(buckets)} with total records: {sum([b['bucket_size'] for b in buckets])}")
         self.logger.info(buckets)
@@ -242,29 +241,22 @@ class hubspotV3SearchStream(hubspotStream):
                     "operator": "LTE",
                     "value": self.current_bucket["end_time"]
                 })
-            if self.current_bucket["filter_by_id"]:
-                payload["filters"].append({
-                    "propertyName": "hs_object_id",
-                    "operator": "GT",
-                    "value": self.current_bucket["last_record_id"]
-                })
-            if self.current_bucket["last_record_id"]:
-                payload["sorts"] = [{
-                    "propertyName": "hs_object_id",
-                    "direction": "ASCENDING"
-                }]
+        payload["filters"].append({
+            "propertyName": "hs_object_id",
+            "operator": "GT",
+            "value": self.current_bucket["last_record_id"]
+        })
+        payload["sorts"] = [{
+            "propertyName": "hs_object_id",
+            "direction": "ASCENDING"
+        }]
+        if self.properties_url:
+            if self.name == "deals_association_parent":
+                payload["properties"] = ["id"]
             else:
-                payload["sorts"] = [{
-                    "propertyName": self.replication_key_filter,
-                    "direction": "ASCENDING"
-                }]
-            if self.properties_url:
-                if self.name == "deals_association_parent":
-                    payload["properties"] = ["id"]
-                else:
-                    payload["properties"] = self.selected_properties
-            else:
-                payload["properties"] = []
+                payload["properties"] = self.selected_properties
+        else:
+            payload["properties"] = []
         if context and context.get("object_id_filters"):
             payload["filters"].append({
                 "propertyName": "hs_object_id",
