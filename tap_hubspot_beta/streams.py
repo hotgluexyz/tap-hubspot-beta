@@ -566,15 +566,19 @@ class FormSubmissionsStream(hubspotV1Stream):
     name = "form_submissions"
     records_jsonpath = "$.results[*]"
     parent_stream_type = FormsStream
-    # NOTE: There is no primary_key for this stream
+    primary_keys = ["form_id", "conversionId"]
     replication_key = "submittedAt"
     path = "/form-integrations/v1/submissions/forms/{form_id}"
     properties_url = "properties/v2/form_submissions/properties"
+    page_size = 50
+    next_page_token_jsonpath = "$.paging.next.after"
 
     schema = th.PropertiesList(
         th.Property("form_id", th.StringType),
         th.Property("values", th.CustomType({"type": ["array", "string"]})),
         th.Property("submittedAt", th.DateTimeType),
+        th.Property("conversionId", th.StringType),
+        th.Property("pageUrl", th.StringType)
     ).to_dict()
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
@@ -582,6 +586,24 @@ class FormSubmissionsStream(hubspotV1Stream):
         row = super().post_process(row, context)
         row["form_id"] = context.get("form_id")
         return row
+    
+    def get_next_page_token(self,
+        response: requests.Response,
+        previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """
+        Return a token for identifying next page or None, if no more pages.
+        Follows the pattern in the hubspotV1Stream class to return a dictionary with the 
+        key set to the URL parameter used for paging and the value set to the token for the next page
+        """
+        all_matches = extract_jsonpath(
+            self.next_page_token_jsonpath,
+            response.json()
+        )        
+        after_id = next(iter(all_matches), None)
+        if after_id:
+            return dict(after=after_id)
+        return None
 
 
 class OwnersStream(hubspotV3Stream):
