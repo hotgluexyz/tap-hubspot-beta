@@ -604,7 +604,18 @@ class FormSubmissionsStream(hubspotV1Stream):
         if after_id:
             return dict(after=after_id)
         return None
-
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        params: dict = {}
+        params["limit"] = self.page_size
+        if next_page_token:
+            params.update(next_page_token)
+        params.update(self.additional_prarams)
+        params[self.properties_param] = self.selected_properties
+        return params
 
 class OwnersStream(hubspotV3Stream):
     """Owners Stream"""
