@@ -224,7 +224,14 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
+        try:
+            response = self.request_decorator(self.request_schema)(url, headers=headers)
+        except (FatalAPIError, RetriableAPIError) as e:
+            self.logger.warning(
+                f"Could not fetch dynamic properties for stream '{self.name}' "
+                f"from {self.properties_url}: {e}. Falling back to base properties only."
+            )
+            return th.PropertiesList(*properties).to_dict()
         schema_res = response.json()
         fields = schema_res["results"] if isinstance(schema_res, dict) and "results" in schema_res else schema_res
 
