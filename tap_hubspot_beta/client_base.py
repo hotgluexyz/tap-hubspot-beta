@@ -53,7 +53,9 @@ class hubspotStream(RESTStream):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
-        self.fields_metadata = {v["name"]: v for v in req.json()}
+        meta_res = req.json()
+        fields = meta_res["results"] if isinstance(meta_res, dict) and "results" in meta_res else meta_res
+        self.fields_metadata = {v["name"]: v for v in fields}
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
@@ -223,7 +225,8 @@ class hubspotStream(RESTStream):
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
         response = self.request_decorator(self.request_schema)(url, headers=headers)
-        fields = response.json()
+        schema_res = response.json()
+        fields = schema_res["results"] if isinstance(schema_res, dict) and "results" in schema_res else schema_res
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []
