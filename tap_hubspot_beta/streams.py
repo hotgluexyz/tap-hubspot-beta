@@ -1456,7 +1456,10 @@ class CallsStream(ObjectSearchV3):
     properties_url = "properties/v2/calls/properties"
 
     def get_child_context(self, record: dict, context) -> dict:
-        return {"id": record["id"]}
+        return {
+            "id": record["id"],
+            "transcript_id": record.get("hs_call_transcription_id"),
+        }
 
 
 class TasksStream(ObjectSearchV3):
@@ -3221,3 +3224,66 @@ class InboxesStream(hubspotV3Stream):
     ).to_dict()
 
     primary_keys = ["id"]
+
+class TranscriptsStream(hubspotV3Stream):
+    """Call Transcripts Stream.
+
+    Retrieves a call transcript for each parent call that has an
+    ``hs_call_transcription_id`` property set. See:
+    https://developers.hubspot.com/docs/api-reference/latest/crm/extensions/transcriptions/get-transcript
+    """
+
+    name = "transcripts"
+    path = "crm/extensions/calling/2026-03/transcripts/{transcript_id}"
+    records_jsonpath = "$"
+    parent_stream_type = CallsStream
+    bulk_child = False
+    ignore_parent_replication_keys = True
+    primary_keys = ["id"]
+    replication_key = "updatedAt"
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("engagementId", th.IntegerType),
+        th.Property("transcriptSource", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property(
+            "transcriptUtterances",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("id", th.StringType),
+                    th.Property("text", th.StringType),
+                    th.Property("languageCode", th.StringType),
+                    th.Property("startTimeMillis", th.IntegerType),
+                    th.Property("endTimeMillis", th.IntegerType),
+                    th.Property(
+                        "speaker",
+                        th.ObjectType(
+                            th.Property("id", th.StringType),
+                            th.Property("name", th.StringType),
+                            th.Property("email", th.StringType),
+                        ),
+                    ),
+                )
+            ),
+        ),
+    ).to_dict()
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        # This endpoint does not accept paging / property selection parameters.
+        return {}
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        return None
+
+    def _sync_records(self, context: Optional[dict] = None) -> None:
+        # Skip requesting the transcript when the parent call does not have an
+        # associated transcription id.
+        if not context or not context.get("transcript_id"):
+            return
+        super()._sync_records(context)
