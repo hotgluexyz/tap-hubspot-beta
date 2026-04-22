@@ -1455,6 +1455,16 @@ class CallsStream(ObjectSearchV3):
     replication_key_filter = "hs_lastmodifieddate"
     properties_url = "properties/v2/calls/properties"
 
+    @cached_property
+    def selected_properties(self):
+        selected_properties = super().selected_properties
+        # Ensure hs_call_transcription_id is fetched so the transcripts child
+        # stream can be populated. This property is required to build the
+        # transcripts API request URL.
+        if "hs_call_transcription_id" not in selected_properties:
+            selected_properties.append("hs_call_transcription_id")
+        return selected_properties
+
     def get_child_context(self, record: dict, context) -> dict:
         return {
             "id": record["id"],
