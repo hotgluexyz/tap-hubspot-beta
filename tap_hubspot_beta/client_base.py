@@ -226,7 +226,12 @@ class hubspotStream(RESTStream):
         url = self.url_base + self.properties_url
         try:
             response = self.request_decorator(self.request_schema)(url, headers=headers)
-        except (FatalAPIError, RetriableAPIError) as e:
+        except (
+            FatalAPIError,
+            RetriableAPIError,
+            requests.exceptions.RequestException,
+            urllib3.exceptions.HTTPError,
+        ) as e:
             self.logger.warning(
                 f"Could not fetch dynamic properties for stream '{self.name}' "
                 f"from {self.properties_url}: {e}. Falling back to base properties only."
