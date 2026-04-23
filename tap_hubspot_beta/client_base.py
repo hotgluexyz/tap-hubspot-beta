@@ -65,6 +65,7 @@ class hubspotStream(RESTStream):
         associations = requests.get(
             f"{self.url_base}crm/v4/associations/{from_current_object}/{to_current_object}/labels",
             headers = self.authenticator.auth_headers or {},
+            timeout=self.timeout,
         )
         return associations.json().get("results", [])
     
@@ -438,7 +439,7 @@ class hubspotStream(RESTStream):
         return th.StringType
 
     def request_schema(self, url, headers):
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=self.timeout)
         try:
             self.validate_response(response)
         except InvalidCredentialsError as e:
@@ -729,6 +730,7 @@ class hubspotStream(RESTStream):
                     f"{self.url_base}crm/v3/lists/{list_id}/memberships",
                         headers=self.authenticator.auth_headers or {},
                         params=params,
+                        timeout=self.timeout,
                     )
 
                 if response.status_code != 200:
