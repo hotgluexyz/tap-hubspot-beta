@@ -669,6 +669,7 @@ class DealsPipelinesStream(hubspotV1Stream):
         response = requests.get(
             f"{self.url_base}crm/v3/pipelines/deals/{pipeline_id}/audit",
             headers=self.authenticator.auth_headers or {},
+            timeout=self.timeout
         )
         self.validate_response(response)
         
