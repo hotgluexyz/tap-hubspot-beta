@@ -47,6 +47,7 @@ class hubspotStream(RESTStream):
         req = requests.get(
             f"{self.url_base}{self.properties_url}",
             headers = self.authenticator.auth_headers or {},
+            timeout=self.timeout,
         )
 
         if req.status_code != 200:
@@ -214,7 +215,7 @@ class hubspotStream(RESTStream):
         return th.StringType
 
     def request_schema(self, url, headers):
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=self.timeout)
         self.validate_response(response)
         return response
 
