@@ -438,7 +438,7 @@ class hubspotStream(RESTStream):
         return th.StringType
 
     def request_schema(self, url, headers):
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=self.timeout)
         try:
             self.validate_response(response)
         except InvalidCredentialsError as e:
