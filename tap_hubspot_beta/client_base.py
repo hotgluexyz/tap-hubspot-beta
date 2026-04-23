@@ -53,7 +53,9 @@ class hubspotStream(RESTStream):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
-        self.fields_metadata = {v["name"]: v for v in req.json()}
+        meta_res = req.json()
+        fields = meta_res["results"] if isinstance(meta_res, dict) and "results" in meta_res else meta_res
+        self.fields_metadata = {v["name"]: v for v in fields}
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
@@ -222,8 +224,21 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
-        fields = response.json()
+        try:
+            response = self.request_decorator(self.request_schema)(url, headers=headers)
+        except (
+            FatalAPIError,
+            RetriableAPIError,
+            requests.exceptions.RequestException,
+            urllib3.exceptions.HTTPError,
+        ) as e:
+            self.logger.warning(
+                f"Could not fetch dynamic properties for stream '{self.name}' "
+                f"from {self.properties_url}: {e}. Falling back to base properties only."
+            )
+            return th.PropertiesList(*properties).to_dict()
+        schema_res = response.json()
+        fields = schema_res["results"] if isinstance(schema_res, dict) and "results" in schema_res else schema_res
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []

@@ -1828,6 +1828,15 @@ class CommerceSubscriptionsStream(ObjectSearchV3):
         return {"id": record["id"]}
 
 
+class LeadsStream(ObjectSearchV3):
+    """Leads Stream"""
+
+    name = "leads"
+    path = "crm/v3/objects/leads/search"
+    properties_url = "crm/v3/properties/leads"
+    replication_key_filter = "hs_lastmodifieddate"
+
+
 # Get associations for engagements streams in v3
 
 class AssociationMeetingsStream(hubspotV4Stream):
