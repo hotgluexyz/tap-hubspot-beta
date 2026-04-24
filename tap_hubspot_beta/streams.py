@@ -3248,9 +3248,8 @@ class TranscriptsStream(hubspotV3Stream):
     records_jsonpath = "$"
     parent_stream_type = CallsStream
     bulk_child = False
-    ignore_parent_replication_keys = True
     primary_keys = ["id"]
-    replication_key = "updatedAt"
+    replication_key = None
 
     schema = th.PropertiesList(
         th.Property("id", th.StringType),
