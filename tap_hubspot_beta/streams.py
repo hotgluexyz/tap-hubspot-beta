@@ -1466,9 +1466,17 @@ class CallsStream(ObjectSearchV3):
         return selected_properties
 
     def get_child_context(self, record: dict, context) -> dict:
+        # The /crm/extensions/calling/2026-03/transcripts/{transcriptId} endpoint
+        # only serves transcripts produced through the calling-extensions
+        # integration (hs_call_source="INTEGRATIONS_PLATFORM"). HubSpot-native VOIP
+        # transcripts expose a superficially similar hs_call_transcription_id value
+        # but the endpoint returns a 404 for them, so we don't pass them through.
+        transcript_id = record.get("hs_call_transcription_id")
+        if transcript_id and record.get("hs_call_source") != "INTEGRATIONS_PLATFORM":
+            transcript_id = None
         return {
             "id": record["id"],
-            "transcript_id": record.get("hs_call_transcription_id"),
+            "transcript_id": transcript_id,
         }
 
 
@@ -3289,6 +3297,23 @@ class TranscriptsStream(hubspotV3Stream):
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
         return None
+
+    def validate_response(self, response: requests.Response) -> None:
+        # Calls may have a transcription id that does not resolve to a fetchable
+        # transcript on this endpoint (e.g. legacy ids or transcripts stored as
+        # notes). Treat 404s as "no transcript available" and skip rather than
+        # failing the whole sync.
+        if response.status_code == 404:
+            self.logger.info(
+                f"No transcript found at path: {self.path}. Skipping record."
+            )
+            return
+        super().validate_response(response)
+
+    def parse_response(self, response: requests.Response) -> Iterable[dict]:
+        if response.status_code == 404:
+            return
+        yield from super().parse_response(response)
 
     def _sync_records(self, context: Optional[dict] = None) -> None:
         # Skip requesting the transcript when the parent call does not have an
