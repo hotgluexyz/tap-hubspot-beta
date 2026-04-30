@@ -1182,10 +1182,14 @@ class ContactListData(ContactsV3Stream):
     parent_stream_type = ContactListsStream
     primary_keys = ["vid", "listId"]
     replication_key = None
+    synthetic_properties = ["listId", "vid", "added_at", "portal-id"]
     base_properties = ContactsV3Stream.base_properties + [
         th.Property("listId", th.StringType),
-        th.Property("vid", th.StringType)
+        th.Property("vid", th.StringType),
+        th.Property("added_at", th.DateTimeType),
+        th.Property("portal-id", th.IntegerType)
     ]
+    portal_id = None
 
     def request_memberships(self, list_id, params, context):
         request = requests.Request(
@@ -1199,8 +1203,20 @@ class ContactListData(ContactsV3Stream):
         response = decorated_request(request.prepare(), context)
         return response
 
+    def get_portal_id(self):
+        if self.portal_id:
+            return self.portal_id
+        request = requests.Request(
+            method="GET",
+            url=f"{self.url_base}account-info/v3/details",
+            headers=self.http_headers,
+        )
+        decorated_request = self.request_decorator(self._request)
+        response = decorated_request(request.prepare(), None)
+        self.portal_id = response.json()["portalId"]
+        return self.portal_id
 
-    def get_list_contact_ids(self, list_id):
+    def get_list_contacts(self, list_id):
         after = None
         while True:
             params = {"limit": self.page_size}
@@ -1210,7 +1226,7 @@ class ContactListData(ContactsV3Stream):
             response_json = response.json()
             for record in response_json.get("results", []):
                 if record.get("recordId"):
-                    yield str(record["recordId"])
+                    yield {"id": str(record["recordId"]), "added_at": record.get("membershipTimestamp")}
             after = response_json.get("paging", {}).get("next", {}).get("after")
             if not after:
                 return
@@ -1218,7 +1234,8 @@ class ContactListData(ContactsV3Stream):
     def prepare_request_payload(self, context, next_page_token):
         payload = super().prepare_request_payload(context, next_page_token)
         selected_properties = [
-            prop for prop in self.selected_properties if prop != "listId"
+            prop for prop in self.selected_properties
+            if prop not in self.synthetic_properties
         ]
         if selected_properties:
             payload["properties"] = selected_properties
@@ -1227,26 +1244,36 @@ class ContactListData(ContactsV3Stream):
     def get_records(self, context: Optional[dict]) -> Iterable[dict]:
         previous_filter = self.filter
         try:
-            contact_ids = []
-            for contact_id in self.get_list_contact_ids(context["list_id"]):
-                contact_ids.append(contact_id)
-                if len(contact_ids) == self.page_size:
-                    yield from self.get_contact_records(context, contact_ids)
-                    contact_ids = []
-            if contact_ids:
-                yield from self.get_contact_records(context, contact_ids)
+            contacts = []
+            for contact in self.get_list_contacts(context["list_id"]):
+                contacts.append(contact)
+                if len(contacts) == self.page_size:
+                    yield from self.get_contact_records(context, contacts)
+                    contacts = []
+            if contacts:
+                yield from self.get_contact_records(context, contacts)
         finally:
             self.filter = previous_filter
 
+    def build_contact_to_membership_map(self, contacts: List[dict]) -> Dict[str, dict]:
+        return {contact["id"]: contact["added_at"] for contact in contacts}
+
+
     def get_contact_records(
-        self, context: Optional[dict], contact_ids: List[str]
+        self, context: Optional[dict], contacts: List[dict]
     ) -> Iterable[dict]:
+
+        contact_to_membership_map = self.build_contact_to_membership_map(contacts)
+
+        contact_ids = list(contact_to_membership_map.keys())
+
         self.filter = {
             "propertyName": "hs_object_id",
             "operator": "IN",
             "values": contact_ids,
         }
         for row in self.request_records(context):
+            row["added_at"] = contact_to_membership_map.get(row["id"])
             yield self.post_process(row, context)
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
@@ -1254,6 +1281,7 @@ class ContactListData(ContactsV3Stream):
         row = super().post_process(row, context)
         row["listId"] = context.get("list_id")
         row["vid"] = row.get("id")
+        row["portal-id"] = self.get_portal_id()
         return row
 
 
