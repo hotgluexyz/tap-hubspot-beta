@@ -604,34 +604,6 @@ class OwnersStream(hubspotV3Stream):
     ).to_dict()
 
 
-class ListsStream(hubspotV1Stream):
-    """Lists Stream"""
-
-    name = "lists"
-    path = "contacts/v1/lists"
-    records_jsonpath = "$.lists[*]"
-    primary_keys = ["listId", "updatedAt"]
-    replication_key = "updatedAt"
-    page_size = 250
-
-    schema = th.PropertiesList(
-        th.Property("listId", th.IntegerType),
-        th.Property("name", th.StringType),
-        th.Property("authorId", th.IntegerType),
-        th.Property("portalId", th.IntegerType),
-        th.Property("internalListId", th.IntegerType),
-        th.Property("dynamic", th.BooleanType),
-        th.Property("listType", th.StringType),
-        th.Property("metaData", th.CustomType({"type": ["object", "string"]})),
-        th.Property("filters", th.CustomType({"type": ["array", "string"]})),
-        th.Property("teamIds", th.CustomType({"type": ["array", "string"]})),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("deleteable", th.BooleanType),
-        th.Property("archived", th.BooleanType),
-    ).to_dict()
-
-
 class DealsPipelinesStream(hubspotV1Stream):
     """Deal Pipelines Stream"""
 
@@ -1079,6 +1051,45 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         }
 
 
+class ListsStream(ListSearchV3Stream):
+    """Lists Stream"""
+
+    name = "lists"
+    primary_keys = ["listId", "updatedAt"]
+    replication_key = None
+    page_size = 250
+
+    schema = th.PropertiesList(
+        th.Property("listId", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("authorId", th.IntegerType),
+        th.Property("portalId", th.IntegerType),
+        th.Property("internalListId", th.IntegerType),
+        th.Property("dynamic", th.BooleanType),
+        th.Property("listType", th.StringType),
+        th.Property("metaData", th.CustomType({"type": ["object", "string"]})),
+        th.Property("filters", th.CustomType({"type": ["array", "string"]})),
+        th.Property("teamIds", th.CustomType({"type": ["array", "string"]})),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("deleteable", th.BooleanType),
+        th.Property("archived", th.BooleanType),
+    ).to_dict()
+
+    def legacy_list_id_map(self) -> dict:
+        return self.config.get("legacy_list_id_map", {}) or {}
+
+    def legacy_list_id_map_inverse(self) -> dict:
+        return {str(value): key for key, value in self.legacy_list_id_map.items()}
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        row = super().post_process(row, context)
+        list_id = row["listId"]
+        row["listId"] = self.legacy_list_id_map_inverse.get(list_id, list_id)
+        row["metaData"] = {"size": row.get("additionalProperties", {}).get("hs_list_size")}
+        return row
+
+
 class ContactListsStream(ListSearchV3Stream):
     """Lists Stream"""
 
@@ -1126,6 +1137,8 @@ class ContactListsStream(ListSearchV3Stream):
             properties.append(th.Property(legacy_Id, th.StringType))
 
         for record in records:
+            if record.get("objectTypeId") != '0-1': # 0-1 is the object type id for contacts
+                continue
             list_id = str(record["listId"])
             if list_id in mapped_list_ids:
                 continue
@@ -1146,10 +1159,12 @@ class ContactListsStream(ListSearchV3Stream):
         for prop in selected_properties:
             if prop in ignore:
                 continue
+            legacy_list_id = None
             list_id = prop
             if list_id.startswith(self.V3_LIST_ID_PREFIX):
                 list_id = list_id[len(self.V3_LIST_ID_PREFIX):]
             elif list_id in self.legacy_list_id_map:
+                legacy_list_id = list_id
                 list_id = self.legacy_list_id_map.get(list_id, None)
             else:
                 raise ValueError(f"Invalid list id: {list_id}")
@@ -1166,12 +1181,13 @@ class ContactListsStream(ListSearchV3Stream):
                     f"Could not find a list name for list id '{list_id}'. "
                     "This may indicate a mismatch between selected list ids and available list ids from fetched records."
                 )
-            yield {"id": list_id, "name": list_name}
+            yield {"id": list_id, "name": list_name, "legacy_list_id": legacy_list_id}
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
             "list_id": record["id"],
+            "legacy_list_id": record["legacy_list_id"]
         }
 
 
@@ -1279,7 +1295,7 @@ class ContactListData(ContactsV3Stream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
-        row["listId"] = context.get("list_id")
+        row["listId"] = context.get("legacy_list_id") or context.get("list_id")
         row["vid"] = row.get("id")
         row["portal-id"] = self.get_portal_id()
         return row
