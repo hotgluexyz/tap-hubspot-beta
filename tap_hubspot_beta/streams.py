@@ -14,7 +14,6 @@ from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from pendulum import parse
 
-from tap_hubspot_beta.client_base import hubspotStreamSchema
 from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v3 import hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream
@@ -660,116 +659,6 @@ class DealsPipelinesStream(hubspotV1Stream):
     ).to_dict()
 
 
-class ContactListsStream(hubspotStreamSchema):
-    """Lists Stream"""
-
-    name = "contact_list"
-    parent_stream_type = None
-    records_jsonpath = "$.lists[*]"
-    primary_keys = ["id", "name"]
-    replication_key = None
-    path = "/contacts/v1/lists"
-
-    def _request_records(self, params: dict) -> Iterable[dict]:
-        """Request and return a page of records from the API."""
-        try:
-            records = list(super().request_records(params))
-        except FatalAPIError:
-            logging.info("Couldn't get schema for path: /contacts/v1/lists")
-            return []
-
-        return records
-
-    @cached_property
-    def schema(self) -> dict:
-        """Dynamically detect the json schema for the stream.
-        This is evaluated prior to any records being retrieved.
-        """
-        # Init request session
-        self._requests_session = requests.Session()
-        # Get the data from Hubspot
-        try:
-            records = self._request_records(dict())
-        except FatalAPIError:
-            self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
-            records = []
-
-        properties = []
-        property_names = set()
-        name = "id"
-        property_names.add(name)
-        properties.append(th.Property(name, th.StringType))
-        name = "name"
-        property_names.add(name)
-        properties.append(th.Property(name, th.StringType))
-        # Loop through all records – some objects have different keys
-        for record in records:
-            # Add the new property to our list
-            name = f"{record['listId']}"
-            property_names.add(name)
-            properties.append(th.Property(name, th.StringType))
-
-        # Return the list as a JSON Schema dictionary object
-        property_list = th.PropertiesList(*properties).to_dict()
-
-        return property_list
-
-    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
-        selected_properties = self.selected_properties
-        ignore = ["id", "name"]
-        # Init request session
-        self._requests_session = requests.Session()
-        # Get the data from Hubspot
-        records = list(self.request_records(dict()))
-        for property in selected_properties:
-            if property not in ignore:
-                list_name = next(
-                    (r["name"] for r in records if str(r["listId"]) == property),
-                    None
-                )
-                if list_name is None:
-                    self.logger.error(
-                        f"No matching list name found for list id '{property}' in list ids: {list(map(lambda x: x['listId'], records))}"
-                    )
-                    raise ValueError(
-                        f"Could not find a list name for list id '{property}'. "
-                        "This may indicate a mismatch between selected list ids and available list ids from fetched records."
-                    )
-                yield {"id": property.strip(), "name": list_name}
-
-    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
-        """Return a context dictionary for child streams."""
-        return {
-            "list_id": record["id"],
-        }
-
-
-class ContactListData(hubspotV1SplitUrlStream):
-    """Lists Stream"""
-
-    name = "contact_list_data"
-    records_jsonpath = "$.contacts[*]"
-    parent_stream_type = ContactListsStream
-    primary_keys = ["vid", "listId"]
-    merge_pk = "vid"
-    replication_key = None
-    path = "/contacts/v1/lists/{list_id}/contacts/all"
-    properties_url = "properties/v1/contacts/properties"
-
-    base_properties = [
-        th.Property("vid", th.IntegerType),
-        th.Property("addedAt", th.DateTimeType),
-        th.Property("portal-id", th.IntegerType),
-        th.Property("listId", th.IntegerType),
-    ]
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        super().post_process(row, context)
-        row["listId"] = int(context.get("list_id"))
-        return row
-
-
 class ObjectSearchV3(hubspotV3SearchStream):
     """Base Object Stream"""
 
@@ -1188,6 +1077,184 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         return {
             "list_id": record["listId"],
         }
+
+
+class ContactListsStream(ListSearchV3Stream):
+    """Lists Stream"""
+
+    name = "contact_list"
+    parent_stream_type = None
+    primary_keys = ["id", "name"]
+    replication_key = None
+    V3_LIST_ID_PREFIX = "list_"
+
+    def _request_records(self, params: dict) -> Iterable[dict]:
+        """Request and return a page of records from the API."""
+        try:
+            records = list(super().request_records(params))
+        except FatalAPIError:
+            logging.info("Couldn't get schema for path: crm/v3/lists/search")
+            return []
+
+        return records
+
+    @property
+    def legacy_list_id_map(self) -> dict:
+        return self.config.get("legacy_list_id_map", {}) or {}
+
+    @cached_property
+    def schema(self) -> dict:
+        """Dynamically detect the json schema for the stream.
+        This is evaluated prior to any records being retrieved.
+        """
+        self._requests_session = requests.Session()
+        try:
+            records = self._request_records(dict())
+        except FatalAPIError:
+            self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
+            records = []
+
+        legacy_list_id_map = self.legacy_list_id_map or {}
+        mapped_list_ids = {str(value) for value in legacy_list_id_map.values()}
+        property_names = {"id", "name"}
+        properties = [th.Property("id", th.StringType), th.Property("name", th.StringType)]
+
+        for legacy_Id in self.legacy_list_id_map:
+            if legacy_Id in property_names:
+                continue
+            property_names.add(legacy_Id)
+            properties.append(th.Property(legacy_Id, th.StringType))
+
+        for record in records:
+            list_id = str(record["listId"])
+            if list_id in mapped_list_ids:
+                continue
+            name = f"{self.V3_LIST_ID_PREFIX}{list_id}"
+            if name in property_names:
+                continue
+            property_names.add(name)
+            properties.append(th.Property(name, th.StringType))
+
+        return th.PropertiesList(*properties).to_dict()
+
+    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+        selected_properties = self.selected_properties
+        ignore = ["id", "name"]
+        self._requests_session = requests.Session()
+        records = list(self.request_records(dict()))
+
+        for prop in selected_properties:
+            if prop in ignore:
+                continue
+            list_id = prop
+            if list_id.startswith(self.V3_LIST_ID_PREFIX):
+                list_id = list_id[len(self.V3_LIST_ID_PREFIX):]
+            elif list_id in self.legacy_list_id_map:
+                list_id = self.legacy_list_id_map.get(list_id, None)
+            else:
+                raise ValueError(f"Invalid list id: {list_id}")
+
+            list_name = next(
+                (r["name"] for r in records if str(r["listId"]) == list_id),
+                None
+            )
+            if list_name is None:
+                self.logger.error(
+                    f"No matching list name found for list id '{list_id}' in list ids: {list(map(lambda x: x['listId'], records))}"
+                )
+                raise ValueError(
+                    f"Could not find a list name for list id '{list_id}'. "
+                    "This may indicate a mismatch between selected list ids and available list ids from fetched records."
+                )
+            yield {"id": list_id, "name": list_name}
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "list_id": record["id"],
+        }
+
+
+class ContactListData(ContactsV3Stream):
+    """Lists Stream"""
+
+    name = "contact_list_data"
+    parent_stream_type = ContactListsStream
+    primary_keys = ["vid", "listId"]
+    replication_key = None
+    base_properties = ContactsV3Stream.base_properties + [
+        th.Property("listId", th.StringType),
+        th.Property("vid", th.StringType)
+    ]
+
+    def request_memberships(self, list_id, params, context):
+        request = requests.Request(
+            method="GET",
+            url=f"{self.url_base}crm/v3/lists/{list_id}/memberships",
+            headers=self.http_headers,
+            params=params
+        )
+        decorated_request = self.request_decorator(self._request)
+
+        response = decorated_request(request.prepare(), context)
+        return response
+
+
+    def get_list_contact_ids(self, list_id):
+        after = None
+        while True:
+            params = {"limit": self.page_size}
+            if after:
+                params["after"] = after
+            response = self.request_memberships(list_id, params, {"list_id": list_id})
+            response_json = response.json()
+            for record in response_json.get("results", []):
+                if record.get("recordId"):
+                    yield str(record["recordId"])
+            after = response_json.get("paging", {}).get("next", {}).get("after")
+            if not after:
+                return
+
+    def prepare_request_payload(self, context, next_page_token):
+        payload = super().prepare_request_payload(context, next_page_token)
+        selected_properties = [
+            prop for prop in self.selected_properties if prop != "listId"
+        ]
+        if selected_properties:
+            payload["properties"] = selected_properties
+        return payload
+
+    def get_records(self, context: Optional[dict]) -> Iterable[dict]:
+        previous_filter = self.filter
+        try:
+            contact_ids = []
+            for contact_id in self.get_list_contact_ids(context["list_id"]):
+                contact_ids.append(contact_id)
+                if len(contact_ids) == self.page_size:
+                    yield from self.get_contact_records(context, contact_ids)
+                    contact_ids = []
+            if contact_ids:
+                yield from self.get_contact_records(context, contact_ids)
+        finally:
+            self.filter = previous_filter
+
+    def get_contact_records(
+        self, context: Optional[dict], contact_ids: List[str]
+    ) -> Iterable[dict]:
+        self.filter = {
+            "propertyName": "hs_object_id",
+            "operator": "IN",
+            "values": contact_ids,
+        }
+        for row in self.request_records(context):
+            yield self.post_process(row, context)
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """As needed, append or transform raw data to match expected structure."""
+        row = super().post_process(row, context)
+        row["listId"] = context.get("list_id")
+        row["vid"] = row.get("id")
+        return row
 
 
 class ListMembershipV3Stream(hubspotV3Stream):
