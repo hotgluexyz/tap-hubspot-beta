@@ -1080,12 +1080,12 @@ class ListsStream(ListSearchV3Stream):
         return self.config.get("legacy_list_id_map", {}) or {}
 
     def legacy_list_id_map_inverse(self) -> dict:
-        return {str(value): key for key, value in self.legacy_list_id_map.items()}
+        return {str(value): key for key, value in self.legacy_list_id_map().items()}
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         row = super().post_process(row, context)
         list_id = row["listId"]
-        row["listId"] = self.legacy_list_id_map_inverse.get(list_id, list_id)
+        row["listId"] = self.legacy_list_id_map_inverse().get(list_id, list_id)
         row["metaData"] = {"size": row.get("additionalProperties", {}).get("hs_list_size")}
         return row
 
