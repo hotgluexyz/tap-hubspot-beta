@@ -1060,7 +1060,7 @@ class ListsStream(ListSearchV3Stream):
     page_size = 250
 
     schema = th.PropertiesList(
-        th.Property("listId", th.StringType),
+        th.Property("listId", th.IntegerType),
         th.Property("name", th.StringType),
         th.Property("authorId", th.IntegerType),
         th.Property("portalId", th.IntegerType),
