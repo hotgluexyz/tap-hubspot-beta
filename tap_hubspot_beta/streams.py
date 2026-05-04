@@ -1839,17 +1839,21 @@ class LeadsStream(ObjectSearchV3):
     
     @cached_property
     def has_permission(self) -> bool:
-        try:
-            decorated_request = self.request_decorator(self._request)
-            prepared_request = self.prepare_request(context=None, next_page_token=None)
-            decorated_request(prepared_request, context=None)
-            return True
-        except FatalAPIError as e:
-            if "403 Client Error" in str(e):
-                self.logger.info("Leads stream is not accessible for this token. Skipping stream...")
-                return False
-            # Fallback to True for other errors during sync
-            return True
+        url = f"{self.url_base}{self.path}"
+        headers = self.http_headers
+        headers.update(self.authenticator.auth_headers or {})
+        response = requests.post(
+            url,
+            json={"limit": 1, "filters": []},
+            headers=headers,
+            timeout=self.timeout,
+        )
+        
+        if response.status_code == 403:
+            return False
+
+        # Fallback to True for other errors during sync
+        return True
 
 
 # Get associations for engagements streams in v3
