@@ -222,7 +222,8 @@ class Taphubspot(Tap):
             ]
 
         # Instantiate them
-        return [stream_class(tap=self) for stream_class in stream_types]
+        streams = [stream_class(tap=self) for stream_class in stream_types]
+        return [s for s in streams if not hasattr(s, 'has_permission') or s.has_permission]
 
     @property
     def catalog_dict(self) -> dict:

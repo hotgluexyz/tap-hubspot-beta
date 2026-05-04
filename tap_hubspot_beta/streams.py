@@ -1836,6 +1836,24 @@ class LeadsStream(ObjectSearchV3):
     path = "crm/v3/objects/leads/search"
     properties_url = "crm/v3/properties/leads"
     replication_key_filter = "hs_lastmodifieddate"
+    
+    @cached_property
+    def has_permission(self) -> bool:
+        url = f"{self.url_base}{self.path}"
+        headers = self.http_headers
+        headers.update(self.authenticator.auth_headers or {})
+        response = requests.post(
+            url,
+            json={"limit": 1, "filters": []},
+            headers=headers,
+            timeout=self.timeout,
+        )
+        
+        if response.status_code == 403:
+            return False
+
+        # Fallback to True for other errors during sync
+        return True
 
 
 # Get associations for engagements streams in v3
