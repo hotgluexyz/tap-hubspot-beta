@@ -269,7 +269,7 @@ class hubspotV3SearchStream(hubspotStream):
     @property
     def use_list_filtering(self):
         config_field_name = self._list_id_config_mapping.get(self.name)
-        return config_field_name and config_field_name in self._tap.config
+        return config_field_name and config_field_name in self._tap.config and self._tap.config.get(config_field_name)
 
     def get_paging_windows(self, context):
         if self.use_list_filtering:
