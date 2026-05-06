@@ -1839,21 +1839,98 @@ class LeadsStream(ObjectSearchV3):
     
     @cached_property
     def has_permission(self) -> bool:
-        url = f"{self.url_base}{self.path}"
-        headers = self.http_headers
-        headers.update(self.authenticator.auth_headers or {})
-        response = requests.post(
-            url,
-            json={"limit": 1, "filters": []},
-            headers=headers,
-            timeout=self.timeout,
-        )
-        
-        if response.status_code == 403:
-            return False
+        return _check_leads_permission(self)
 
-        # Fallback to True for other errors during sync
-        return True
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"id": record["id"]}
+
+def _check_leads_permission(stream) -> bool:
+    """Check whether the connected portal has access to the leads object.
+
+    Lead pipelines and associations require Sales Hub Pro/Enterprise; a 403
+    here means the entire leads suite (object, pipelines, associations) is
+    unavailable for this portal.
+    """
+    url = f"{stream.url_base}crm/v3/objects/leads/search"
+    headers = stream.http_headers
+    headers.update(stream.authenticator.auth_headers or {})
+    response = requests.post(
+        url,
+        json={"limit": 1, "filters": []},
+        headers=headers,
+        timeout=stream.timeout,
+    )
+
+    if response.status_code == 403:
+        return False
+
+    # Fallback to True for other errors during sync
+    return True
+
+class LeadHistoryPropertiesStream(hubspotHistoryV3Stream):
+    """Lead History Properties Stream"""
+
+    name = "leads_history_properties"
+    path = "crm/v3/objects/leads/batch/read"
+    properties_url = "crm/v3/properties/leads"
+    parent_stream_type = LeadsStream
+    primary_keys = ["id"]
+
+    base_properties = [
+        th.Property("id", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property("propertiesWithHistory", th.CustomType({"type": ["object", "string"]})),
+    ]
+
+    @cached_property
+    def has_permission(self) -> bool:
+        return _check_leads_permission(self)
+
+
+class LeadPipelinesStream(hubspotV3Stream):
+    """Lead Pipelines Stream"""
+
+    name = "lead_pipelines"
+    path = "crm/v3/pipelines/leads"
+    records_jsonpath = "$.results[*]"
+    primary_keys = ["id"]
+    replication_key = None
+    page_size = 250
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("label", th.StringType),
+        th.Property("displayOrder", th.IntegerType),
+        th.Property("archived", th.BooleanType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archivedAt", th.DateTimeType),
+        th.Property(
+            "stages",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("id", th.StringType),
+                    th.Property("label", th.StringType),
+                    th.Property("displayOrder", th.IntegerType),
+                    th.Property("archived", th.BooleanType),
+                    th.Property("createdAt", th.DateTimeType),
+                    th.Property("updatedAt", th.DateTimeType),
+                    th.Property("archivedAt", th.DateTimeType),
+                    th.Property(
+                        "metadata",
+                        th.CustomType({"type": ["object", "string"]}),
+                    ),
+                )
+            ),
+        ),
+    ).to_dict()
+
+    @cached_property
+    def has_permission(self) -> bool:
+        return _check_leads_permission(self)
 
 
 # Get associations for engagements streams in v3
@@ -2137,3 +2214,38 @@ class AssociationSubscriptionsDealsStream(AssociationSubscriptionsStream):
 
     name = "associations_subscriptions_deals"
     path = "crm/v4/associations/subscriptions/deals/batch/read"
+
+
+class AssociationLeadsStream(hubspotV4Stream):
+    """Association Base Stream for Leads"""
+
+    primary_keys = ["from_id", "to_id"]
+    parent_stream_type = LeadsStream
+    name = "associations_leads"
+
+    schema = association_schema
+
+    @cached_property
+    def has_permission(self) -> bool:
+        return _check_leads_permission(self)
+
+
+class AssociationLeadsContactsStream(AssociationLeadsStream):
+    """Association Leads -> Contacts Stream"""
+
+    name = "associations_leads_contacts"
+    path = "crm/v4/associations/leads/contacts/batch/read"
+
+
+class AssociationLeadsCompaniesStream(AssociationLeadsStream):
+    """Association Leads -> Companies Stream"""
+
+    name = "associations_leads_companies"
+    path = "crm/v4/associations/leads/companies/batch/read"
+
+
+class AssociationLeadsDealsStream(AssociationLeadsStream):
+    """Association Leads -> Deals Stream"""
+
+    name = "associations_leads_deals"
+    path = "crm/v4/associations/leads/deals/batch/read"
