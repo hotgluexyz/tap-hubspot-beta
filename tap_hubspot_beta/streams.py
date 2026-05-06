@@ -158,6 +158,7 @@ class ContactsStream(hubspotV1SplitUrlStream):
 
     name = "contacts"
     path = "contacts/v1/lists/all/contacts/all"
+    #path = "contacts/v1/lists/all/contacts/recent" #to speed up tests - remove before merge
     records_jsonpath = "$.contacts[*]"
     primary_keys = ["vid"]
     replication_key = None
@@ -173,6 +174,10 @@ class ContactsStream(hubspotV1SplitUrlStream):
         th.Property("list-memberships", th.CustomType({"type": ["array", "string"]})),
         th.Property("subscriber_email", th.StringType)
     ]
+
+    #to speed up tests - remove before merge
+    # def get_next_page_token(self, response, previous_token):
+    #     return None
 
     def parse_response(self, response):
         response_content = response.json()
