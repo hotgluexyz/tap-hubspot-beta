@@ -84,20 +84,20 @@ from tap_hubspot_beta.streams import (
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
-# By allowing caller to ignore the stream we are able ensure existing tests continue to pass.
-# 1. Get the environment variable IGNORE_STREAMS and split by commas
-ignore_streams = os.environ.get('IGNORE_STREAMS', '').split(',')
-logging.info(f"IGNORE_STREAMS: "+ os.environ.get('IGNORE_STREAMS', ''))
+# By allowing caller to whitelist the stream we are able ensure existing tests continue to pass.
+# 1. Get the environment variable INCLUDE_STREAMS and split by commas
+include_streams = os.environ.get('INCLUDE_STREAMS', "").split(',') if os.environ.get('INCLUDE_STREAMS', "") else None
+logging.info("INCLUDE_STREAMS: "+ os.environ.get('INCLUDE_STREAMS', ''))
 
-# Function to add multiple streams to STREAM_TYPES if not in ignore_streams
+# Function to add multiple streams to STREAM_TYPES if not in include_streams
 def add_streams(stream_classes):
 
     stream_types = []
     for stream_class in stream_classes:
-        if stream_class.__name__ not in ignore_streams:
+        if include_streams is None or stream_class.__name__ in include_streams:
             stream_types.append(stream_class)
         else:
-            logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
+            logging.info(f"Skipped stream {stream_class.__name__} as it's not in INCLUDE_STREAMS.")
     return stream_types
 
 STREAM_TYPES = add_streams([
@@ -202,7 +202,7 @@ class Taphubspot(Tap):
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
         streams = [stream_class(tap=self) for stream_class in STREAM_TYPES]
-        if 'DiscoverCustomObjectsStream' not in ignore_streams:
+        if include_streams is None or 'DiscoverCustomObjectsStream' in include_streams:
             try:
                 discover_stream = DiscoverCustomObjectsStream(tap=self)
                 for record in discover_stream.get_records(context={}):
