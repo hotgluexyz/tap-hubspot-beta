@@ -49,11 +49,9 @@ jobs:
           cd test-framework
           # Try to switch to the same branch as the current PR
           BRANCH_NAME=${{ github.head_ref }}
-          if git show-ref --verify --quiet refs/heads/$BRANCH_NAME; then
-            echo "Checking out branch $BRANCH_NAME"
+          if git show-ref --verify refs/remotes/origin/$BRANCH_NAME; then
             git checkout $BRANCH_NAME
           else
-            echo "Branch $BRANCH_NAME not found, checking out main"
             git checkout main
           fi
           
