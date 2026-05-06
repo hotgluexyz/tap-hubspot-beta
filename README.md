@@ -41,6 +41,59 @@ tap-hubspot --help
 tap-hubspot --config CONFIG --discover > ./catalog.json
 ```
 
+### Available and Selected Filters
+
+The tap supports Hotglue filter discovery and runtime filter selection:
+
+- `--get-available-filters`: outputs `available-filters.json` metadata used by the UI.
+- `--selected-filters`: applies the selected filters for a sync run.
+
+For `contact_events`, filters are supported on `eventType`.
+
+Get available filters:
+
+```bash
+tap-hubspot-beta \
+  --config config.json \
+  --catalog catalog-selected \
+  --get-available-filters > available-filters.json
+```
+
+Run a sync with selected filters:
+
+```bash
+tap-hubspot-beta \
+  --config config.json \
+  --catalog catalog-selected \
+  --state state.json \
+  --selected-filters selected-filters.json
+```
+
+Example `selected-filters.json`:
+
+```json
+{
+  "filters_version": "1.0.0",
+  "streams": {
+    "contact_events": {
+      "clause_1": {
+        "field": "eventType",
+        "operator": "IN",
+        "value": [
+          "e_visited_page",
+          "e_submitted_form"
+        ]
+      },
+      "clause_2": {
+        "field": "eventType",
+        "operator": "EQ",
+        "value": "e_form_submission_v2"
+      }
+    }
+  }
+}
+```
+
 ## Developer Resources
 
 - [ ] `Developer TODO:` As a first step, scan the entire project for the text "`TODO:`" and complete any recommended steps, deleting the "TODO" references once completed.

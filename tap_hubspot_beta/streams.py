@@ -22,6 +22,7 @@ from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
+from tap_hubspot_beta.selected_filters import parse_contact_events_selected_filters
 import pytz
 from urllib.parse import urlencode, quote
 import json
@@ -403,6 +404,7 @@ class ContactEventsStream(hubspotV3Stream):
     parent_stream_type = ContactsStream
     primary_keys = ["id"]
     replication_key = "occurredAt"
+    _selected_event_types: Optional[List[str]] = None
 
     schema = th.PropertiesList(
         th.Property("objectType", th.StringType),
@@ -420,10 +422,82 @@ class ContactEventsStream(hubspotV3Stream):
         row["contact_id"] = context.get("contact_id")
         return row
 
+    def setup_selected_filters(self) -> None:
+        """Parse selected filters and cache selected event types for this stream."""
+        if not self._selected_filters:
+            return
+        try:
+            self._selected_event_types = parse_contact_events_selected_filters(
+                self._selected_filters
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid selected filters for stream '{self.name}': {exc}"
+            ) from exc
+        self.logger.info(
+            "Contact events selected filters for stream '%s': %s",
+            self.name,
+            self._selected_event_types,
+        )
+
+    def _fetch_event_type_options(self) -> List[str]:
+        """Fetch available event types from HubSpot for available-filters output."""
+        try:
+            prepared_request = self.build_prepared_request(
+                "GET", f"{self.url_base}events/v3/events/event-types"
+            )
+            decorated_request = self.request_decorator(self._request)
+            response = decorated_request(prepared_request, None)
+            event_types = response.json().get("eventTypes", [])
+            if not isinstance(event_types, list):
+                return []
+            unique_event_types = {
+                event_type.strip()
+                for event_type in event_types
+                if isinstance(event_type, str) and event_type.strip()
+            }
+            return sorted(unique_event_types)
+        except Exception as exc:
+            self.logger.warning("Failed to fetch contact event types: %s", exc)
+            return []
+
+    def get_available_filters_metadata(self) -> Dict[str, Any]:
+        event_type_options = self._fetch_event_type_options()
+        return {
+            "supported_operators": ["OR"],
+            "supports_nesting_clauses": False,
+            "filters": {
+                "event_type": {
+                    "label": "Event type",
+                    "supported_operators": ["IN", "EQ"],
+                    "target_field": "eventType",
+                    "options": event_type_options,
+                }
+            },
+        }
+
+    def _build_event_type_contexts(
+        self, context: Optional[dict]
+    ) -> List[Optional[dict]]:
+        if context and context.get("event_type"):
+            return [context]
+
+        selected_event_types = self._selected_event_types or []
+        if not selected_event_types:
+            return [context]
+
+        base_context = copy.copy(context) if context else {}
+        return [
+            {**base_context, "event_type": event_type}
+            for event_type in selected_event_types
+        ]
+
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
+        if context and context.get("event_type"):
+            params["eventType"] = context["event_type"]
 
         child_part = {}
         if self.tap_state.get("bookmarks"):
@@ -451,45 +525,55 @@ class ContactEventsStream(hubspotV3Stream):
             state = self.get_context_state(current_context)
             state_partition_context = self._get_state_partition_context(current_context)
             self._write_starting_replication_value(current_context)
-            child_context: Optional[dict] = (
-                None if current_context is None else copy.copy(current_context)
-            )
-            for record_result in self.get_records(current_context):
-                if isinstance(record_result, tuple):
-                    # Tuple items should be the record and the child context
-                    record, child_context = record_result
-                else:
-                    record = record_result
-                child_context = copy.copy(
-                    self.get_child_context(record=record, context=child_context)
+            seen_record_ids = set()
+            request_contexts = self._build_event_type_contexts(current_context)
+            for request_context in request_contexts:
+                child_context: Optional[dict] = (
+                    None if current_context is None else copy.copy(current_context)
                 )
-                for key, val in (state_partition_context or {}).items():
-                    # Add state context to records if not already present
-                    if key not in record:
-                        record[key] = val
+                for record_result in self.get_records(request_context):
+                    if isinstance(record_result, tuple):
+                        # Tuple items should be the record and the child context
+                        record, child_context = record_result
+                    else:
+                        record = record_result
 
-                # Sync children, except when primary mapper filters out the record
-                if self.stream_maps[0].get_filter_result(record):
-                    self._sync_children(child_context)
-                self._check_max_record_limit(record_count)
-                if selected:
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=current_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
+                    record_id = record.get("id")
+                    if record_id and record_id in seen_record_ids:
+                        continue
+                    if record_id:
+                        seen_record_ids.add(record_id)
 
-                record_count += 1
-                partition_record_count += 1
+                    child_context = copy.copy(
+                        self.get_child_context(record=record, context=child_context)
+                    )
+                    for key, val in (state_partition_context or {}).items():
+                        # Add state context to records if not already present
+                        if key not in record:
+                            record[key] = val
+
+                    # Sync children, except when primary mapper filters out the record
+                    if self.stream_maps[0].get_filter_result(record):
+                        self._sync_children(child_context)
+                    self._check_max_record_limit(record_count)
+                    if selected:
+                        self._write_record_message(record)
+                        try:
+                            self._increment_stream_state(record, context=current_context)
+                        except InvalidStreamSortException as ex:
+                            log_sort_error(
+                                log_fn=self.logger.error,
+                                ex=ex,
+                                record_count=record_count + 1,
+                                partition_record_count=partition_record_count + 1,
+                                current_context=current_context,
+                                state_partition_context=state_partition_context,
+                                stream_name=self.name,
+                            )
+                            raise ex
+
+                    record_count += 1
+                    partition_record_count += 1
             if current_context == state_partition_context:
                 # Finalize per-partition state only if 1:1 with context
                 self.finalize_state_progress_markers(state)
