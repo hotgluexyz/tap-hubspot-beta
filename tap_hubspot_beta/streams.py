@@ -1836,6 +1836,7 @@ class LeadsStream(ObjectSearchV3):
     path = "crm/v3/objects/leads/search"
     properties_url = "crm/v3/properties/leads"
     replication_key_filter = "hs_lastmodifieddate"
+    bulk_child_size = 50 # max allowed in the API
     
     @cached_property
     def has_permission(self) -> bool:
