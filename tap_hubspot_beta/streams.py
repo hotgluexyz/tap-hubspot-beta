@@ -421,7 +421,11 @@ class ContactEventsStream(hubspotV3Stream):
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
         contact_id = context.get("contact_id") if context else None
-        if contact_id is None and row.get("objectType").lower() == "contact":
+        if (
+            contact_id is None
+            and isinstance(row.get("objectType"), str)
+            and row.get("objectType").lower() == "contact"
+        ):
             contact_id = row.get("objectId")
         row["contact_id"] = contact_id
         return row
@@ -431,20 +435,41 @@ class ContactEventsStream(hubspotV3Stream):
         if self._list_membership_contexts is not None:
             return self._list_membership_contexts
 
+        selected_event_types = self._selected_event_types or []
         config_field_name = self._list_id_config_mapping.get(self.name)
         list_ids = self.config.get(config_field_name) if config_field_name else None
-        if not list_ids:
-            self.logger.info(
-                "No configured list ids found in '%s' for '%s'; using broad scope.",
-                self.name,
-                config_field_name or "contacts_list_ids",
-            )
-            self._list_membership_contexts = [{}]
+
+        if list_ids:
+            contact_ids = self.fetch_list_memberships(list_ids)
+            contexts = [{"contact_id": str(contact_id)} for contact_id in contact_ids]
+            if selected_event_types:
+                contexts = [
+                    {**context, "event_type": event_type}
+                    for context in contexts
+                    for event_type in selected_event_types
+                ]
+            self._list_membership_contexts = contexts
             return self._list_membership_contexts
 
-        contact_ids = self.fetch_list_memberships(list_ids)
+        if selected_event_types:
+            self._list_membership_contexts = [
+                {"event_type": event_type} for event_type in selected_event_types
+            ]
+            return self._list_membership_contexts
+
+        self.logger.info(
+            "No configured list ids found in '%s' for '%s'; using broad scope.",
+            self.name,
+            config_field_name or "contacts_list_ids",
+        )
+        available_event_types = self._fetch_event_type_options()
+        if not available_event_types:
+            raise ValueError(
+                "Cannot sync 'contact_events' in broad scope without event types. "
+                "Configure 'contacts_list_ids' or select explicit event_type filters."
+            )
         self._list_membership_contexts = [
-            {"contact_id": str(contact_id)} for contact_id in contact_ids
+            {"event_type": event_type} for event_type in available_event_types
         ]
         return self._list_membership_contexts
 
@@ -502,33 +527,6 @@ class ContactEventsStream(hubspotV3Stream):
             },
         }
 
-    def _build_event_type_contexts(
-        self, context: Optional[dict]
-    ) -> List[Optional[dict]]:
-        if context and context.get("event_type"):
-            return [context]
-
-        selected_event_types = self._selected_event_types or []
-        if selected_event_types:
-            base_context = copy.copy(context) if context else {}
-            return [
-                {**base_context, "event_type": event_type}
-                for event_type in selected_event_types
-            ]
-
-        # For contact-scoped syncs we can query without event type.
-        if context and context.get("contact_id"):
-            return [context]
-
-        # Broad scope must fan out by event type to avoid HubSpot validation errors.
-        available_event_types = self._fetch_event_type_options()
-        if not available_event_types:
-            raise ValueError(
-                "Cannot sync 'contact_events' in broad scope without event types. "
-                "Configure 'contacts_list_ids' or select explicit event_type filters."
-            )
-        return [{"event_type": event_type} for event_type in available_event_types]
-
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -544,99 +542,11 @@ class ContactEventsStream(hubspotV3Stream):
             params["occurredAfter"] = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return params
 
-    def _sync_records(  # noqa C901  # too complex
-        self, context: Optional[dict] = None
-    ) -> None:
-        record_count = 0
-        current_context: Optional[dict]
-        context_list: Optional[List[dict]]
-        context_list = [context] if context is not None else self.partitions
-
-        for current_context in context_list or []:
-            partition_record_count = 0
-            current_context = current_context or None
-            state = self.get_context_state(current_context)
-            state_partition_context = self._get_state_partition_context(current_context)
-            self._write_starting_replication_value(current_context)#??
-            seen_record_ids = set()
-            request_contexts = self._build_event_type_contexts(current_context)
-            for request_context in request_contexts:
-                child_context: Optional[dict] = (
-                    None if current_context is None else copy.copy(current_context)
-                )
-                for record_result in self.get_records(request_context):
-                    if isinstance(record_result, tuple):
-                        # Tuple items should be the record and the child context
-                        record, child_context = record_result
-                    else:
-                        record = record_result
-
-                    if record.get("objectType").lower() != "contact":
-                        continue
-
-                    record_id = record.get("id")
-                    if record_id and record_id in seen_record_ids:
-                        continue
-                    if record_id:
-                        seen_record_ids.add(record_id)
-
-                    child_context = copy.copy(
-                        self.get_child_context(record=record, context=child_context)
-                    )
-                    for key, val in (state_partition_context or {}).items():
-                        # Add state context to records if not already present
-                        if key not in record:
-                            record[key] = val
-
-                    # Sync children, except when primary mapper filters out the record
-                    ##check from here
-                    if self.stream_maps[0].get_filter_result(record):
-                        self._sync_children(child_context)
-                    self._check_max_record_limit(record_count)
-                    
-                    self._write_record_message(record)
-                    try:
-                        self._increment_stream_state(record, context=request_context)
-                    except InvalidStreamSortException as ex:
-                        log_sort_error(
-                            log_fn=self.logger.error,
-                            ex=ex,
-                            record_count=record_count + 1,
-                            partition_record_count=partition_record_count + 1,
-                            current_context=current_context,
-                            state_partition_context=state_partition_context,
-                            stream_name=self.name,
-                        )
-                        raise ex
-
-                    record_count += 1
-                    partition_record_count += 1
-            if current_context == state_partition_context:
-                # Finalize per-partition state only if 1:1 with context
-                self.finalize_state_progress_markers(state)
-        if not context:
-            # Finalize total stream only if we have the full full context.
-            # Otherwise will be finalized by tap at end of sync.
-            self.finalize_state_progress_markers(self.stream_state)
-        self._write_record_count_log(record_count=record_count, context=context)
-
-    schema_writed = False
-
-    def sync_custom(self, context: Optional[dict] = None) -> None:
-        msg = f"Beginning {self.replication_method.lower()} sync of '{self.name}'"
-        if context:
-            msg += f" with context: {context}"
-        self.logger.info(f"{msg}...")
-        # Use a replication signpost, if available
-        signpost = self.get_replication_key_signpost(context)
-        if signpost:
-            self._write_replication_key_signpost(context, signpost)
-        # Send a SCHEMA message to the downstream target:
-        if not self.schema_writed:
-            self._write_schema_message()
-            self.schema_writed = True
-        # Sync the records themselves:
-        self._sync_records(context)
+    def parse_response(self, response: requests.Response):
+        for record in super().parse_response(response):
+            object_type = record.get("objectType")
+            if isinstance(object_type, str) and object_type.lower() == "contact":
+                yield record
 
 
 class EmailEventsStream(hubspotV1Stream):
