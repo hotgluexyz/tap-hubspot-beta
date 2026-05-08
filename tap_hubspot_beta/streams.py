@@ -411,9 +411,9 @@ class ContactEventsStream(hubspotV3Stream):
         th.Property("objectType", th.StringType),
         th.Property("objectId", th.StringType),
         th.Property("eventType", th.StringType),
+        th.Property("contact_id", th.StringType),
         th.Property("occurredAt", th.DateTimeType),
         th.Property("id", th.StringType),
-        th.Property("contact_id", th.IntegerType),
         th.Property("properties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -515,7 +515,6 @@ class ContactEventsStream(hubspotV3Stream):
     def get_available_filters_metadata(self) -> Dict[str, Any]:
         event_type_options = self._fetch_event_type_options()
         return {
-            #"supported_operators": ["OR"],
             "supported_operators": [],
             "supports_nesting_clauses": False,
             "filters": {
