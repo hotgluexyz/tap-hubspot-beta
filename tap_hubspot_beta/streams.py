@@ -515,7 +515,8 @@ class ContactEventsStream(hubspotV3Stream):
     def get_available_filters_metadata(self) -> Dict[str, Any]:
         event_type_options = self._fetch_event_type_options()
         return {
-            "supported_operators": ["OR"],
+            #"supported_operators": ["OR"],
+            "supported_operators": [],
             "supports_nesting_clauses": False,
             "filters": {
                 "event_type": {
