@@ -44,6 +44,7 @@ class hubspotV3SearchStream(hubspotStream):
         start_date = self.get_starting_timestamp(context)
         if start_date:
             return int(start_date.timestamp() * 1000)
+        return int(datetime(2000, 1, 1).timestamp() * 1000)
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
@@ -545,6 +546,7 @@ class hubspotV3SingleSearchStream(hubspotStream):
         start_date = self.get_starting_timestamp(context)
         if start_date:
             return int(start_date.timestamp() * 1000)
+        return int(datetime(2000, 1, 1).timestamp() * 1000)
 
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
