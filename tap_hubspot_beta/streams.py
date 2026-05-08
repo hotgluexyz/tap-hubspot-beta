@@ -411,9 +411,9 @@ class ContactEventsStream(hubspotV3Stream):
         th.Property("objectType", th.StringType),
         th.Property("objectId", th.StringType),
         th.Property("eventType", th.StringType),
-        th.Property("contact_id", th.StringType),
         th.Property("occurredAt", th.DateTimeType),
         th.Property("id", th.StringType),
+        th.Property("contact_id", th.IntegerType),
         th.Property("properties", th.CustomType({"type": ["object", "string"]})),
     ).to_dict()
 
@@ -427,7 +427,7 @@ class ContactEventsStream(hubspotV3Stream):
             and row.get("objectType").lower() == "contact"
         ):
             contact_id = row.get("objectId")
-        row["contact_id"] = contact_id
+        row["contact_id"] = int(contact_id)
         return row
 
     @property
