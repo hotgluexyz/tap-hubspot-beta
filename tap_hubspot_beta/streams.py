@@ -22,7 +22,7 @@ from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
-from tap_hubspot_beta.selected_filters import parse_contact_events_selected_filters
+from tap_hubspot_beta.selected_filters import parse_contact_events_types_filters
 import pytz
 from urllib.parse import urlencode, quote
 import json
@@ -478,7 +478,7 @@ class ContactEventsStream(hubspotV3Stream):
         if not self._selected_filters:
             return
         try:
-            self._selected_event_types = parse_contact_events_selected_filters(
+            self._selected_event_types = parse_contact_events_types_filters(
                 self._selected_filters
             )
         except ValueError as exc:
