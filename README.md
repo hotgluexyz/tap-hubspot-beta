@@ -55,7 +55,7 @@ Get available filters:
 ```bash
 tap-hubspot-beta \
   --config config.json \
-  --catalog catalog-selected \
+  --catalog catalog-selected.json \
   --get-available-filters > available-filters.json
 ```
 
@@ -64,7 +64,7 @@ Run a sync with selected filters:
 ```bash
 tap-hubspot-beta \
   --config config.json \
-  --catalog catalog-selected \
+  --catalog catalog-selected.json \
   --state state.json \
   --selected-filters selected-filters.json
 ```
@@ -83,11 +83,6 @@ Example `selected-filters.json`:
           "e_visited_page",
           "e_submitted_form"
         ]
-      },
-      "clause_2": {
-        "field": "eventType",
-        "operator": "EQ",
-        "value": "e_form_submission_v2"
       }
     }
   }
