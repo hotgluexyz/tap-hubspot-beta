@@ -343,7 +343,7 @@ class hubspotV3SearchStream(hubspotStream):
                 if len(child_context_bulk["ids"])>=self.bulk_child_size:
                     self._sync_children(child_context_bulk)
                     child_context_bulk = {"ids": []}
-                self._check_max_record_limit(record_count)
+
                 if selected:
                     if (record_count - 1) % self.STATE_MSG_FREQUENCY == 0:
                         self._write_state_message()
@@ -367,8 +367,9 @@ class hubspotV3SearchStream(hubspotStream):
 
                 record_count += 1
                 partition_record_count += 1
-            
-            
+                if self._check_max_record_limit(record_count):
+                    return
+
             if len(child_context_bulk):
                 self._sync_children(child_context_bulk)
             if current_context == state_partition_context:
