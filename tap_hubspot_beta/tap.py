@@ -1,9 +1,12 @@
 """hubspot tap class."""
 
 import os
+import json
+from pathlib import Path
 from typing import List, Dict, Type, Any, cast
 import logging
 from hotglue_singer_sdk.helpers._compat import final
+from hotglue_singer_sdk.helpers._util import utc_now
 from hotglue_singer_sdk.helpers.capabilities import AlertingLevel
 from backports.cached_property import cached_property
 from hotglue_singer_sdk import Stream, Tap
@@ -12,7 +15,7 @@ from hotglue_singer_sdk.exceptions import FatalAPIError
 from hotglue_etl_exceptions import InvalidCredentialsError
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
-from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
+from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream, hubspotV3SearchStream
 from tap_hubspot_beta.streams import (
     AccountStream,
     AssociationDealsCompaniesStream,
@@ -295,6 +298,57 @@ class Taphubspot(Tap):
         th.Property("use_legacy_streams", th.BooleanType, default=True),
         th.Property("use_incremental_contact_subscriptions", th.BooleanType, default=False),
     ).to_dict()
+
+    def run_sync(self, catalog: Any = None, state: Any = None) -> None:
+        self.register_streams_from_catalog(catalog)
+        self.register_state_from_file(state)
+        self.emit_estimated_record_totals_snapshot()
+        self.sync_all()
+
+    def emit_estimated_record_totals_snapshot(self) -> None:
+        for stream in self.streams.values():
+            if not isinstance(stream, hubspotV3SearchStream):
+                continue
+
+            if not stream.selected and not stream.has_selected_descendents:
+                continue
+
+            try:
+                starting_time = stream.get_starting_time(context=None)
+                end_time = stream.get_end_time()
+                total_records = stream.get_time_bucket_size(
+                    context=None,
+                    starting_time=starting_time,
+                    end_time=end_time,
+                )
+                self.write_estimated_total_metric(stream.name,total_records)
+            except Exception as exc:
+                self.logger.warning(
+                    f"Failed to collect pre-sync search total for stream '{stream.name}': {exc}"
+                )
+
+    def write_estimated_total_metric(self, stream_name: str, estimated_total: int) -> None:
+        if estimated_total is None:
+            return
+
+        metrics_path = Path("estimated_job_metrics.json")
+        content = {}
+        if metrics_path.is_file():
+            try:
+                content = json.loads(metrics_path.read_text())
+            except Exception:
+                content = {}
+
+
+        metrics = content.setdefault("metrics", {})
+        estimated_totals = metrics.setdefault("estimatedRecordCount", {})
+        estimated_totals[stream_name] = estimated_total
+        content["last_updated"] = utc_now().isoformat()
+
+        tmp_path = metrics_path.with_suffix(f"{metrics_path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(content))
+        tmp_path.replace(metrics_path)
+
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
