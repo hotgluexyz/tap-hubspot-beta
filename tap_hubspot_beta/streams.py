@@ -499,8 +499,6 @@ class ContactEventsStream(hubspotV3Stream):
         decorated_request = self.request_decorator(self._request)
         response = decorated_request(prepared_request, None)
         event_types = response.json().get("eventTypes", [])
-        if not isinstance(event_types, list):
-            return []
         return sorted(event_types)
         
 
