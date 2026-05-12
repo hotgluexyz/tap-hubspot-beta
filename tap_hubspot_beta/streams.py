@@ -493,24 +493,16 @@ class ContactEventsStream(hubspotV3Stream):
 
     def _fetch_event_type_options(self) -> List[str]:
         """Fetch available event types from HubSpot for available-filters output."""
-        try:
-            prepared_request = self.build_prepared_request(
-                "GET", f"{self.url_base}events/v3/events/event-types"
-            )
-            decorated_request = self.request_decorator(self._request)
-            response = decorated_request(prepared_request, None)
-            event_types = response.json().get("eventTypes", [])
-            if not isinstance(event_types, list):
-                return []
-            unique_event_types = {
-                event_type.strip()
-                for event_type in event_types
-                if isinstance(event_type, str) and event_type.strip()
-            }
-            return sorted(unique_event_types)
-        except Exception as exc:
-            self.logger.warning("Failed to fetch contact event types: %s", exc)
+        prepared_request = self.build_prepared_request(
+            "GET", f"{self.url_base}events/v3/events/event-types"
+        )
+        decorated_request = self.request_decorator(self._request)
+        response = decorated_request(prepared_request, None)
+        event_types = response.json().get("eventTypes", [])
+        if not isinstance(event_types, list):
             return []
+        return sorted(event_types)
+        
 
     def get_available_filters_metadata(self) -> Dict[str, Any]:
         event_type_options = self._fetch_event_type_options()
