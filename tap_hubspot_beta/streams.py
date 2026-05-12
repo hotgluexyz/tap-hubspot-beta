@@ -22,7 +22,6 @@ from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
-from tap_hubspot_beta.selected_filters import parse_contact_events_types_filters
 import pytz
 from urllib.parse import urlencode, quote
 import json
@@ -477,14 +476,15 @@ class ContactEventsStream(hubspotV3Stream):
         """Parse selected filters and cache selected event types for this stream."""
         if not self._selected_filters:
             return
-        try:
-            self._selected_event_types = parse_contact_events_types_filters(
-                self._selected_filters
-            )
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid selected filters for stream '{self.name}': {exc}"
-            ) from exc
+        
+        clause = self._selected_filters.get("clause_1", {})
+        operator = clause.get("operator")
+
+        if operator == "EQ":
+            self._selected_event_types = [clause.get("value")]
+        else: # operator == "IN":
+            self._selected_event_types = clause.get("value", [])
+        
         self.logger.info(
             "Contact events selected filters for stream '%s': %s",
             self.name,
