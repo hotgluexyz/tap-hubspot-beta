@@ -23,39 +23,6 @@ def _ordered_clauses(stream_filters: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [c[1] for c in clauses]
 
 
-def _normalize_clause_values(clause: Dict[str, Any]) -> List[str]:
-    try:
-        field = clause["field"]
-        operator = str(clause["operator"]).strip().upper()
-        value = clause["value"]
-    except KeyError as exc:
-        raise ValueError(f"Clause missing required key: {exc}") from exc
-
-    if not isinstance(field, str) or field.strip() not in _SUPPORTED_FIELDS:
-        supported_fields = ", ".join(sorted(_SUPPORTED_FIELDS))
-        raise ValueError(
-            f"Unsupported filter field {field!r}; supported: {supported_fields}."
-        )
-
-    if operator not in _SUPPORTED_OPERATORS:
-        supported_ops = ", ".join(sorted(_SUPPORTED_OPERATORS))
-        raise ValueError(
-            f"Unsupported clause operator {operator!r}; supported: {supported_ops}."
-        )
-
-    if operator == "EQ":
-        if isinstance(value, list):
-            raise ValueError("EQ operator expects a single value, got a list.")
-        normalized = str(value).strip()
-        return [normalized] if normalized else []
-
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-
-    normalized = str(value).strip()
-    return [normalized] if normalized else []
-
-
 def parse_contact_events_types_filters(stream_filters: Dict[str, Any]) -> List[str]:
     """Return normalized selected event types from one stream filter object."""
     clauses = _ordered_clauses(stream_filters)
@@ -63,7 +30,11 @@ def parse_contact_events_types_filters(stream_filters: Dict[str, Any]) -> List[s
     for clause in clauses:
         if clause.get("field") != "eventType":
             continue
-        event_types.extend(_normalize_clause_values(clause))
+        
+        if clause["operator"] == "EQ":
+            event_types.append(str(clause["value"]).strip())
+        else:  # IN
+            event_types.extend(str(item).strip() for item in clause["value"])
 
     # Preserve order while removing duplicates.
     return list(dict.fromkeys(event_types))
