@@ -706,6 +706,7 @@ class hubspotStream(RESTStream):
         "contacts": "contacts_list_ids",
         "contacts_v3": "contacts_list_ids",
         "contacts_v3_archived": "contacts_list_ids",
+        "contact_events": "contacts_list_ids",
         "companies": "companies_list_ids",
         "companies_archived": "companies_list_ids",
         "deals": "deals_list_ids",
