@@ -317,6 +317,7 @@ class Taphubspot(Tap):
                 continue
 
             try:
+                stream._write_starting_replication_value(context=None)
                 starting_time = stream.get_starting_time(context=None)
                 end_time = stream.get_end_time()
                 total_records = stream.get_time_bucket_size(
