@@ -341,11 +341,15 @@ class Taphubspot(Tap):
     def write_estimated_total_metric(self, stream_name: str, estimated_total: int) -> None:
 
         sync_output_dir = self.config.get("hg_sync_output")
-        if sync_output_dir:
-            metrics_path = Path(sync_output_dir).expanduser() / "estimated_job_metrics.json"
-        else:
-            metrics_path = Path("estimated_job_metrics.json")  # local fallback
-        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        metrics_path = Path(sync_output_dir).expanduser() / "estimated_job_metrics.json"
+
+        #metrics_path = os.path.expanduser(os.path.join(sync_output_dir, "job_metrics.json"))
+
+        if not os.path.isfile(metrics_path):
+            Path(metrics_path).touch()
+
+        #metrics_path.parent.mkdir(parents=True, exist_ok=True)
         
         content = {}
         if metrics_path.is_file():
