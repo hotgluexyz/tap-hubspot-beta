@@ -1085,7 +1085,7 @@ class ListsStream(ListSearchV3Stream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         row = super().post_process(row, context)
         list_id = row["listId"]
-        row["listId"] = int(self.legacy_list_id_map_inverse().get(list_id, list_id))
+        row["listId"] = self.legacy_list_id_map_inverse().get(list_id, f"list_{list_id}")
         row["metaData"] = {"size": row.get("additionalProperties", {}).get("hs_list_size")}
         return row
 
