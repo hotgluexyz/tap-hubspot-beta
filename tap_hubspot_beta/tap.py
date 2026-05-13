@@ -306,6 +306,9 @@ class Taphubspot(Tap):
         self.sync_all()
 
     def emit_estimated_record_totals_snapshot(self) -> None:
+        
+        self.logger.info("Starting estimated record totals snapshot.")
+
         for stream in self.streams.values():
             if not isinstance(stream, hubspotV3SearchStream):
                 continue
@@ -321,15 +324,21 @@ class Taphubspot(Tap):
                     starting_time=starting_time,
                     end_time=end_time,
                 )
+                self.logger.info(
+                    "Estimated records for stream='%s': %s",
+                    stream.name,
+                    total_records,
+                )
                 self.write_estimated_total_metric(stream.name,total_records)
             except Exception as exc:
                 self.logger.warning(
                     f"Failed to collect pre-sync search total for stream '{stream.name}': {exc}"
                 )
+        
+        self.logger.info("Finished estimated record totals snapshot.")
+
 
     def write_estimated_total_metric(self, stream_name: str, estimated_total: int) -> None:
-        if estimated_total is None:
-            return
 
         metrics_path = Path("estimated_job_metrics.json")
         content = {}
@@ -344,6 +353,13 @@ class Taphubspot(Tap):
         estimated_totals = metrics.setdefault("estimatedRecordCount", {})
         estimated_totals[stream_name] = estimated_total
         content["last_updated"] = utc_now().isoformat()
+
+        self.logger.info(
+            "Writing estimated total metric stream='%s' total=%s path='%s'",
+            stream_name,
+            estimated_total,
+            metrics_path.resolve(),
+        )
 
         tmp_path = metrics_path.with_suffix(f"{metrics_path.suffix}.tmp")
         tmp_path.write_text(json.dumps(content))
