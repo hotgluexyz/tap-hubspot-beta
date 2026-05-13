@@ -344,12 +344,8 @@ class Taphubspot(Tap):
         
         metrics_path = Path(sync_output_dir).expanduser() / "estimated_job_metrics.json"
 
-        #metrics_path = os.path.expanduser(os.path.join(sync_output_dir, "job_metrics.json"))
-
         if not os.path.isfile(metrics_path):
             Path(metrics_path).touch()
-
-        #metrics_path.parent.mkdir(parents=True, exist_ok=True)
         
         content = {}
         if metrics_path.is_file():
@@ -361,11 +357,6 @@ class Taphubspot(Tap):
 
         estimated_totals = content.setdefault("estimatedRecordCount", {})
         estimated_totals[stream_name] = estimated_total
-
-        # metrics = content.setdefault("metrics", {})
-        # estimated_totals = metrics.setdefault("estimatedRecordCount", {})
-        # estimated_totals[stream_name] = estimated_total
-        # content["last_updated"] = utc_now().isoformat()
 
         self.logger.info(
             "Writing estimated total metric stream='%s' total=%s path='%s'",
