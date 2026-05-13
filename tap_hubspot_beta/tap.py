@@ -349,10 +349,13 @@ class Taphubspot(Tap):
                 content = {}
 
 
-        metrics = content.setdefault("metrics", {})
-        estimated_totals = metrics.setdefault("estimatedRecordCount", {})
+        estimated_totals = content.setdefault("estimatedRecordCount", {})
         estimated_totals[stream_name] = estimated_total
-        content["last_updated"] = utc_now().isoformat()
+
+        # metrics = content.setdefault("metrics", {})
+        # estimated_totals = metrics.setdefault("estimatedRecordCount", {})
+        # estimated_totals[stream_name] = estimated_total
+        # content["last_updated"] = utc_now().isoformat()
 
         self.logger.info(
             "Writing estimated total metric stream='%s' total=%s path='%s'",
