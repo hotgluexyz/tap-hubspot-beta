@@ -70,7 +70,7 @@ class hubspotStream(RESTStream):
             headers = self.authenticator.auth_headers or {},
             timeout=self.timeout,
         )
-        self._audit_daily_remaining(associations)
+        self._check_daily_usage_quota(associations)
         return associations.json().get("results", [])
     
     def get_associations_to_fetch(self) -> list:
@@ -132,7 +132,7 @@ class hubspotStream(RESTStream):
         # GraphQL API - not present on this tap
         return "general"
 
-    def _audit_daily_remaining(self, response):
+    def _check_daily_usage_quota(self, response):
         daily_limit = response.headers.get("X-HubSpot-RateLimit-Daily")
         daily_remaining = response.headers.get("X-HubSpot-RateLimit-Daily-Remaining")
         if isinstance(daily_limit, str):
@@ -163,7 +163,7 @@ class hubspotStream(RESTStream):
             prepared_request.headers.update(authenticator.auth_headers or {})
 
         response = self.requests_session.send(prepared_request, timeout=self.timeout)
-        self._audit_daily_remaining(response)
+        self._check_daily_usage_quota(response)
         if self._LOG_REQUEST_METRICS:
             extra_tags = {}
             if self._LOG_REQUEST_METRIC_URLS:
@@ -476,7 +476,7 @@ class hubspotStream(RESTStream):
 
     def request_schema(self, url, headers):
         response = requests.get(url, headers=headers, timeout=self.timeout)
-        self._audit_daily_remaining(response)
+        self._check_daily_usage_quota(response)
         try:
             self.validate_response(response)
         except InvalidCredentialsError as e:
@@ -770,7 +770,7 @@ class hubspotStream(RESTStream):
                         params=params,
                         timeout=self.timeout,
                     )
-                self._audit_daily_remaining(response)
+                self._check_daily_usage_quota(response)
 
                 if response.status_code != 200:
                     raise Exception(f"Error fetching list memberships for list {list_id}: {response.status_code} {response.text}")

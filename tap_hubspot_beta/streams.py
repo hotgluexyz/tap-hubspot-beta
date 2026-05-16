@@ -745,7 +745,7 @@ class DealsPipelinesStream(hubspotV1Stream):
     def _fetch_pipeline_audit(self, url, headers):
         """Fetch pipeline audit history with centralized retry logic."""
         response = requests.get(url, headers=headers, timeout=self.timeout)
-        self._audit_daily_remaining(response)
+        self._check_daily_usage_quota(response)
         self.validate_response(response)
         return response
 
