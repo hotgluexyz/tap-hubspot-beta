@@ -10,6 +10,7 @@ from hotglue_singer_sdk import Stream, Tap
 from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.exceptions import FatalAPIError
 from hotglue_etl_exceptions import InvalidCredentialsError
+from tap_hubspot_beta.client_base import TapHubspotDailyAPIQuotaExceededException
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
@@ -261,6 +262,9 @@ class Taphubspot(Tap):
 
     name = "tap-hubspot"
     alerting_level = AlertingLevel.ERROR
+    exception_alerting_level_map = {
+        TapHubspotDailyAPIQuotaExceededException: AlertingLevel.NONE,
+    }
     legacy_streams_mapping = {}
     associations_metadata = {}
     custom_objects_streams = set()
@@ -294,6 +298,7 @@ class Taphubspot(Tap):
         th.Property("enable_list_selection", th.BooleanType, default=False),
         th.Property("use_legacy_streams", th.BooleanType, default=True),
         th.Property("use_incremental_contact_subscriptions", th.BooleanType, default=False),
+        th.Property("daily_quota_percent_cap", th.IntegerType, default=80),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:

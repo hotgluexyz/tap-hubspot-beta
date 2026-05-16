@@ -29,6 +29,9 @@ import http.client
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
 
+class TapHubspotDailyAPIQuotaExceededException(Exception):
+    """Raised when HubSpot daily quota usage exceeds configured cap."""
+
 class hubspotStream(RESTStream):
     """hubspot stream class."""
 
@@ -67,6 +70,7 @@ class hubspotStream(RESTStream):
             headers = self.authenticator.auth_headers or {},
             timeout=self.timeout,
         )
+        self._audit_daily_remaining(associations)
         return associations.json().get("results", [])
     
     def get_associations_to_fetch(self) -> list:
@@ -119,6 +123,37 @@ class hubspotStream(RESTStream):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
+    def _classify_limit_policy(self, response) -> str:
+        path_url = response.request.path_url
+        if "associations" in path_url:
+            return "associations"
+        if "crm" in path_url and path_url.endswith("/search"):
+            return "crm_search"
+        # GraphQL API - not present on this tap
+        return "general"
+
+    def _audit_daily_remaining(self, response):
+        daily_limit = response.headers.get("X-HubSpot-RateLimit-Daily")
+        daily_remaining = response.headers.get("X-HubSpot-RateLimit-Daily-Remaining")
+        if isinstance(daily_limit, str):
+            daily_limit = int(daily_limit)
+        if isinstance(daily_remaining, str):
+            daily_remaining = int(daily_remaining)
+        
+        if daily_limit and daily_remaining:
+            daily_used = daily_limit - daily_remaining
+            percent_used = (daily_used / daily_limit) * 100
+            if percent_used >= self.config["daily_quota_percent_cap"]:
+                total_message = ("Hubspot has reported {}/{} ({:3.2f}%) {} API quota usage " +
+                             "across all Hubspot Private Distributed Apps. Terminating " +
+                             "job to avoid exceeding the configured " +
+                             "of {}% of the total quota.").format(daily_used,
+                                                           daily_limit,
+                                                           percent_used,
+                                                           self._classify_limit_policy(response),
+                                                           self.config["daily_quota_percent_cap"])
+            raise TapHubspotDailyAPIQuotaExceededException(total_message)
+
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
     ) -> requests.Response:
@@ -128,6 +163,7 @@ class hubspotStream(RESTStream):
             prepared_request.headers.update(authenticator.auth_headers or {})
 
         response = self.requests_session.send(prepared_request, timeout=self.timeout)
+        self._audit_daily_remaining(response)
         if self._LOG_REQUEST_METRICS:
             extra_tags = {}
             if self._LOG_REQUEST_METRIC_URLS:
@@ -440,6 +476,7 @@ class hubspotStream(RESTStream):
 
     def request_schema(self, url, headers):
         response = requests.get(url, headers=headers, timeout=self.timeout)
+        self._audit_daily_remaining(response)
         try:
             self.validate_response(response)
         except InvalidCredentialsError as e:
@@ -733,6 +770,7 @@ class hubspotStream(RESTStream):
                         params=params,
                         timeout=self.timeout,
                     )
+                self._audit_daily_remaining(response)
 
                 if response.status_code != 200:
                     raise Exception(f"Error fetching list memberships for list {list_id}: {response.status_code} {response.text}")
