@@ -152,7 +152,7 @@ class hubspotStream(RESTStream):
                                                            percent_used,
                                                            self._classify_limit_policy(response),
                                                            self.config["daily_quota_percent_cap"])
-            raise TapHubspotDailyAPIQuotaExceededException(total_message)
+                raise TapHubspotDailyAPIQuotaExceededException(total_message)
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
