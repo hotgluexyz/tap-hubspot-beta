@@ -135,12 +135,9 @@ class hubspotStream(RESTStream):
     def _check_daily_usage_quota(self, response):
         daily_limit = response.headers.get("X-HubSpot-RateLimit-Daily")
         daily_remaining = response.headers.get("X-HubSpot-RateLimit-Daily-Remaining")
-        if isinstance(daily_limit, str):
+        if isinstance(daily_limit, str) and isinstance(daily_remaining, str):
             daily_limit = int(daily_limit)
-        if isinstance(daily_remaining, str):
             daily_remaining = int(daily_remaining)
-        
-        if daily_limit and daily_remaining:
             daily_used = daily_limit - daily_remaining
             percent_used = (daily_used / daily_limit) * 100
             if percent_used >= self.config["daily_quota_percent_cap"]:
