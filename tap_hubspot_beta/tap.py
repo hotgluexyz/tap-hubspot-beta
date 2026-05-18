@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Dict, Type, Any, cast
 import logging
 from hotglue_singer_sdk.helpers._compat import final
-from hotglue_singer_sdk.helpers._util import utc_now
 from hotglue_singer_sdk.helpers.capabilities import AlertingLevel
 from backports.cached_property import cached_property
 from hotglue_singer_sdk import Stream, Tap
