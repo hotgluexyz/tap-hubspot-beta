@@ -301,7 +301,9 @@ class Taphubspot(Tap):
     def run_sync(self, catalog: Any = None, state: Any = None) -> None:
         self.register_streams_from_catalog(catalog)
         self.register_state_from_file(state)
-        self.emit_estimated_record_totals_snapshot()
+        # flag only used for testing purposes
+        if self.config.get("emit_estimated_record_totals_snapshot", True):
+            self.emit_estimated_record_totals_snapshot()
         self.sync_all()
 
     def emit_estimated_record_totals_snapshot(self) -> None:
