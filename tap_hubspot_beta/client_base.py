@@ -143,7 +143,7 @@ class hubspotStream(RESTStream):
             if percent_used >= self.config["daily_quota_percent_cap"]:
                 total_message = ("Hubspot has reported {}/{} ({:3.2f}%) {} API quota usage " +
                              "across all Hubspot Private Distributed Apps. Terminating " +
-                             "job to avoid exceeding the configured " +
+                             "job to avoid exceeding the configured cap " +
                              "of {}% of the total quota.").format(daily_used,
                                                            daily_limit,
                                                            percent_used,
