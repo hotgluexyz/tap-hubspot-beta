@@ -263,6 +263,7 @@ class Taphubspot(Tap):
     name = "tap-hubspot"
     alerting_level = AlertingLevel.ERROR
     exception_alerting_level_map = {
+        InvalidCredentialsError: AlertingLevel.NONE,
         TapHubspotDailyAPIQuotaExceededException: AlertingLevel.NONE,
     }
     legacy_streams_mapping = {}
