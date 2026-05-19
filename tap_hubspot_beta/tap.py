@@ -346,15 +346,10 @@ class Taphubspot(Tap):
         
         metrics_path = Path(sync_output_dir).expanduser() / "estimated_job_metrics.json"
 
-        if not os.path.isfile(metrics_path):
-            Path(metrics_path).touch()
-        
-        content = {}
-        if metrics_path.is_file():
-            try:
-                content = json.loads(metrics_path.read_text())
-            except Exception:
-                content = {}
+        try:
+            content = json.loads(metrics_path.read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            content = {}
 
 
         estimated_totals = content.setdefault("estimatedRecordCount", {})
