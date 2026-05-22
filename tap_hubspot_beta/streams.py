@@ -1295,7 +1295,7 @@ class ContactListData(ContactsV3Stream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
-        row["listId"] = context.get("legacy_list_id") or context.get("list_id")
+        row["listId"] = context.get("legacy_list_id") or "list_" + context.get("list_id")
         row["vid"] = row.get("id")
         row["portal-id"] = self.get_portal_id()
         return row
