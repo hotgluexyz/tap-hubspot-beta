@@ -419,7 +419,7 @@ class ContactEventsStream(hubspotV3Stream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
         row = super().post_process(row, context)
-        contact_id = int(context.get("contact_id")) if context else None
+        contact_id = int(context.get("contact_id")) if context and context.get("contact_id") is not None else None
         if (
             contact_id is None
             and isinstance(row.get("objectType"), str)
