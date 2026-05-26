@@ -1089,6 +1089,14 @@ class ListsStream(ListSearchV3Stream):
         row["metaData"] = {"size": row.get("additionalProperties", {}).get("hs_list_size")}
         return row
 
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        """Prepare the data payload for the REST API request."""
+        payload = super().prepare_request_payload(context, next_page_token)
+        payload["additionalProperties"] = ["hs_list_size"]
+        return payload
+
 
 class ContactListsStream(ListSearchV3Stream):
     """Lists Stream"""
