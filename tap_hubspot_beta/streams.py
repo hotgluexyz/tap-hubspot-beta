@@ -1083,6 +1083,8 @@ class ListsStream(ListSearchV3Stream):
         return {str(value): key for key, value in self.legacy_list_id_map().items()}
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        if row.get("objectTypeId") != "0-1":  # 0-1 = contacts
+            return None
         row = super().post_process(row, context)
         list_id = row["listId"]
         row["listId"] = self.legacy_list_id_map_inverse().get(list_id, f"list_{list_id}")
