@@ -1646,6 +1646,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
     records_jsonpath = "$[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
+    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
@@ -1653,12 +1654,12 @@ class ListMembershipV3Stream(hubspotV3Stream):
     ).to_dict()
 
     def validate_response(self, response: requests.Response):
-        if response.status_code == 400 and "INVALID_OBJECT_TYPE_FOR_LIST" in response.text:
+        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             return
         super().validate_response(response)
     
     def parse_response(self, response: requests.Response):
-        if response.status_code == 400 and "INVALID_OBJECT_TYPE_FOR_LIST" in response.text:
+        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             yield from []
         else:
             yield from super().parse_response(response)
