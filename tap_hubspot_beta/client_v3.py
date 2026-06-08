@@ -148,6 +148,12 @@ class hubspotV3SearchStream(hubspotStream):
 
         return response.get('total')
 
+    def get_estimated_record_count(self, context: Optional[dict] = None) -> Optional[int]:
+        self._write_starting_replication_value(context)
+        starting_time = self.get_starting_time(context)
+        end_time = self.get_end_time()
+        return self.get_time_bucket_size(context, starting_time, end_time)
+
     def split_time_bucket(self, context, starting_time: int, end_time: int):
         buckets = []
         time_diff = end_time - starting_time
