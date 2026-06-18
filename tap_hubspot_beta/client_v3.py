@@ -148,12 +148,12 @@ class hubspotV3SearchStream(hubspotStream):
 
         return response.get('total')
 
-    def get_estimated_record_count(self, context: Optional[dict] = None) -> Optional[int]:
+    def get_estimated_record_count(self) -> Optional[int]:
         if self.config.get("emit_estimated_record_totals_snapshot", True):
-            self._write_starting_replication_value(context)
-            starting_time = self.get_starting_time(context)
+            self._write_starting_replication_value(context=None)
+            starting_time = self.get_starting_time(context=None)
             end_time = self.get_end_time()
-            return self.get_time_bucket_size(context, starting_time, end_time)
+            return self.get_time_bucket_size(None, starting_time, end_time)
         else:
             return None
 
