@@ -425,7 +425,10 @@ class hubspotStream(RESTStream):
             msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
             self._log_and_raise(RetriableAPIError, response, msg)
         
-        elif self.name == "list_membership_v3" and response.status_code == 403 and "You do not have permissions to view object" in response.text:
+        elif (
+            self.name in {"list_membership_v3", "list_membership"}
+            or getattr(self, "original_name", None) == "list_membership_v3"
+        ) and response.status_code == 403 and "You do not have permissions to view object" in response.text:
             curl_command = self.curlify_request(response.request)
             logging.info(f"Response code: {response.status_code}, info: {response.text}")
             logging.info(f"CURL command for failed request: {curl_command}")
