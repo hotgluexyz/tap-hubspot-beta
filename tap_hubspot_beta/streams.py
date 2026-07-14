@@ -1024,6 +1024,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     MEMBERSHIP_MARKER_PROPERTIES = [
         "hs_last_record_added_at",
         "hs_last_record_removed_at",
+        "hs_list_size",
     ]
 
     schema = th.PropertiesList(
@@ -1063,6 +1064,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             "added": self._marker_value(child_context.get("list_last_added_at")),
             "removed": self._marker_value(child_context.get("list_last_removed_at")),
             "updated": self._marker_value(child_context.get("list_updated_at")),
+            "size": self._marker_value(child_context.get("list_size")),
         }
 
     def _list_membership_children(self):
@@ -1071,6 +1073,11 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             child_names = {child.name, getattr(child, "original_name", None)}
             if child_names & membership_names:
                 yield child
+
+    def _is_membership_child(self, child) -> bool:
+        membership_names = {"list_membership_v3", "list_membership"}
+        child_names = {child.name, getattr(child, "original_name", None)}
+        return bool(child_names & membership_names)
 
     def _list_membership_child_selected(self) -> bool:
         for child in self._list_membership_children():
@@ -1090,6 +1097,17 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         for child in self._list_membership_children():
             child._benign_error_on_last_sync = False
 
+    def _sync_children_excluding_membership(self, child_context: dict) -> None:
+        """Run parent child sync for every child except list membership streams."""
+        original_children = self.child_streams
+        self.child_streams = [
+            child for child in original_children if not self._is_membership_child(child)
+        ]
+        try:
+            super()._sync_children(child_context)
+        finally:
+            self.child_streams = original_children
+
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Optional[dict]:
@@ -1106,16 +1124,25 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             "list_last_added_at": additional.get("hs_last_record_added_at"),
             "list_last_removed_at": additional.get("hs_last_record_removed_at"),
             "list_updated_at": record.get("updatedAt"),
+            "list_size": additional.get("hs_list_size"),
         }
 
     def _sync_children(self, child_context: dict) -> None:
-        """Sync list memberships only when add/remove/update markers changed.
+        """Sync list memberships only when add/remove/update/size markers changed.
 
         Markers are stored on lists_v3 state under `list_change_markers`:
-            { list_id: { "added": str|None, "removed": str|None, "updated": str|None } }
+            {
+              list_id: {
+                "added": str|None,
+                "removed": str|None,
+                "updated": str|None,
+                "size": str|None,
+              }
+            }
 
         Applies to both full and incremental parent syncs so unchanged lists
-        do not trigger membership API calls. Markers are only written after a
+        do not trigger membership API calls. Other child streams (e.g.
+        contact_list_data) are always synced. Markers are only written after a
         successful membership sync so benign 400/403 lists keep being retried.
         """
         if not child_context:
@@ -1141,6 +1168,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
                 "Skipping list_membership_v3 for list_id=%s; change markers unchanged",
                 list_id,
             )
+            self._sync_children_excluding_membership(child_context)
             return
 
         self._reset_membership_benign_error_flags()
@@ -1194,14 +1222,6 @@ class ListsStream(ListSearchV3Stream):
         row["listId"] = self.legacy_list_id_map_inverse().get(list_id, f"list_{list_id}")
         row["metaData"] = {"size": row.get("additionalProperties", {}).get("hs_list_size")}
         return row
-
-    def prepare_request_payload(
-        self, context: Optional[dict], next_page_token: Optional[Any]
-    ) -> Optional[dict]:
-        """Prepare the data payload for the REST API request."""
-        payload = super().prepare_request_payload(context, next_page_token)
-        payload["additionalProperties"] = ["hs_list_size", *self.MEMBERSHIP_MARKER_PROPERTIES]
-        return payload
 
 
 class ContactListsStream(ListSearchV3Stream):
