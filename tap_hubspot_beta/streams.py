@@ -1020,7 +1020,11 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     primary_keys = ["listId"]
     path = "crm/v3/lists/search"
     records_jsonpath = "$.lists[*]"
-
+    LIST_CHANGE_MARKERS_STATE_KEY = "list_change_markers"
+    MEMBERSHIP_MARKER_PROPERTIES = [
+        "hs_last_record_added_at",
+        "hs_last_record_removed_at",
+    ]
 
     schema = th.PropertiesList(
         th.Property("listId", th.StringType),
@@ -1045,10 +1049,86 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
 
+    @staticmethod
+    def _marker_value(value: Any) -> Optional[str]:
+        """Serialize marker values so state bookmarks stay JSON-safe and comparable."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
+    def _current_list_change_markers(self, child_context: dict) -> dict:
+        return {
+            "added": self._marker_value(child_context.get("list_last_added_at")),
+            "removed": self._marker_value(child_context.get("list_last_removed_at")),
+            "updated": self._marker_value(child_context.get("list_updated_at")),
+        }
+
+    def _list_membership_child_selected(self) -> bool:
+        membership_names = {"list_membership_v3", "list_membership"}
+        for child in self.child_streams:
+            child_names = {child.name, getattr(child, "original_name", None)}
+            if child_names & membership_names and (
+                child.selected or child.has_selected_descendents
+            ):
+                return True
+        return False
+
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        payload = super().prepare_request_payload(context, next_page_token)
+        payload["additionalProperties"] = list(self.MEMBERSHIP_MARKER_PROPERTIES)
+        return payload
+
     def get_child_context(self, record, context):
+        additional = record.get("additionalProperties") or {}
+        if not isinstance(additional, dict):
+            additional = {}
         return {
             "list_id": record["listId"],
+            "list_last_added_at": additional.get("hs_last_record_added_at"),
+            "list_last_removed_at": additional.get("hs_last_record_removed_at"),
+            "list_updated_at": record.get("updatedAt"),
         }
+
+    def _sync_children(self, child_context: dict) -> None:
+        """Sync list memberships only when add/remove/update markers changed.
+
+        Markers are stored on lists_v3 state under `list_change_markers`:
+            { list_id: { "added": str|None, "removed": str|None, "updated": str|None } }
+
+        Applies to both full and incremental parent syncs so unchanged lists
+        do not trigger membership API calls.
+        """
+        if not child_context:
+            return
+
+        list_id = child_context.get("list_id")
+        if list_id is None:
+            return
+
+        list_id = str(list_id)
+        child_context = {**child_context, "list_id": list_id}
+
+        if not self._list_membership_child_selected():
+            super()._sync_children(child_context)
+            return
+
+        current_markers = self._current_list_change_markers(child_context)
+        markers_by_list = self.stream_state.setdefault(self.LIST_CHANGE_MARKERS_STATE_KEY, {})
+        previous_markers = markers_by_list.get(list_id)
+
+        if previous_markers is not None and previous_markers == current_markers:
+            self.logger.debug(
+                "Skipping list_membership_v3 for list_id=%s; change markers unchanged",
+                list_id,
+            )
+            return
+
+        super()._sync_children(child_context)
+        markers_by_list[list_id] = current_markers
 
 
 class ListsStream(ListSearchV3Stream):
@@ -1096,7 +1176,7 @@ class ListsStream(ListSearchV3Stream):
     ) -> Optional[dict]:
         """Prepare the data payload for the REST API request."""
         payload = super().prepare_request_payload(context, next_page_token)
-        payload["additionalProperties"] = ["hs_list_size"]
+        payload["additionalProperties"] = ["hs_list_size", *self.MEMBERSHIP_MARKER_PROPERTIES]
         return payload
 
 
@@ -1321,6 +1401,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
     records_jsonpath = "$.results[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
+    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
     # NOTE: we have disabled rep key on this stream to properly detect removals
     # replication_key = "membershipTimestamp"
 
@@ -1329,6 +1410,26 @@ class ListMembershipV3Stream(hubspotV3Stream):
         th.Property("membershipTimestamp", th.DateTimeType),
         th.Property("listId", th.StringType),
     ).to_dict()
+
+    def _is_benign_membership_error(self, response: requests.Response) -> bool:
+        if response.status_code == 400 and any(
+            code in response.text for code in self.BENIGN_ERROR_CODES
+        ):
+            return True
+        if response.status_code == 403 and "You do not have permissions to view object" in response.text:
+            return True
+        return False
+
+    def validate_response(self, response: requests.Response):
+        if self._is_benign_membership_error(response):
+            return
+        super().validate_response(response)
+
+    def parse_response(self, response: requests.Response):
+        if self._is_benign_membership_error(response):
+            yield from []
+        else:
+            yield from super().parse_response(response)
 
     def post_process(self, row, context):
         row = super().post_process(row, context)
