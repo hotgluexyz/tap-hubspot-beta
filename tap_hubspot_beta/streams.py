@@ -1303,11 +1303,11 @@ class ContactListsStream(ListSearchV3Stream):
             else:
                 raise ValueError(f"Invalid list id: {list_id}")
 
-            list_name = next(
-                (r["name"] for r in records if str(r["listId"]) == list_id),
-                None
+            matching = next(
+                (r for r in records if str(r["listId"]) == list_id),
+                None,
             )
-            if list_name is None:
+            if matching is None:
                 self.logger.error(
                     f"No matching list name found for list id '{list_id}' in list ids: {list(map(lambda x: x['listId'], records))}"
                 )
@@ -1315,14 +1315,26 @@ class ContactListsStream(ListSearchV3Stream):
                     f"Could not find a list name for list id '{list_id}'. "
                     "This may indicate a mismatch between selected list ids and available list ids from fetched records."
                 )
-            yield {"id": list_id, "name": list_name, "legacy_list_id": legacy_list_id}
+            yield {
+                "id": list_id,
+                "name": matching["name"],
+                "legacy_list_id": legacy_list_id,
+                "updatedAt": matching.get("updatedAt"),
+                "additionalProperties": matching.get("additionalProperties"),
+            }
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
-        return {
-            "list_id": record["id"],
-            "legacy_list_id": record["legacy_list_id"]
-        }
+        child_context = super().get_child_context(
+            {
+                "listId": record["id"],
+                "updatedAt": record.get("updatedAt"),
+                "additionalProperties": record.get("additionalProperties"),
+            },
+            context,
+        )
+        child_context["legacy_list_id"] = record["legacy_list_id"]
+        return child_context
 
 
 class ContactListData(ContactsV3Stream):
