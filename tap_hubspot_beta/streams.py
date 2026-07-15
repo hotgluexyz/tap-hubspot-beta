@@ -1684,7 +1684,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             }
             
         Markers are only written after a
-        successful membership sync so benign 400/403 lists keep being retried.
+        successful membership sync so benign lists keep being retried.
         """
         if not child_context:
             return
@@ -1736,7 +1736,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
     records_jsonpath = "$[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
-    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE", "You do not have permissions to view object"]
+    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
@@ -1745,14 +1745,14 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
 
     def validate_response(self, response: requests.Response):
-        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+        if response.status_code in [400, 403] and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
             self._benign_error_on_last_sync = True
             return
         super().validate_response(response)
 
     def parse_response(self, response: requests.Response):
-        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+        if response.status_code in [400, 403] and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
             self._benign_error_on_last_sync = True
             yield from []
