@@ -1746,12 +1746,14 @@ class ListMembershipV3Stream(hubspotV3Stream):
 
     def validate_response(self, response: requests.Response):
         if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+            self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
             self._benign_error_on_last_sync = True
             return
         super().validate_response(response)
 
     def parse_response(self, response: requests.Response):
         if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+            self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
             self._benign_error_on_last_sync = True
             yield from []
         else:
