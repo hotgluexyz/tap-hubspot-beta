@@ -1736,7 +1736,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
     records_jsonpath = "$[*]"
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
-    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
+    BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE", "You do not have permissions to view object"]
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
