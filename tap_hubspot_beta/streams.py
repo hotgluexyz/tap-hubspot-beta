@@ -1651,47 +1651,6 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             "size": self._marker_value(child_context.get("list_size")),
         }
 
-    def _list_membership_children(self):
-        membership_names = {"list_membership_v3", "list_membership"}
-        for child in self.child_streams:
-            child_names = {child.name, getattr(child, "original_name", None)}
-            if child_names & membership_names:
-                yield child
-
-    def _is_membership_child(self, child) -> bool:
-        membership_names = {"list_membership_v3", "list_membership"}
-        child_names = {child.name, getattr(child, "original_name", None)}
-        return bool(child_names & membership_names)
-
-    def _list_membership_child_selected(self) -> bool:
-        for child in self._list_membership_children():
-            if child.selected or child.has_selected_descendents:
-                return True
-        return False
-
-    def _membership_sync_completed_successfully(self) -> bool:
-        """True unless a selected membership child hit a benign 400/403."""
-        for child in self._list_membership_children():
-            if child.selected or child.has_selected_descendents:
-                if getattr(child, "_benign_error_on_last_sync", False):
-                    return False
-        return True
-
-    def _reset_membership_benign_error_flags(self) -> None:
-        for child in self._list_membership_children():
-            child._benign_error_on_last_sync = False
-
-    def _sync_children_excluding_membership(self, child_context: dict) -> None:
-        """Run parent child sync for every child except list membership streams."""
-        original_children = self.child_streams
-        self.child_streams = [
-            child for child in original_children if not self._is_membership_child(child)
-        ]
-        try:
-            super()._sync_children(child_context)
-        finally:
-            self.child_streams = original_children
-
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Optional[dict]:
@@ -1723,10 +1682,8 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
                 "size": str|None,
               }
             }
-
-        Applies to both full and incremental parent syncs so unchanged lists
-        do not trigger membership API calls. Other child streams (e.g.
-        contact_list_data) are always synced. Markers are only written after a
+            
+        Markers are only written after a
         successful membership sync so benign 400/403 lists keep being retried.
         """
         if not child_context:
@@ -1739,8 +1696,11 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         list_id = str(list_id)
         child_context = {**child_context, "list_id": list_id}
 
-        if not self._list_membership_child_selected():
-            super()._sync_children(child_context)
+        # lists_v3 has a single child: list_membership(_v3)
+        membership_child = self.child_streams[0] if self.child_streams else None
+        if membership_child is None or not (
+            membership_child.selected or membership_child.has_selected_descendents
+        ):
             return
 
         current_markers = self._current_list_change_markers(child_context)
@@ -1752,19 +1712,18 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
                 "Skipping list_membership_v3 for list_id=%s; change markers unchanged",
                 list_id,
             )
-            self._sync_children_excluding_membership(child_context)
             return
 
-        self._reset_membership_benign_error_flags()
+        membership_child._benign_error_on_last_sync = False
         super()._sync_children(child_context)
-        if self._membership_sync_completed_successfully():
-            markers_by_list[list_id] = current_markers
-        else:
+        if getattr(membership_child, "_benign_error_on_last_sync", False):
             self.logger.debug(
                 "Not recording list_change_markers for list_id=%s; "
                 "membership sync hit a benign error",
                 list_id,
             )
+        else:
+            markers_by_list[list_id] = current_markers
 
 
 class ListMembershipV3Stream(hubspotV3Stream):
@@ -1778,31 +1737,21 @@ class ListMembershipV3Stream(hubspotV3Stream):
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
     BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
-    # NOTE: we have disabled rep key on this stream to properly detect removals
-    # replication_key = "membershipTimestamp"
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
         th.Property("list_id", th.StringType),
     ).to_dict()
 
-    def _is_benign_membership_error(self, response: requests.Response) -> bool:
-        if response.status_code == 400 and any(
-            code in response.text for code in self.BENIGN_ERROR_CODES
-        ):
-            return True
-        if response.status_code == 403 and "You do not have permissions to view object" in response.text:
-            return True
-        return False
 
     def validate_response(self, response: requests.Response):
-        if self._is_benign_membership_error(response):
+        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             self._benign_error_on_last_sync = True
             return
         super().validate_response(response)
 
     def parse_response(self, response: requests.Response):
-        if self._is_benign_membership_error(response):
+        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
             self._benign_error_on_last_sync = True
             yield from []
         else:
