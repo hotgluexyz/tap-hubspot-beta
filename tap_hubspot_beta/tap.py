@@ -480,6 +480,17 @@ class Taphubspot(Tap):
         return self._streams
 
 
+    def get_reserved_stream_names(self) -> set:
+        """Return built-in stream names that custom objects must not collide with."""
+        reserved = set()
+        for stream_class in STREAM_TYPES:
+            stream_name = stream_class.name
+            reserved.add(stream_name)
+            # v3 streams are renamed to their base name unless use_legacy_streams is set
+            if stream_name.endswith("_v3") and not self.config.get("use_legacy_streams"):
+                reserved.add(stream_name.split("_v3")[0])
+        return reserved
+
     def generate_stream_class(self, custom_object: Dict[str, Any]) -> hubspotV3Stream:
         # check for required fields to construct the custom objects class
         required_fields = ["id", "name", "objectTypeId", "properties"]
@@ -496,6 +507,15 @@ class Taphubspot(Tap):
         object_type_id = custom_object.get("objectTypeId")
         properties = custom_object.get("properties")
         associations = custom_object.get("associations")
+
+        # Avoid colliding with built-in stream names (e.g. custom object "account")
+        if name in self.get_reserved_stream_names():
+            fully_qualified_name = custom_object.get("fullyQualifiedName")
+            self.logger.info(
+                f"Custom object '{name}' collides with a built-in stream; "
+                f"using fullyQualifiedName '{fully_qualified_name}' as stream name."
+            )
+            name = fully_qualified_name
         
         if custom_object.get("archived", False):
             name = "archived_" + name
