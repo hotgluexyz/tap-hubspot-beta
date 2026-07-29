@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
+from requests.exceptions import SSLError, Timeout, ConnectionError
 from singer_sdk.authenticators import APIAuthenticatorBase
 from singer_sdk.streams import Stream as RESTStreamBase
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
@@ -83,7 +84,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         """
         return self.oauth_request_body
 
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5)
+    @backoff.on_exception(backoff.expo, (RetriableAPIError, SSLError, Timeout, ConnectionError), max_tries=5)
     def request_token(self, endpoint, data):
         token_response = requests.post(endpoint, data)
         if 500 <= token_response.status_code <= 600:
