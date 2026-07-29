@@ -77,6 +77,7 @@ class OAuth2Authenticator(OAuthAuthenticator):
 
     @backoff.on_exception(backoff.expo, (RetriableAPIError, SSLError, Timeout, ConnectionError), max_tries=5)
     def request_token(self, endpoint, data):
+        self.logger.info(f"Requesting token from {endpoint}")
         token_response = requests.post(endpoint, data, timeout=300)
         if 500 <= token_response.status_code <= 600:
             raise RetriableAPIError(f"Auth error: {token_response.text}")
