@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 import requests
+from requests.exceptions import SSLError, Timeout, ConnectionError
 from hotglue_singer_sdk.authenticators import OAuthAuthenticator
 from hotglue_singer_sdk.exceptions import RetriableAPIError
 from hotglue_etl_exceptions import InvalidCredentialsError
@@ -74,8 +75,9 @@ class OAuth2Authenticator(OAuthAuthenticator):
         """
         return self.oauth_request_body
 
-    @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5)
+    @backoff.on_exception(backoff.expo, (RetriableAPIError, SSLError, Timeout, ConnectionError), max_tries=5)
     def request_token(self, endpoint, data):
+        self.logger.info(f"Requesting token from {endpoint}")
         token_response = requests.post(endpoint, data, timeout=300)
         if 500 <= token_response.status_code <= 600:
             raise RetriableAPIError(f"Auth error: {token_response.text}")
