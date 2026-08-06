@@ -1604,7 +1604,12 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     primary_keys = ["listId"]
     path = "crm/v3/lists/search"
     records_jsonpath = "$.lists[*]"
-
+    LIST_CHANGE_MARKERS_STATE_KEY = "list_change_markers"
+    MEMBERSHIP_MARKER_PROPERTIES = [
+        "hs_last_record_added_at",
+        "hs_last_record_removed_at",
+        "hs_list_size",
+    ]
 
     schema = th.PropertiesList(
         th.Property("listId", th.StringType),
@@ -1629,11 +1634,96 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
 
-    def get_child_context(self, record, context):
+    @staticmethod
+    def _marker_value(value: Any) -> Optional[str]:
+        """Serialize marker values so state bookmarks stay JSON-safe and comparable."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
+    def _current_list_change_markers(self, child_context: dict) -> dict:
         return {
-            "list_id": record["listId"],
+            "added": self._marker_value(child_context.get("list_last_added_at")),
+            "removed": self._marker_value(child_context.get("list_last_removed_at")),
+            "updated": self._marker_value(child_context.get("list_updated_at")),
+            "size": self._marker_value(child_context.get("list_size")),
         }
 
+    def prepare_request_payload(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Optional[dict]:
+        payload = super().prepare_request_payload(context, next_page_token)
+        payload["additionalProperties"] = list(self.MEMBERSHIP_MARKER_PROPERTIES)
+        return payload
+
+    def get_child_context(self, record, context):
+        additional = record.get("additionalProperties") or {}
+        if not isinstance(additional, dict):
+            additional = {}
+        return {
+            "list_id": record["listId"],
+            "list_last_added_at": additional.get("hs_last_record_added_at"),
+            "list_last_removed_at": additional.get("hs_last_record_removed_at"),
+            "list_updated_at": record.get("updatedAt"),
+            "list_size": additional.get("hs_list_size"),
+        }
+
+    def _sync_children(self, child_context: dict) -> None:
+        """Sync list memberships only when add/remove/update/size markers changed.
+
+        Markers are stored on lists_v3 state under `list_change_markers`:
+            {
+              list_id: {
+                "added": str|None,
+                "removed": str|None,
+                "updated": str|None,
+                "size": str|None,
+              }
+            }
+            
+        Markers are only written after a
+        successful membership sync so benign lists keep being retried.
+        """
+        if not child_context:
+            return
+
+        list_id = child_context.get("list_id")
+        if list_id is None:
+            return
+
+        list_id = str(list_id)
+        child_context = {**child_context, "list_id": list_id}
+
+        # lists_v3 has a single child: list_membership(_v3)
+        membership_child = self.child_streams[0] if self.child_streams else None
+        if membership_child is None or not (
+            membership_child.selected or membership_child.has_selected_descendents
+        ):
+            return
+
+        current_markers = self._current_list_change_markers(child_context)
+        markers_by_list = self.stream_state.setdefault(self.LIST_CHANGE_MARKERS_STATE_KEY, {})
+        previous_markers = markers_by_list.get(list_id)
+
+        if previous_markers is not None and previous_markers == current_markers:
+            self.logger.debug(
+                "Skipping list_membership_v3 for list_id=%s; change markers unchanged",
+                list_id,
+            )
+            return
+
+        membership_child._benign_error_on_last_sync = False
+        super()._sync_children(child_context)
+        if getattr(membership_child, "_benign_error_on_last_sync", False):
+            self.logger.debug(
+                "Not recording list_change_markers for list_id=%s; "
+                "membership sync hit a benign error",
+                list_id,
+            )
+        else:
+            markers_by_list[list_id] = current_markers
 
 
 class ListMembershipV3Stream(hubspotV3Stream):
@@ -1653,13 +1743,18 @@ class ListMembershipV3Stream(hubspotV3Stream):
         th.Property("list_id", th.StringType),
     ).to_dict()
 
+
     def validate_response(self, response: requests.Response):
-        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+        if response.status_code in [400, 403] and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+            self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
+            self._benign_error_on_last_sync = True
             return
         super().validate_response(response)
-    
+
     def parse_response(self, response: requests.Response):
-        if response.status_code == 400 and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+        if response.status_code in [400, 403] and any(code in response.text for code in self.BENIGN_ERROR_CODES):
+            self.logger.warning(f"Skipping list_membership_v3 benign error: {response.text}")
+            self._benign_error_on_last_sync = True
             yield from []
         else:
             yield from super().parse_response(response)
