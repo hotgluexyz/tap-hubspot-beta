@@ -656,7 +656,7 @@ class FormSubmissionsStream(hubspotV1Stream):
         """Return the partition's replication start time in epoch milliseconds."""
         start_date = self.get_starting_timestamp(context)
         if start_date:
-            return int(start_date.replace(tzinfo=pytz.utc).timestamp() * 1000)
+            return int(start_date.timestamp() * 1000)
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
