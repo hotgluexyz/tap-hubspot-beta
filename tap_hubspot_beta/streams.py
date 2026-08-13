@@ -564,20 +564,69 @@ class FormSubmissionsStream(hubspotV1Stream):
 
     name = "form_submissions"
     records_jsonpath = "$.results[*]"
+    next_page_token_jsonpath = "$.paging.next.after"
     parent_stream_type = FormsStream
-    # NOTE: There is no primary_key for this stream
+    primary_keys = ["conversionId"]
     replication_key = "submittedAt"
     path = "/form-integrations/v1/submissions/forms/{form_id}"
     properties_url = "properties/v2/form_submissions/properties"
+    # this endpoint ignores "count" and caps "limit" at 50 (default 20)
+    page_size = 50
+    starting_time = None
 
     schema = th.PropertiesList(
         th.Property("form_id", th.StringType),
+        th.Property("conversionId", th.StringType),
+        th.Property("pageUrl", th.StringType),
         th.Property("values", th.CustomType({"type": ["array", "string"]})),
         th.Property("submittedAt", th.DateTimeType),
     ).to_dict()
 
+    def get_starting_time(self, context):
+        """Return the partition's replication start time in epoch milliseconds."""
+        start_date = self.get_starting_timestamp(context)
+        if start_date:
+            return int(start_date.replace(tzinfo=pytz.utc).timestamp() * 1000)
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return a dictionary of values to be used in URL parameterization."""
+        # this endpoint pages on an opaque "after" cursor, not the offset the V1
+        # base class builds, so the token is applied here instead of by super()
+        params = super().get_url_params(context, None)
+        params.pop("count", None)
+        params["limit"] = self.page_size
+        if next_page_token:
+            params["after"] = next_page_token
+        # get_next_page_token has no access to the partition context
+        self.starting_time = self.get_starting_time(context)
+        return params
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        response_json = response.json()
+        records = extract_jsonpath(self.records_jsonpath, input=response_json)
+        submitted_at = [
+            row.get("submittedAt") for row in records if row.get("submittedAt")
+        ]
+        # submissions come back newest-first and the endpoint has no "since" filter,
+        # so once the oldest row on this page predates the bookmark we are done
+        oldest = min(submitted_at) if submitted_at else None
+        if self.starting_time and oldest and oldest < self.starting_time:
+            return None
+        all_matches = extract_jsonpath(self.next_page_token_jsonpath, response_json)
+        return next(iter(all_matches), None)
+
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
+        # read submittedAt before super() rewrites it into an ISO 8601 string
+        submitted_at = row.get("submittedAt")
+        starting_time = self.get_starting_time(context)
+        if starting_time and submitted_at and submitted_at < starting_time:
+            return None
         row = super().post_process(row, context)
         row["form_id"] = context.get("form_id")
         return row
