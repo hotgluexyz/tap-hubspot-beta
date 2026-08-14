@@ -664,7 +664,7 @@ class FormSubmissionsStream(hubspotV1PagingStream):
         return dt
 
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:
-        """Client-side occurredAfter: results are newest-first, stop at bookmark."""
+        """Client-side submittedAt: results are newest-first, stop at bookmark."""
         bookmark = self.get_starting_timestamp(context)
         bookmark_dt = self._submitted_at_dt(bookmark) if bookmark else None
         next_page_token: Any = None
