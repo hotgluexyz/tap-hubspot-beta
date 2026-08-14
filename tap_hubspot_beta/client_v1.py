@@ -142,3 +142,26 @@ class hubspotV1SplitUrlStream(hubspotV1Stream):
                 responses.append(decorated_request(req, context))
             return merge_responses(responses, self.merge_pk, self.records_jsonpath)
         return decorated_request(prepared_request, context)
+    
+class hubspotV1PagingStream(hubspotV1Stream):
+    """hubspot stream class with paging."""
+
+    next_page_token_jsonpath = "$.paging.next.after"
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return paging.next.after; this endpoint does not use has-more/offset."""
+        all_matches = extract_jsonpath(
+            self.next_page_token_jsonpath, response.json()
+        )
+        return next(iter(all_matches), None)
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Use limit/after; `count` and offset are ignored by this endpoint."""
+        params: dict = {"limit": self.page_size}
+        if next_page_token:
+            params["after"] = next_page_token
+        return params

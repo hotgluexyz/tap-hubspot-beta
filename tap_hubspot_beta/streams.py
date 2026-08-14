@@ -18,7 +18,7 @@ from hotglue_singer_sdk import typing as th
 from pendulum import parse
 
 from tap_hubspot_beta.client_base import hubspotStreamSchema
-from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream
+from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream, hubspotV1PagingStream
 from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
@@ -629,22 +629,76 @@ class FormsStream(hubspotV3Stream):
         }
 
 
-class FormSubmissionsStream(hubspotV1Stream):
+class FormSubmissionsStream(hubspotV1PagingStream):
     """FormSubmissions Stream"""
 
     name = "form_submissions"
     records_jsonpath = "$.results[*]"
     parent_stream_type = FormsStream
-    # NOTE: There is no primary_key for this stream
+    primary_keys = ["conversionId"]
     replication_key = "submittedAt"
     path = "/form-integrations/v1/submissions/forms/{form_id}"
     properties_url = "properties/v2/form_submissions/properties"
+    page_size = 50
+    persist_state_partitions = True
 
     schema = th.PropertiesList(
         th.Property("form_id", th.StringType),
+        th.Property("conversionId", th.StringType),
+        th.Property("pageUrl", th.StringType),
         th.Property("values", th.CustomType({"type": ["array", "string"]})),
         th.Property("submittedAt", th.DateTimeType),
     ).to_dict()
+
+    def _submitted_at_dt(self, value):
+        """Normalize API ms timestamps and datetimes for bookmark comparison."""
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            try:
+                dt = parse(value)
+            except Exception:
+                dt = datetime.fromtimestamp(int(value) / 1000, tz=pytz.UTC)
+        if getattr(dt, "tzinfo", None) is not None:
+            return dt.astimezone(pytz.UTC).replace(tzinfo=None)
+        return dt
+
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Client-side submittedAt: results are newest-first, stop at bookmark."""
+        bookmark = self.get_starting_timestamp(context)
+        bookmark_dt = self._submitted_at_dt(bookmark) if bookmark else None
+        next_page_token: Any = None
+        finished = False
+        decorated_request = self.request_decorator(self._request)
+
+        while not finished:
+            prepared_request = self.prepare_request(
+                context, next_page_token=next_page_token
+            )
+            resp = decorated_request(prepared_request, context)
+
+            parsed_response = list(self.parse_response(resp))
+            parsed_response = self.get_associations_data(parsed_response)
+
+            for row in parsed_response:
+                submitted_at = row.get(self.replication_key)
+                if bookmark_dt is not None and submitted_at is not None:
+                    # Exclusive cutoff (same idea as occurredAfter): do not re-emit
+                    # the last bookmark row, and stop paging (newest-first).
+                    if self._submitted_at_dt(submitted_at) <= bookmark_dt:
+                        return
+                yield row
+
+            previous_token = copy.deepcopy(next_page_token)
+            next_page_token = self.get_next_page_token(
+                response=resp, previous_token=previous_token
+            )
+            if next_page_token and next_page_token == previous_token:
+                raise RuntimeError(
+                    f"Loop detected in pagination. "
+                    f"Pagination token {next_page_token} is identical to prior token."
+                )
+            finished = not next_page_token
 
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure."""
