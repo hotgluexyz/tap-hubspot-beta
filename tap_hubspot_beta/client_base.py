@@ -48,6 +48,8 @@ class hubspotStream(RESTStream):
     bulk_child_size = 1000
     is_first_sync = False
     visible_in_catalog = True
+    # When True, STATE keeps per-context partitions (e.g. form_id bookmarks).
+    persist_state_partitions = False
     _list_record_ids = set()
     _list_record_ids_for_stream = ""
 
@@ -688,9 +690,16 @@ class hubspotStream(RESTStream):
     def _write_state_message(self) -> None:
         """Write out a STATE message with the latest state."""
         tap_state = self.tap_state
+        persist_streams = {
+            name
+            for name, stream in self._tap.streams.items()
+            if getattr(stream, "persist_state_partitions", False)
+        }
 
         if tap_state and tap_state.get("bookmarks"):
             for stream_name in tap_state.get("bookmarks").keys():
+                if stream_name in persist_streams:
+                    continue
                 if tap_state["bookmarks"][stream_name].get("partitions"):
                     tap_state["bookmarks"][stream_name]["partitions"] = []
 
