@@ -641,6 +641,17 @@ class FormsStream(hubspotV3Stream):
         return reference_data
 
 
+def _parse_selected_form_id(value: Any) -> Optional[str]:
+    """Extract form UUID from a bare id or a ``{name} ({id})`` filter label."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    _prefix, sep, tail = text.rpartition(" (")
+    if sep and tail.endswith(")"):
+        return tail[:-1]
+    return text
+
+
 class FormSubmissionsStream(hubspotV1PagingStream):
     """FormSubmissions Stream"""
 
@@ -676,7 +687,11 @@ class FormSubmissionsStream(hubspotV1PagingStream):
         else:  # operator == "IN":
             values = clause.get("value", [])
 
-        self._selected_form_ids = [value.split(" (")[-1].split(")")[0] for value in values if value is not None]
+        self._selected_form_ids = frozenset(
+            form_id
+            for value in values
+            if (form_id := _parse_selected_form_id(value)) is not None
+        )
 
         self.logger.info(
             "Form submissions selected filters for stream '%s': %s",
