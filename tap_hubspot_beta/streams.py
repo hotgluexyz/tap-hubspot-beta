@@ -2,7 +2,7 @@
 from abc import ABC
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 import copy
 
 from hotglue_singer_sdk.exceptions import InvalidStreamSortException
@@ -628,6 +628,18 @@ class FormsStream(hubspotV3Stream):
             "form_id": record["id"],
         }
 
+    def get_available_filters_reference_data(
+        self, fields_to_include: Set[str]
+    ) -> List[Dict[str, Any]]:
+        """Include form name alongside id for filter option labels."""
+        fields = set(fields_to_include)
+        if "id" in fields:
+            fields.add("name")
+        reference_data = super().get_available_filters_reference_data(fields)
+        for record in reference_data:
+            record["name (id)"] = f"{record['name']} ({record['id']})"
+        return reference_data
+
 
 class FormSubmissionsStream(hubspotV1PagingStream):
     """FormSubmissions Stream"""
@@ -641,6 +653,7 @@ class FormSubmissionsStream(hubspotV1PagingStream):
     properties_url = "properties/v2/form_submissions/properties"
     page_size = 50
     persist_state_partitions = True
+    _selected_form_ids: Optional[frozenset] = None
 
     schema = th.PropertiesList(
         th.Property("form_id", th.StringType),
@@ -649,6 +662,51 @@ class FormSubmissionsStream(hubspotV1PagingStream):
         th.Property("values", th.CustomType({"type": ["array", "string"]})),
         th.Property("submittedAt", th.DateTimeType),
     ).to_dict()
+
+    def setup_selected_filters(self) -> None:
+        """Parse selected filters and cache allowed form ids for this stream."""
+        if not self._selected_filters:
+            return
+
+        clause = self._selected_filters.get("clause_1", {})
+        operator = clause.get("operator")
+
+        if operator == "EQ":
+            values = [clause.get("value")]
+        else:  # operator == "IN":
+            values = clause.get("value", [])
+
+        self._selected_form_ids = [value.split(" (")[-1].split(")")[0] for value in values if value is not None]
+
+        self.logger.info(
+            "Form submissions selected filters for stream '%s': %s",
+            self.name,
+            sorted(self._selected_form_ids),
+        )
+
+    def get_available_filters_metadata(self) -> Dict[str, Any]:
+        return {
+            "supported_operators": [],
+            "supports_nesting_clauses": False,
+            "filters": {
+                "form_id": {
+                    "label": "Form",
+                    "supported_operators": ["IN", "EQ"],
+                    "target_field": "form_id",
+                    "options": "reference_data.forms.name (id)",
+                }
+            },
+        }
+
+    def sync(self, context: Optional[dict] = None) -> None:
+        """Skip child partitions that are not in the selected form_id filter."""
+        if (
+            self._selected_form_ids is not None
+            and context
+            and context.get("form_id") not in self._selected_form_ids
+        ):
+            return
+        super().sync(context)
 
     def _submitted_at_dt(self, value):
         """Normalize API ms timestamps and datetimes for bookmark comparison."""
