@@ -632,9 +632,7 @@ class FormsStream(hubspotV3Stream):
         self, fields_to_include: Set[str]
     ) -> List[Dict[str, Any]]:
         """Include form name alongside id for filter option labels."""
-        fields = set(fields_to_include)
-        if "id" in fields:
-            fields.add("name")
+        fields = ["id", "name"]
         reference_data = super().get_available_filters_reference_data(fields)
         for record in reference_data:
             record["name (id)"] = f"{record['name']} ({record['id']})"
