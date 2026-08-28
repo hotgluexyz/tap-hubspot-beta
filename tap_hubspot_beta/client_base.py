@@ -8,11 +8,11 @@ import backoff
 from copy import deepcopy
 from typing import Any, Dict, Optional, cast, List
 from backports.cached_property import cached_property
-from singer_sdk import typing as th
-from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
-from singer_sdk.streams import RESTStream
-from singer_sdk.mapper import  SameRecordTransform, StreamMap
-from singer_sdk.helpers._flattening import get_flattening_options
+from hotglue_singer_sdk import typing as th
+from hotglue_singer_sdk.exceptions import FatalAPIError, RetriableAPIError
+from hotglue_singer_sdk.streams import RESTStream
+from hotglue_singer_sdk.mapper import  SameRecordTransform, StreamMap
+from hotglue_singer_sdk.helpers._flattening import get_flattening_options
 
 from pendulum import parse
 
