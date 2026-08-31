@@ -4,9 +4,9 @@ from typing import Any, Dict, List
 import os
 import logging
 
-from singer_sdk import Stream, Tap
-from singer_sdk import typing as th
-from singer_sdk.exceptions import FatalAPIError
+from hotglue_singer_sdk import Stream, Tap
+from hotglue_singer_sdk import typing as th
+from hotglue_singer_sdk.exceptions import FatalAPIError
 
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
 from tap_hubspot_beta.streams import (

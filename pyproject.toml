@@ -10,9 +10,9 @@ keywords = [
 license = "Apache 2.0"
 
 [tool.poetry.dependencies]
-python = "<3.11,>=3.7.1"
+python = ">=3.7,<3.15"
 requests = "^2.25.1"
-singer-sdk = "^0.4.4"
+hotglue-singer-sdk = "^1.0.41"
 "backports.cached-property" = "^1.0.1"
 curlify = "^2.2.1"
 
@@ -32,7 +32,7 @@ multi_line_output = 3 # Vertical Hanging Indent
 src_paths = "tap_hubspot_beta"
 
 [build-system]
-requires = ["poetry-core==1.0.8"]
+requires = ["poetry-core>=1.0.8,<2.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]

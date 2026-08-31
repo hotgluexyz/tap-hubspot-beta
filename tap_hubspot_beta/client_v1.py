@@ -7,11 +7,11 @@ from typing import Any, Dict, Optional
 import copy
 import urllib
 import requests
-from singer_sdk.helpers.jsonpath import extract_jsonpath
+from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 from tap_hubspot_beta.utils import merge_responses
 from tap_hubspot_beta.client_base import hubspotStream
 import backoff
-from singer_sdk.exceptions import RetriableAPIError
+from hotglue_singer_sdk.exceptions import RetriableAPIError
 
 class hubspotV1Stream(hubspotStream):
     """hubspot stream class."""
