@@ -1868,6 +1868,9 @@ class ListMembershipV3Stream(hubspotV3Stream):
         th.Property("list_id", th.StringType),
     ).to_dict()
 
+    def backoff_max_tries(self) -> int:
+        # Erroneous rate limits have been observed on this endpoint
+        return 10
 
     def validate_response(self, response: requests.Response):
         if response.status_code in [400, 403] and any(code in response.text for code in self.BENIGN_ERROR_CODES):
