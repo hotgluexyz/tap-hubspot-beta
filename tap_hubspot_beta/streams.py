@@ -1768,7 +1768,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
                     "label": "List",
                     "supported_operators": ["IN", "EQ"],
                     "target_field": "listId",
-                    "options": "reference_data.lists_v3.name (listId)",
+                    "options": f"reference_data.{self.name}.name (listId)",
                 }
             },
         }
@@ -1927,6 +1927,11 @@ class ListMembershipV3Stream(hubspotV3Stream):
         return ids_from_config(self.config.get("membership_list_ids"))
 
     def get_available_filters_metadata(self) -> Dict[str, Any]:
+        lists_name = self._tap.legacy_streams_mapping.get(
+            self.parent_stream_type.name,  # key: "lists_v3"
+            self.parent_stream_type.name,  # default when mapping empty
+        )
+        # -> "lists_v3" (legacy true) or "lists" (legacy false)
         return {
             "supported_operators": [],
             "supports_nesting_clauses": False,
@@ -1935,7 +1940,7 @@ class ListMembershipV3Stream(hubspotV3Stream):
                     "label": "List",
                     "supported_operators": ["IN", "EQ"],
                     "target_field": "list_id",
-                    "options": "reference_data.lists_v3.name (listId)",
+                    "options": f"reference_data.{lists_name}.name (listId)",
                 }
             },
         }
