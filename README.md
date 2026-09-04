@@ -48,7 +48,12 @@ The tap supports Hotglue filter discovery and runtime filter selection:
 - `--get-available-filters`: outputs `available-filters.json` metadata used by the UI.
 - `--selected-filters`: applies the selected filters for a sync run.
 
-For `contact_events`, filters are supported on `eventType`.
+Supported stream filters:
+
+- `contact_events`: `eventType` (`IN` / `EQ`)
+- `form_submissions`: `form_id` (`IN` / `EQ`)
+- `lists_v3`: `list_ids` (`IN` / `EQ`) — scopes which lists are fetched
+- `list_membership_v3`: `membership_list_ids` (`IN` / `EQ`) — scopes which lists get membership sync
 
 Get available filters:
 
@@ -83,6 +88,20 @@ Example `selected-filters.json`:
           "e_visited_page",
           "e_submitted_form"
         ]
+      }
+    },
+    "lists_v3": {
+      "clause_1": {
+        "field": "list_ids",
+        "operator": "IN",
+        "value": ["9", "10"]
+      }
+    },
+    "list_membership_v3": {
+      "clause_1": {
+        "field": "membership_list_ids",
+        "operator": "EQ",
+        "value": "9"
       }
     }
   }

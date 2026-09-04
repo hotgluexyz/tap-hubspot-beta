@@ -22,6 +22,7 @@ from tap_hubspot_beta.client_v1 import hubspotV1Stream, hubspotV1SplitUrlStream,
 from tap_hubspot_beta.client_v4 import hubspotV4Stream, association_schema
 from tap_hubspot_beta.client_v2 import hubspotV2Stream
 from tap_hubspot_beta.client_v3 import hubspotHistoryV3Stream, hubspotV3SearchStream, hubspotV3Stream, hubspotV3SingleSearchStream, AssociationsV3ParentStream
+from tap_hubspot_beta.utils import ids_from_config, ids_from_filter_clause
 import pytz
 from urllib.parse import urlencode, quote
 import json
@@ -639,17 +640,6 @@ class FormsStream(hubspotV3Stream):
         return reference_data
 
 
-def _parse_selected_form_id(value: Any) -> Optional[str]:
-    """Extract form UUID from a bare id or a ``{name} ({id})`` filter label."""
-    if value is None:
-        return None
-    text = str(value).strip()
-    _prefix, sep, tail = text.rpartition(" (")
-    if sep and tail.endswith(")"):
-        return tail[:-1]
-    return text
-
-
 class FormSubmissionsStream(hubspotV1PagingStream):
     """FormSubmissions Stream"""
 
@@ -677,18 +667,8 @@ class FormSubmissionsStream(hubspotV1PagingStream):
         if not self._selected_filters:
             return
 
-        clause = self._selected_filters.get("clause_1", {})
-        operator = clause.get("operator")
-
-        if operator == "EQ":
-            values = [clause.get("value")]
-        else:  # operator == "IN":
-            values = clause.get("value", [])
-
-        self._selected_form_ids = frozenset(
-            form_id
-            for value in values
-            if (form_id := _parse_selected_form_id(value)) is not None
+        self._selected_form_ids = ids_from_filter_clause(
+            self._selected_filters.get("clause_1", {})
         )
 
         self.logger.info(
@@ -1735,6 +1715,7 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         "hs_last_record_removed_at",
         "hs_list_size",
     ]
+    _selected_list_ids: Optional[frozenset] = None
 
     schema = th.PropertiesList(
         th.Property("listId", th.StringType),
@@ -1759,6 +1740,49 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
             if catalog_entry.replication_method:
                 self.forced_replication_method = catalog_entry.replication_method
 
+    def setup_selected_filters(self) -> None:
+        """Parse selected filters and cache allowed list ids for this stream."""
+        if not self._selected_filters:
+            return
+        self._selected_list_ids = ids_from_filter_clause(
+            self._selected_filters.get("clause_1", {})
+        )
+        self.logger.info(
+            "Lists selected filters for stream '%s': %s",
+            self.name,
+            sorted(self._selected_list_ids),
+        )
+
+    def get_scoped_list_ids(self) -> Optional[frozenset]:
+        """List ids from selected-filters, else config ``list_ids``, else unrestricted."""
+        if self._selected_list_ids is not None:
+            return self._selected_list_ids
+        return ids_from_config(self.config.get("list_ids"))
+
+    def get_available_filters_metadata(self) -> Dict[str, Any]:
+        return {
+            "supported_operators": [],
+            "supports_nesting_clauses": False,
+            "filters": {
+                "list_ids": {
+                    "label": "List",
+                    "supported_operators": ["IN", "EQ"],
+                    "target_field": "listId",
+                    "options": "reference_data.lists_v3.name (listId)",
+                }
+            },
+        }
+
+    def get_available_filters_reference_data(
+        self, fields_to_include: Set[str]
+    ) -> List[Dict[str, Any]]:
+        """Include list name alongside listId for filter option labels."""
+        fields = ["listId", "name"]
+        reference_data = super().get_available_filters_reference_data(fields)
+        for record in reference_data:
+            record["name (listId)"] = f"{record['name']} ({record['listId']})"
+        return reference_data
+
     @staticmethod
     def _marker_value(value: Any) -> Optional[str]:
         """Serialize marker values so state bookmarks stay JSON-safe and comparable."""
@@ -1781,6 +1805,9 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
     ) -> Optional[dict]:
         payload = super().prepare_request_payload(context, next_page_token)
         payload["additionalProperties"] = list(self.MEMBERSHIP_MARKER_PROPERTIES)
+        scoped_list_ids = self.get_scoped_list_ids()
+        if scoped_list_ids is not None:
+            payload["listIds"] = sorted(scoped_list_ids)
         return payload
 
     def get_child_context(self, record, context):
@@ -1828,6 +1855,17 @@ class ListSearchV3Stream(hubspotV3SingleSearchStream):
         ):
             return
 
+        allowed_membership_list_ids = membership_child.get_scoped_membership_list_ids()
+        if (
+            allowed_membership_list_ids is not None
+            and list_id not in allowed_membership_list_ids
+        ):
+            self.logger.debug(
+                "Skipping list_membership_v3 for list_id=%s; not in membership_list_ids",
+                list_id,
+            )
+            return
+
         current_markers = self._current_list_change_markers(child_context)
         markers_by_list = self.stream_state.setdefault(self.LIST_CHANGE_MARKERS_STATE_KEY, {})
         previous_markers = markers_by_list.get(list_id)
@@ -1862,11 +1900,56 @@ class ListMembershipV3Stream(hubspotV3Stream):
     parent_stream_type = ListSearchV3Stream
     primary_keys = ["list_id"]
     BENIGN_ERROR_CODES = ["INVALID_OBJECT_TYPE_FOR_LIST", "INVALID_PROCESSING_TYPE"]
+    _selected_membership_list_ids: Optional[frozenset] = None
 
     schema = th.PropertiesList(
         th.Property("results", th.CustomType({"type": ["array", "string"]})),
         th.Property("list_id", th.StringType),
     ).to_dict()
+
+    def setup_selected_filters(self) -> None:
+        """Parse selected filters and cache allowed membership list ids."""
+        if not self._selected_filters:
+            return
+        self._selected_membership_list_ids = ids_from_filter_clause(
+            self._selected_filters.get("clause_1", {})
+        )
+        self.logger.info(
+            "List membership selected filters for stream '%s': %s",
+            self.name,
+            sorted(self._selected_membership_list_ids),
+        )
+
+    def get_scoped_membership_list_ids(self) -> Optional[frozenset]:
+        """List ids from selected-filters, else config ``membership_list_ids``."""
+        if self._selected_membership_list_ids is not None:
+            return self._selected_membership_list_ids
+        return ids_from_config(self.config.get("membership_list_ids"))
+
+    def get_available_filters_metadata(self) -> Dict[str, Any]:
+        return {
+            "supported_operators": [],
+            "supports_nesting_clauses": False,
+            "filters": {
+                "membership_list_ids": {
+                    "label": "List",
+                    "supported_operators": ["IN", "EQ"],
+                    "target_field": "list_id",
+                    "options": "reference_data.lists_v3.name (listId)",
+                }
+            },
+        }
+
+    def sync(self, context: Optional[dict] = None) -> None:
+        """Skip partitions outside membership_list_ids when that scope is set."""
+        allowed = self.get_scoped_membership_list_ids()
+        if (
+            allowed is not None
+            and context
+            and str(context.get("list_id")) not in allowed
+        ):
+            return
+        super().sync(context)
 
     def backoff_max_tries(self) -> int:
         # Erroneous rate limits have been observed on this endpoint
