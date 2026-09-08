@@ -632,6 +632,22 @@ class Taphubspot(Tap):
                     # change v3 name to base_name
                     stream.name = base_name
 
+            # Selected filters are bound in Stream.__init__ using the pre-rename
+            # name. Re-bind under the runtime catalog name when use_legacy_streams
+            # is false (e.g. lists_v3 -> lists).
+            if self._selected_filters:
+                for stream in streams_by_type.values():
+                    stream_filters = self._selected_filters.get("streams", {}).get(
+                        stream.name
+                    )
+                    if not stream_filters:
+                        continue
+                    stream._selected_filters_version = self._selected_filters.get(
+                        "filters_version"
+                    )
+                    stream._selected_filters = stream_filters
+                    stream.setup_selected_filters()
+
         # delete streams that have same name as v3 stream
         streams_by_type = {key: value for key, value in streams_by_type.items() if key not in del_streams}
 

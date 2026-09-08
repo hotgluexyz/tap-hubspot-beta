@@ -2,6 +2,39 @@ import json
 import requests
 from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
+from typing import Any, Optional
+
+
+def parse_selected_id_label(value: Any) -> Optional[str]:
+    """Extract an id from a bare id or a ``{name} ({id})`` filter label."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    _prefix, sep, tail = text.rpartition(" (")
+    if sep and tail.endswith(")"):
+        return tail[:-1]
+    return text
+
+
+def ids_from_filter_clause(clause: dict) -> frozenset:
+    """Parse EQ/IN clause values into a frozenset of id strings."""
+    operator = clause.get("operator")
+    if operator == "EQ":
+        values = [clause.get("value")]
+    else:  # operator == "IN"
+        values = clause.get("value", [])
+    return frozenset(
+        parsed
+        for value in values
+        if (parsed := parse_selected_id_label(value)) is not None
+    )
+
+
+def ids_from_config(config_value: Any) -> Optional[frozenset]:
+    """Normalize a config list-id value to frozenset, or None when unset."""
+    if not config_value:
+        return None
+    return frozenset(str(value) for value in config_value)
 
 
 def deep_merge(dict1, dict2):
