@@ -87,12 +87,43 @@ def merge_responses(responses, pk, jsonpath=None):
     return merged_response
 
 
+def _association_id_parts(value):
+    """Expand an association field value into ordered ID parts."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(part) for part in value]
+    return [str(value)]
+
+
+def _join_association_ids(ids):
+    """Join association IDs with ';', preserving first-seen order and dropping duplicates."""
+    seen = set()
+    ordered = []
+    for item in ids:
+        item_str = str(item)
+        if item_str in seen:
+            continue
+        seen.add(item_str)
+        ordered.append(item_str)
+    if not ordered:
+        return None
+    if len(ordered) == 1:
+        return ordered[0]
+    return ";".join(ordered)
+
+
+def merge_association_values(left, right):
+    """Merge two association values into a single string (or None)."""
+    return _join_association_ids(_association_id_parts(left) + _association_id_parts(right))
+
+
 def deep_merge_dicts(a, b):
     """
     Deep merge two dictionaries:
     - If both values are dicts, merge recursively.
-    - If both values are strings and differ, make a list with both.
-    - If one is list and the other a string, append (keeping unique).
+    - If both values are strings and differ, join with ';'.
+    - If one is list and the other a string, join preserving order.
     - Otherwise, b overwrites a.
     """
     merged = dict(a)
@@ -105,22 +136,11 @@ def deep_merge_dicts(a, b):
             if isinstance(a_val, dict) and isinstance(b_val, dict):
                 merged[key] = deep_merge_dicts(a_val, b_val)
 
-            # Case 2: both strings
-            elif isinstance(a_val, str) and isinstance(b_val, str):
-                if a_val == b_val:
-                    merged[key] = a_val
-                else:
-                    merged[key] = [a_val, b_val]
-
-            # Case 3: string + list
-            elif isinstance(a_val, str) and isinstance(b_val, list):
-                merged[key] = list(set([a_val] + b_val))
-            elif isinstance(a_val, list) and isinstance(b_val, str):
-                merged[key] = list(set(a_val + [b_val]))
-
-            # Case 4: both lists
-            elif isinstance(a_val, list) and isinstance(b_val, list):
-                merged[key] = list(set(a_val + b_val))
+            # Case 2: both strings → join with ';' when different
+            # Case 3: string + list → join preserving order
+            # Case 4: both lists → join preserving order
+            elif isinstance(a_val, (str, list)) and isinstance(b_val, (str, list)):
+                merged[key] = merge_association_values(a_val, b_val)
 
             # Case 5: fallback — overwrite
             else:
