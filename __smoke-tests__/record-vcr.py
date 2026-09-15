@@ -1,16 +1,19 @@
+import json
+from typing import ClassVar
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from faker import Faker
-from hotglue_smoke_test.vcr.tap import VCRTapTestRunner
 from hotglue_smoke_test.vcr.sanitize import (
     make_faker_replace_fn,
     sanitize_cassette_file,
     scrub_response_body,
 )
+from hotglue_smoke_test.vcr.tap import VCRTapTestRunner
 
 
 class Runner(VCRTapTestRunner):
-    PRESERVE_KEYS = {
+    PRESERVE_KEYS: ClassVar[set[str]] = {
+        "archived",
         "hasMore",
         "has-more",
         "id",
@@ -52,11 +55,19 @@ class Runner(VCRTapTestRunner):
                 )
             )
 
+        def scrub_body(body: str) -> str:
+            preserve_keys = set(self.PRESERVE_KEYS)
+            data = json.loads(body)
+            results = data.get("results", []) if isinstance(data, dict) else []
+            if any(isinstance(result, dict) and "objectTypeId" in result for result in results):
+                preserve_keys.update({"name", "objectTypeId"})
+            return scrub_response_body(
+                body, preserve_keys, faker, cache, set(self.TOKEN_KEYS)
+            )
+
         sanitize_cassette_file(
             self.vcr_cassette_path,
-            scrub_response=lambda body: scrub_response_body(
-                body, set(self.PRESERVE_KEYS), faker, cache, set(self.TOKEN_KEYS)
-            ),
+            scrub_response=scrub_body,
             scrub_uri=scrub_uri,
         )
 
