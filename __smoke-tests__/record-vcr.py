@@ -1,8 +1,6 @@
-import time
 from typing import ClassVar
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
-import requests
 from faker import Faker
 from hotglue_smoke_test.vcr.sanitize import (
     make_faker_replace_fn,
@@ -30,26 +28,7 @@ class Runner(VCRTapTestRunner):
     def launch(self):
         from tap_hubspot_beta.tap import Taphubspot
 
-        if self.mode != "record":
-            Taphubspot.cli()
-            return
-
-        original_request = requests.Session.request
-
-        def request_with_ssl_retry(session, method, url, **kwargs):
-            for attempt in range(5):
-                try:
-                    return original_request(session, method, url, **kwargs)
-                except requests.exceptions.SSLError:
-                    if attempt == 4:
-                        raise
-                    time.sleep(2**attempt)
-
-        requests.Session.request = request_with_ssl_retry
-        try:
-            Taphubspot.cli()
-        finally:
-            requests.Session.request = original_request
+        Taphubspot.cli()
 
     def sanitize_cassette(self):
         faker = Faker()
