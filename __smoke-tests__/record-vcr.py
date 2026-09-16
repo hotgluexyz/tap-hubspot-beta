@@ -32,28 +32,31 @@ class Runner(VCRTapTestRunner):
 
         Taphubspot.cli()
 
+    def scrub_uri(self, uri: str) -> str:
+        email_path = "/communication-preferences/v3/status/email/"
+        parts = urlsplit(uri)
+        if email_path not in parts.path:
+            return uri
+        prefix, email = parts.path.split(email_path, 1)
+        if not hasattr(self, "_uri_replace"):
+            faker = Faker()
+            Faker.seed(hash(self.test_case) & 0xFFFFFFFF)
+            self._uri_replace = make_faker_replace_fn(faker, {})
+        scrubbed_email = quote(self._uri_replace("email", unquote(email)), safe="")
+        return urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                prefix + email_path + scrubbed_email,
+                parts.query,
+                parts.fragment,
+            )
+        )
+
     def sanitize_cassette(self):
         faker = Faker()
         Faker.seed(hash(self.test_case) & 0xFFFFFFFF)
         cache = {}
-        replace = make_faker_replace_fn(faker, cache)
-        email_path = "/communication-preferences/v3/status/email/"
-
-        def scrub_uri(uri: str) -> str:
-            parts = urlsplit(uri)
-            if email_path not in parts.path:
-                return uri
-            prefix, email = parts.path.split(email_path, 1)
-            scrubbed_email = quote(replace("email", unquote(email)), safe="")
-            return urlunsplit(
-                (
-                    parts.scheme,
-                    parts.netloc,
-                    prefix + email_path + scrubbed_email,
-                    parts.query,
-                    parts.fragment,
-                )
-            )
 
         def scrub_body(body: str) -> str:
             preserve_keys = set(self.PRESERVE_KEYS)
@@ -68,7 +71,7 @@ class Runner(VCRTapTestRunner):
         sanitize_cassette_file(
             self.vcr_cassette_path,
             scrub_response=scrub_body,
-            scrub_uri=scrub_uri,
+            scrub_uri=self.scrub_uri,
         )
 
 
