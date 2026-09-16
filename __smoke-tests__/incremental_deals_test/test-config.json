@@ -1,0 +1,6 @@
+{
+    "include_streams": ["FullsyncDealsStream", "DealsStream"],
+    "sort_config": {
+        "deals": ["id"]
+    }
+}

@@ -1,0 +1,6 @@
+{
+    "include_streams": ["CompaniesStream", "FullsyncCompaniesStream"],
+    "sort_config": {
+        "companies": ["id"]
+    }
+}
