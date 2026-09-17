@@ -51,21 +51,23 @@ class Runner(VCRTapTestRunner):
 
     def scrub_response_body(self, body: str, faker: Faker, cache: dict) -> str:
         scrubbed = json.loads(super().scrub_response_body(body, faker, cache))
+        source = json.loads(body)
+        if not isinstance(source, dict) or not isinstance(scrubbed, dict):
+            return json.dumps(scrubbed)
 
-        def restore_dynamic_fields(source, target):
-            if isinstance(source, dict) and isinstance(target, dict):
-                if "objectTypeId" in source:
-                    for key in ("name", "objectTypeId"):
-                        if key in source:
-                            target[key] = source[key]
-                for key, value in source.items():
-                    if key in target:
-                        restore_dynamic_fields(value, target[key])
-            elif isinstance(source, list) and isinstance(target, list):
-                for source_item, target_item in zip(source, target):
-                    restore_dynamic_fields(source_item, target_item)
-
-        restore_dynamic_fields(json.loads(body), scrubbed)
+        source_results = source.get("results", [])
+        scrubbed_results = scrubbed.get("results", [])
+        for source, target in zip(source_results, scrubbed_results):
+            object_type_id = source.get("objectTypeId") if isinstance(source, dict) else None
+            if (
+                isinstance(target, dict)
+                and isinstance(object_type_id, str)
+                and object_type_id.startswith("2-")
+                and isinstance(source.get("properties"), list)
+                and isinstance(source.get("name"), str)
+            ):
+                target["name"] = source["name"]
+                target["objectTypeId"] = object_type_id
         return json.dumps(scrubbed)
 
 
