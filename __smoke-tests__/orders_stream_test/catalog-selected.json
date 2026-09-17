@@ -1,0 +1,1180 @@
+{
+  "streams": [
+    {
+      "tap_stream_id": "orders",
+      "replication_key": "updatedAt",
+      "replication_method": "INCREMENTAL",
+      "key_properties": ["id"],
+      "schema": {
+        "properties": {
+          "id": {
+            "type": ["string", "null"]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "archived": {
+            "type": ["boolean", "null"]
+          },
+          "_hg_archived": {
+            "type": ["boolean", "null"]
+          },
+          "archivedAt": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_all_accessible_team_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_all_assigned_business_unit_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_all_owner_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_all_team_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_city": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_country": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_email": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_firstname": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_lastname": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_name": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_phone": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_postal_code": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_state": {
+            "type": ["string", "null"]
+          },
+          "hs_billing_address_street": {
+            "type": ["string", "null"]
+          },
+          "hs_buyer_accepts_marketing": {
+            "type": ["boolean", "null"]
+          },
+          "hs_cancellation_reason": {
+            "type": ["string", "null"]
+          },
+          "hs_closed_date": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_created_by_user_id": {
+            "type": ["string", "null"]
+          },
+          "hs_createdate": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_customer_phone": {
+            "type": ["string", "null"]
+          },
+          "hs_date_entered_3725360f_519b_4b18_a593_494d60a29c9f_69491685": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_entered_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_entered_4b27b500_f031_4927_9811_68a0b525cbae_483620459": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_entered_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_entered_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_exited_3725360f_519b_4b18_a593_494d60a29c9f_69491685": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_exited_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_exited_4b27b500_f031_4927_9811_68a0b525cbae_483620459": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_exited_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_date_exited_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_discount_codes": {
+            "type": ["string", "null"]
+          },
+          "hs_exchange_rate": {
+            "type": ["string", "null"]
+          },
+          "hs_external_canceled_date": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_external_cart_id": {
+            "type": ["string", "null"]
+          },
+          "hs_external_checkout_id": {
+            "type": ["string", "null"]
+          },
+          "hs_external_created_date": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_external_modified_date": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_external_order_id": {
+            "type": ["string", "null"]
+          },
+          "hs_external_order_status": {
+            "type": ["string", "null"]
+          },
+          "hs_external_order_url": {
+            "type": ["string", "null"]
+          },
+          "hs_fulfillment_status": {
+            "type": ["string", "null"]
+          },
+          "hs_homecurrency_amount": {
+            "type": ["string", "null"]
+          },
+          "hs_is_canceled": {
+            "type": ["boolean", "null"]
+          },
+          "hs_is_closed": {
+            "type": ["boolean", "null"]
+          },
+          "hs_landing_site": {
+            "type": ["string", "null"]
+          },
+          "hs_lastmodifieddate": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_merged_object_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_object_id": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_detail_1": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_detail_2": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_detail_3": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_id": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_label": {
+            "type": ["string", "null"]
+          },
+          "hs_object_source_user_id": {
+            "type": ["string", "null"]
+          },
+          "hs_order_business_type": {
+            "type": ["string", "null"]
+          },
+          "hs_order_discount": {
+            "type": ["string", "null"]
+          },
+          "hs_order_name": {
+            "type": ["string", "null"]
+          },
+          "hs_order_note": {
+            "type": ["string", "null"]
+          },
+          "hs_owning_teams": {
+            "type": ["string", "null"]
+          },
+          "hs_payment_processing_method": {
+            "type": ["string", "null"]
+          },
+          "hs_payment_status": {
+            "type": ["string", "null"]
+          },
+          "hs_pinned_engagement_id": {
+            "type": ["string", "null"]
+          },
+          "hs_pipeline": {
+            "type": ["string", "null"]
+          },
+          "hs_pipeline_stage": {
+            "type": ["string", "null"]
+          },
+          "hs_processed_date": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hs_read_only": {
+            "type": ["boolean", "null"]
+          },
+          "hs_referring_site": {
+            "type": ["string", "null"]
+          },
+          "hs_refund_amount": {
+            "type": ["string", "null"]
+          },
+          "hs_shared_team_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_shared_user_ids": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_city": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_country": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_name": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_phone": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_postal_code": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_state": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_address_street": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_cost": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_status_url": {
+            "type": ["string", "null"]
+          },
+          "hs_shipping_tracking_number": {
+            "type": ["string", "null"]
+          },
+          "hs_source_id": {
+            "type": ["string", "null"]
+          },
+          "hs_source_store": {
+            "type": ["string", "null"]
+          },
+          "hs_subtotal_price": {
+            "type": ["string", "null"]
+          },
+          "hs_tags": {
+            "type": ["string", "null"]
+          },
+          "hs_tax": {
+            "type": ["string", "null"]
+          },
+          "hs_time_in_3725360f_519b_4b18_a593_494d60a29c9f_69491685": {
+            "type": ["string", "null"]
+          },
+          "hs_time_in_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863": {
+            "type": ["string", "null"]
+          },
+          "hs_time_in_4b27b500_f031_4927_9811_68a0b525cbae_483620459": {
+            "type": ["string", "null"]
+          },
+          "hs_time_in_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953": {
+            "type": ["string", "null"]
+          },
+          "hs_time_in_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780": {
+            "type": ["string", "null"]
+          },
+          "hs_total_price": {
+            "type": ["string", "null"]
+          },
+          "hs_total_weight": {
+            "type": ["string", "null"]
+          },
+          "hs_unique_creation_key": {
+            "type": ["string", "null"]
+          },
+          "hs_updated_by_user_id": {
+            "type": ["string", "null"]
+          },
+          "hs_user_ids_of_all_notification_followers": {
+            "type": ["string", "null"]
+          },
+          "hs_user_ids_of_all_notification_unfollowers": {
+            "type": ["string", "null"]
+          },
+          "hs_user_ids_of_all_owners": {
+            "type": ["string", "null"]
+          },
+          "hs_was_imported": {
+            "type": ["boolean", "null"]
+          },
+          "hubspot_owner_assigneddate": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "hubspot_owner_id": {
+            "type": ["string", "null"]
+          },
+          "hubspot_team_id": {
+            "type": ["string", "null"]
+          }
+        },
+        "type": "object"
+      },
+      "stream": "orders",
+      "metadata": [
+        {
+          "breadcrumb": ["properties", "id"],
+          "metadata": {
+            "inclusion": "automatic"
+          }
+        },
+        {
+          "breadcrumb": ["properties", "createdAt"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "updatedAt"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "archived"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "_hg_archived"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "archivedAt"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_all_accessible_team_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_all_assigned_business_unit_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_all_owner_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_all_team_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_city"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_country"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_email"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_firstname"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_lastname"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_name"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_phone"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_postal_code"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_state"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_billing_address_street"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_buyer_accepts_marketing"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_cancellation_reason"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_closed_date"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_created_by_user_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_createdate"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_customer_phone"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_entered_3725360f_519b_4b18_a593_494d60a29c9f_69491685"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_entered_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_entered_4b27b500_f031_4927_9811_68a0b525cbae_483620459"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_entered_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_entered_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_exited_3725360f_519b_4b18_a593_494d60a29c9f_69491685"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_exited_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_exited_4b27b500_f031_4927_9811_68a0b525cbae_483620459"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_exited_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_date_exited_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_discount_codes"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_exchange_rate"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_canceled_date"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_cart_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_checkout_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_created_date"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_modified_date"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_order_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_order_status"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_external_order_url"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_fulfillment_status"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_homecurrency_amount"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_is_canceled"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_is_closed"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_landing_site"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_lastmodifieddate"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_merged_object_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_detail_1"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_detail_2"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_detail_3"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_label"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_object_source_user_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_order_business_type"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_order_discount"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_order_name"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_order_note"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_owning_teams"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_payment_processing_method"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_payment_status"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_pinned_engagement_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_pipeline"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_pipeline_stage"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_processed_date"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_read_only"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_referring_site"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_refund_amount"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shared_team_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shared_user_ids"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_city"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_country"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_name"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_phone"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_postal_code"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_state"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_address_street"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_cost"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_status_url"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_shipping_tracking_number"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_source_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_source_store"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_subtotal_price"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_tags"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_tax"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_time_in_3725360f_519b_4b18_a593_494d60a29c9f_69491685"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_time_in_3c85a297_e9ce_400b_b42e_9f16853d69d6_2088003863"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_time_in_4b27b500_f031_4927_9811_68a0b525cbae_483620459"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_time_in_937ea84d_0a4f_4dcf_9028_3f9c2aafbf03_2012274953"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_time_in_aa99e8d0_c1d5_4071_b915_d240bbb1aed9_618008780"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_total_price"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_total_weight"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_unique_creation_key"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_updated_by_user_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_user_ids_of_all_notification_followers"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [
+            "properties",
+            "hs_user_ids_of_all_notification_unfollowers"
+          ],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_user_ids_of_all_owners"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hs_was_imported"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hubspot_owner_assigneddate"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hubspot_owner_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": ["properties", "hubspot_team_id"],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true
+          }
+        },
+        {
+          "breadcrumb": [],
+          "metadata": {
+            "inclusion": "available",
+            "selected": true,
+            "table-key-properties": ["id"],
+            "valid-replication-keys": ["updatedAt"],
+            "visible": true
+          }
+        }
+      ],
+      "stream_meta": {}
+    }
+  ]
+}
