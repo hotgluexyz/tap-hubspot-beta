@@ -49,12 +49,8 @@ class Runner(VCRTapTestRunner):
             )
         )
 
-    def scrub_response_body(self, body: str, faker: Faker, cache: dict) -> str:
-        scrubbed = json.loads(super().scrub_response_body(body, faker, cache))
-        source = json.loads(body)
-        if not isinstance(source, dict) or not isinstance(scrubbed, dict):
-            return json.dumps(scrubbed)
-
+    @staticmethod
+    def restore_custom_object_schema_identifiers(source: dict, scrubbed: dict) -> None:
         source_results = source.get("results", [])
         scrubbed_results = scrubbed.get("results", [])
         for source, target in zip(source_results, scrubbed_results):
@@ -68,6 +64,14 @@ class Runner(VCRTapTestRunner):
             ):
                 target["name"] = source["name"]
                 target["objectTypeId"] = object_type_id
+
+    def scrub_response_body(self, body: str, faker: Faker, cache: dict) -> str:
+        scrubbed = json.loads(super().scrub_response_body(body, faker, cache))
+        source = json.loads(body)
+        if not isinstance(source, dict) or not isinstance(scrubbed, dict):
+            return json.dumps(scrubbed)
+
+        self.restore_custom_object_schema_identifiers(source, scrubbed)
         return json.dumps(scrubbed)
 
 
