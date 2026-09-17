@@ -1,0 +1,20 @@
+{
+  "bookmarks": {
+    "contacts_v3": {
+      "replication_key": "updatedAt",
+      "replication_key_value": "2026-01-27T19:10:25.701743+00:00"
+    },
+    "fullsync_contacts_v3": {
+      "replication_key": "updatedAt",
+      "replication_key_value": "2026-04-27T19:10:25.701743+00:00"
+    },
+    "contacts_v3_archived": {
+      "replication_key": "archivedAt",
+      "replication_key_value": "2026-04-08T10:33:44.102000+00:00",
+      "partitions": []
+    },
+    "fullsync_companies": {
+
+    }
+  }
+}

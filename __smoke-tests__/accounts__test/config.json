@@ -1,0 +1,9 @@
+{
+    "client_id": "787***",
+    "client_secret": "620***",
+    "refresh_token": "7f0***",
+    "access_token": "CJD***",
+    "expires_in": 1789520163,
+    "redirect_uri": "https://qa.hotglue.xyz/callback",
+    "_refresh_token_via_hg_api": false
+}

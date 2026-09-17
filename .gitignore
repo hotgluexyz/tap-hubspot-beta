@@ -137,3 +137,10 @@ dmypy.json
 .pyre/
 .vscode
 .history
+
+# Colocated smoke tests (hotglue-smoke-test)
+__smoke-tests__/**/test_runtime/
+__smoke-tests__/unsanitized_*_test/
+!__smoke-tests__/**/config.json
+!__smoke-tests__/**/expected_output/
+!__smoke-tests__/**/expected_output/**

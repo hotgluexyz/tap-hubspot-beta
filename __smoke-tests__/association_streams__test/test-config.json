@@ -1,0 +1,8 @@
+{
+    "include_streams": [
+        "AssociationCallsDealsStream",
+        "AssociationsTasksDealsStream",
+        "CallsStream",
+        "TasksStream"
+    ]
+}

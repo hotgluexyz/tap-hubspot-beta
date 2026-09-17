@@ -1,0 +1,147 @@
+interactions:
+- request:
+    body: redirect_uri=https%3A%2F%2Fqa.hotglue.xyz%2Fcallback&grant_type=refresh_token
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '226'
+      Content-Type:
+      - application/x-www-form-urlencoded
+      User-Agent:
+      - python-requests/2.34.2
+    method: POST
+    uri: https://api.hubapi.com/oauth/v1/token
+  response:
+    body:
+      string: '{"token_type": "-Fallback-scrubbed-xtvEBL", "refresh_token": "7f0***",
+        "access_token": "CJD***", "hub_id": 2613, "scopes": ["-Fallback-scrubbed-kZkRzDDHGFTYkglpMENFHqZ",
+        "-Fallback-scrubbed-TETpqSH", "-Fallback-scrubbed-TAZqYKKuhcHowx", "-Fallback-scrubbed-lCZgVMHKemuZClbVnHWInT",
+        "-Fallback-scrubbed-bkpKQmaJxRVzyoYucfdpOnIbeh", "-Fallback-scrubbed-tLDlKOjizNsvWgcaxVAwsLp",
+        "-Fallback-scrubbed-QpyyudJZUdhHuKpC", "-Fallback-scrubbed-LHDssukrRQvShzwvzdKXAIvGJ",
+        "-Fallback-scrubbed-uiuBoiI", "-Fallback-scrubbed-zwvtNentfGgpWFJYnhKvZDn",
+        "-Fallback-scrubbed-aavrhvBmMknksuUyFkhVnKM", "-Fallback-scrubbed-CPuKQMpLcDXLCosZmqZKwXNRTHF",
+        "-Fallback-scrubbed-OagpuQLziaOZVNFzshUxu", "-Fallback-scrubbed-iUDRauEaIDbNIYKlJiYxcH",
+        "-Fallback-scrubbed-uElfaKzcqRhPZlLLcWuDoZCF", "-Fallback-scrubbed-qfjtyilZWrxYsjBDHaSoVjo",
+        "-Fallback-scrubbed-eRhyQKWayLRtUioJoPYECeKXym", "-Fallback-scrubbed-GDwBQOIUqrwmldzAAfaCzktQEQ",
+        "-Fallback-scrubbed-pdEkZ", "-Fallback-scrubbed-LicvPEuSrpMOxARNPt", "-Fallback-scrubbed-FxGOKXgyMAJpuTX",
+        "-Fallback-scrubbed-cCemHJUfljSAxagzNQMpqcsSaV", "-Fallback-scrubbed-bUXTnJrqMpoQgvymKBDcPPzLzMh",
+        "-Fallback-scrubbed-bwlfeegoNrZjXNZZAgoqPtnWoFUmxVJdiE", "-Fallback-scrubbed-hgMDrGDGtejkdNsBwJTnoIlSw",
+        "-Fallback-scrubbed-HkXmRzWXvRwJGdnQBBmeEVzt", "-Fallback-scrubbed-ugKbQkpiyFLiorwVSuLyFdRtiWjieBJ",
+        "-Fallback-scrubbed-yvUXwkvKlZOMrPqMlJrEvLG", "-Fallback-scrubbed-mxXpthsKosxjjACJVUrQEIvwHrogQL",
+        "-Fallback-scrubbed-FRSMsxehrVvjHTTKxSTNCxvBVmhXCwMXULNM", "-Fallback-scrubbed-eDlDrqNatImbHQFAlZVZgCAOzDB",
+        "-Fallback-scrubbed-IBCdhuIMsL", "-Fallback-scrubbed-iokDkZZhSZEGInNzrdXvkmi",
+        "-Fallback-scrubbed-sMEPlovsiLkoZpDqWOhnbMNpYMszodvEx", "-Fallback-scrubbed-XudWCmlXVFkVVRSGvRDEpwyYeF",
+        "-Fallback-scrubbed-COgIigRZUgwVsvoLdYodKwIZp", "-Fallback-scrubbed-pkVRDJiPxqNAFgyGdyX",
+        "-Fallback-scrubbed-DRUGnkGYAKWfFmMS", "-Fallback-scrubbed-ydPAeNlIKuLDtJrmGWwwzWufS",
+        "-Fallback-scrubbed-KDXRc"], "token_use": "-Fallback-scrubbed-vrLLWwiRUZRP",
+        "expires_in": 5684}'
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - a3ba5d36dc7edeec-SEA
+      Cache-Control:
+      - no-store, no-transform
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Tue, 15 Sep 2026 20:26:03 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}'
+      Pragma:
+      - no-cache
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=XdGjHNuP50%2Bf2Hj%2BQBIUbTxkDrmChAjdkJ90B%2Fu2015bfzr1VvsEa8qklWmsesOvdKLFsZIwP8dttyzw2AnWRf34TwlnDtcZUwu922ez1TfZfG9pJx95Ze%2BNfh5V6HN9"}]}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Vary:
+      - origin, accept-encoding
+      access-control-allow-credentials:
+      - 'false'
+      content-length:
+      - '1671'
+      server-timing:
+      - hcid;desc="01a0a6bf-7f8d-7ef6-b236-a7ab8a950c0d", cfr;desc="a3ba5d389a97deec-IAD"
+      x-content-type-options:
+      - nosniff
+      x-hubspot-correlation-id:
+      - 01a0a6bf-7f8d-7ef6-b236-a7ab8a950c0d
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.34.2
+    method: GET
+    uri: https://api.hubapi.com/integrations/v1/me?count=100&property=portalId&property=timeZone&property=accountType&property=currency&property=utcOffset&property=utcOffsetMilliseconds
+  response:
+    body:
+      string: '{"portalId": 2613, "timeZone": "-Fallback-scrubbed-iAXONglHWI", "accountType":
+        "-Fallback-scrubbed-rcyMUzXfvpAJYP", "currency": "-Fallback-scrubbed-VFv",
+        "utcOffset": "-Fallback-scrubbed-KlnVKp", "utcOffsetMilliseconds": 5994}'
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - a3ba5d39fb693167-SEA
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Tue, 15 Sep 2026 20:26:03 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=rBZzB1TZukfb7xxDChFWv0Pkx8hcmKgOlFktOFmDRMHtgILc6i%2BFWYVgeiHD1JSHkBlo76SS0M%2FhLw0nIgAxFtFhtozgc4t2sJRKYfaW4I81iLzMLRoP1WscyRM7nCu%2F"}]}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - origin
+      access-control-allow-credentials:
+      - 'false'
+      content-length:
+      - '148'
+      server-timing:
+      - hcid;desc="01a0a6bf-8072-7145-885e-ac4a252184c9", cfr;desc="a3ba5d3a1a6a3167-IAD"
+      x-content-type-options:
+      - nosniff
+      x-hubspot-correlation-id:
+      - 01a0a6bf-8072-7145-885e-ac4a252184c9
+      x-hubspot-ratelimit-interval-milliseconds:
+      - '10000'
+      x-hubspot-ratelimit-max:
+      - '110'
+      x-hubspot-ratelimit-remaining:
+      - '109'
+      x-hubspot-ratelimit-secondly:
+      - '11'
+      x-hubspot-ratelimit-secondly-remaining:
+      - '10'
+    status:
+      code: 200
+      message: OK
+version: 1
