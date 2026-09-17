@@ -5,8 +5,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from faker import Faker
 from hotglue_smoke_test.vcr.sanitize import (
     make_faker_replace_fn,
-    sanitize_cassette_file,
-    scrub_response_body,
+    scrub_response_body as sanitize_response_body,
 )
 from hotglue_smoke_test.vcr.tap import VCRTapTestRunner
 
@@ -53,25 +52,14 @@ class Runner(VCRTapTestRunner):
             )
         )
 
-    def sanitize_cassette(self):
-        faker = Faker()
-        Faker.seed(hash(self.test_case) & 0xFFFFFFFF)
-        cache = {}
-
-        def scrub_body(body: str) -> str:
-            preserve_keys = set(self.PRESERVE_KEYS)
-            data = json.loads(body)
-            results = data.get("results", []) if isinstance(data, dict) else []
-            if any(isinstance(result, dict) and "objectTypeId" in result for result in results):
-                preserve_keys.update({"name", "objectTypeId"})
-            return scrub_response_body(
-                body, preserve_keys, faker, cache, set(self.TOKEN_KEYS)
-            )
-
-        sanitize_cassette_file(
-            self.vcr_cassette_path,
-            scrub_response=scrub_body,
-            scrub_uri=self.scrub_uri,
+    def scrub_response_body(self, body: str, faker: Faker, cache: dict) -> str:
+        preserve_keys = set(self.PRESERVE_KEYS)
+        data = json.loads(body)
+        results = data.get("results", []) if isinstance(data, dict) else []
+        if any(isinstance(result, dict) and "objectTypeId" in result for result in results):
+            preserve_keys.update({"name", "objectTypeId"})
+        return sanitize_response_body(
+            body, preserve_keys, faker, cache, set(self.TOKEN_KEYS)
         )
 
 
