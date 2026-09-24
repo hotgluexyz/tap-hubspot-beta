@@ -150,6 +150,28 @@ def add_streams(stream_classes):
                 logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
     return stream_types
 
+# DISPLAY list for the connector landing page, not a support contract.
+# Sourced from __smoke-tests__/emit_estimated_contacts_no_legacy_test/catalog-selected.json.
+# Runtime discovery remains authoritative; this list is not validated against it.
+COMMON_HUBSPOT_OBJECTS = [
+    "calls",
+    "companies",
+    "contacts",
+    "deals",
+    "emails",
+    "forms",
+    "leads",
+    "lineitems",
+    "marketing_emails",
+    "meetings",
+    "notes",
+    "orders",
+    "owners",
+    "products",
+    "tasks",
+    "tickets",
+]
+
 STREAM_TYPES = add_streams([
     ContactsStream,
     ListsStream,
@@ -263,6 +285,8 @@ class Taphubspot(Tap):
     """hubspot tap class."""
 
     name = "tap-hubspot"
+    dynamic_catalog = True
+    static_stream_names = COMMON_HUBSPOT_OBJECTS
     alerting_level = AlertingLevel.ERROR
     exception_alerting_level_map = {
         InvalidCredentialsError: AlertingLevel.NONE,
