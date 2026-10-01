@@ -15,6 +15,7 @@ from hotglue_etl_exceptions import InvalidCredentialsError
 from tap_hubspot_beta.client_base import TapHubspotDailyAPIQuotaExceededException
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+from tap_hubspot_beta.utils import validate_hubspot_list_id_config
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream, hubspotV3SearchStream
 from tap_hubspot_beta.streams import (
     AccountStream,
@@ -307,6 +308,7 @@ class Taphubspot(Tap):
     def run_sync(self, catalog: Any = None, state: Any = None) -> None:
         self.register_streams_from_catalog(catalog)
         self.register_state_from_file(state)
+        validate_hubspot_list_id_config(self.config)
         # flag only used for testing purposes
         if self.config.get("emit_estimated_record_totals_snapshot", True):
             self.emit_estimated_record_totals_snapshot()
