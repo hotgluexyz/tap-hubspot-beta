@@ -1,8 +1,10 @@
 import json
-import requests
-from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
 from typing import Any, Dict, Optional
+
+import requests
+from hotglue_singer_sdk.exceptions import ConfigValidationError
+from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 
 HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS: Dict[str, str] = {
     "contacts": "contacts_list_ids",
@@ -23,17 +25,13 @@ HUBSPOT_LIST_ID_CONFIG_KEYS = (
 ) + tuple(dict.fromkeys(HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS.values()))
 
 
-class InvalidHubSpotListIdError(ValueError):
-    """Raised when a config value is not a valid HubSpot list id."""
-
-
-def _invalid_hubspot_list_id(field: str, value: Any) -> InvalidHubSpotListIdError:
+def _invalid_hubspot_list_id(field: str, value: Any) -> ConfigValidationError:
     """Build a field-specific error for a non-integer HubSpot list id."""
     if isinstance(value, str) and not isinstance(value, bool):
         shown = f"'{value}'"
     else:
         shown = repr(value)
-    return InvalidHubSpotListIdError(
+    return ConfigValidationError(
         f"Invalid HubSpot list id in {field} config: {shown} (expected integer value)"
     )
 
@@ -61,7 +59,7 @@ def validate_hubspot_list_id_config(config: dict) -> None:
         if not config_value:
             continue
         if not isinstance(config_value, (list, tuple)):
-            raise InvalidHubSpotListIdError(
+            raise ConfigValidationError(
                 f"Invalid HubSpot list id in {key}: config value must be a list"
             )
         for value in config_value:

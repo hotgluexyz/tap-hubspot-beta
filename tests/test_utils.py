@@ -1,12 +1,12 @@
 """Tests for tap_hubspot_beta.utils helpers."""
 
 import pytest
+from hotglue_singer_sdk.exceptions import ConfigValidationError
 
 from tap_hubspot_beta.client_base import hubspotStream
 from tap_hubspot_beta.utils import (
     HUBSPOT_LIST_ID_CONFIG_KEYS,
     HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS,
-    InvalidHubSpotListIdError,
     coerce_hubspot_list_id,
     deep_merge_dicts,
     ids_from_config,
@@ -52,7 +52,7 @@ def test_deep_merge_dicts_merges_string_with_list():
     ["none", "", "12a", True, -1],
 )
 def test_coerce_hubspot_list_id_rejects_invalid(value):
-    with pytest.raises(InvalidHubSpotListIdError):
+    with pytest.raises(ConfigValidationError):
         coerce_hubspot_list_id(value, field="list_ids")
 
 
@@ -61,12 +61,12 @@ def test_ids_from_config_accepts_string_and_int_ids():
 
 
 def test_validate_hubspot_list_id_config_rejects_none_sentinel():
-    with pytest.raises(InvalidHubSpotListIdError, match="list_ids"):
+    with pytest.raises(ConfigValidationError, match="list_ids"):
         validate_hubspot_list_id_config({"list_ids": ["none"]})
 
 
 def test_validate_hubspot_list_id_config_checks_all_keys():
-    with pytest.raises(InvalidHubSpotListIdError, match="contacts_list_ids"):
+    with pytest.raises(ConfigValidationError, match="contacts_list_ids"):
         validate_hubspot_list_id_config({"contacts_list_ids": ["bad-id"]})
 
 
