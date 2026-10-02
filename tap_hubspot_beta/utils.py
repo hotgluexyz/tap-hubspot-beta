@@ -1,8 +1,69 @@
 import json
-import requests
-from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
-from typing import Any, Optional
+from typing import Any, Dict, Optional
+
+import requests
+from hotglue_singer_sdk.exceptions import ConfigValidationError
+from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
+
+HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS: Dict[str, str] = {
+    "contacts": "contacts_list_ids",
+    "contacts_v3": "contacts_list_ids",
+    "contacts_v3_archived": "contacts_list_ids",
+    "contact_events": "contacts_list_ids",
+    "companies": "companies_list_ids",
+    "companies_archived": "companies_list_ids",
+    "deals": "deals_list_ids",
+    "deals_archived": "deals_list_ids",
+    "tickets": "tickets_list_ids",
+    "orders": "orders_list_ids",
+}
+
+HUBSPOT_LIST_ID_CONFIG_KEYS = (
+    "list_ids",
+    "membership_list_ids",
+) + tuple(dict.fromkeys(HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS.values()))
+
+
+def _invalid_hubspot_list_id(field: str, value: Any) -> ConfigValidationError:
+    """Build a field-specific error for a non-integer HubSpot list id."""
+    if isinstance(value, str) and not isinstance(value, bool):
+        shown = f"'{value}'"
+    else:
+        shown = repr(value)
+    return ConfigValidationError(
+        f"Invalid HubSpot list id in {field} config: {shown} (expected integer value)"
+    )
+
+
+def coerce_hubspot_list_id(value: Any, *, field: str) -> str:
+    """Return a canonical string list id or raise with a field-specific message."""
+    if isinstance(value, bool):
+        raise _invalid_hubspot_list_id(field, value)
+    if isinstance(value, int):
+        if value < 0:
+            raise _invalid_hubspot_list_id(field, value)
+        return str(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text.isdigit():
+            raise _invalid_hubspot_list_id(field, value)
+        return text
+    raise _invalid_hubspot_list_id(field, value)
+
+
+def validate_hubspot_list_id_config(config: dict) -> None:
+    """Validate all HubSpot list-id config keys before sync makes API requests."""
+    for key in HUBSPOT_LIST_ID_CONFIG_KEYS:
+        config_value = config.get(key)
+        if not config_value:
+            continue
+        if not isinstance(config_value, (list, tuple)):
+            raise ConfigValidationError(
+                f"Invalid HubSpot list id in {key}: config value must be a list"
+            )
+        for value in config_value:
+            coerce_hubspot_list_id(value, field=key)
 
 
 def parse_selected_id_label(value: Any) -> Optional[str]:
