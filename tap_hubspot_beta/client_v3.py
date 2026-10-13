@@ -148,6 +148,22 @@ class hubspotV3SearchStream(hubspotStream):
 
         return response.get('total')
 
+    def get_estimated_record_count(self) -> Optional[int]:
+        """Return HubSpot's exact search total for this sync's time window."""
+        try:
+            return self.get_time_bucket_size(
+                context=None,
+                starting_time=self.starting_time or self.get_starting_time(context=None),
+                end_time=self.get_end_time(),
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to collect pre-sync search total for stream '%s': %s",
+                self.name,
+                exc,
+            )
+            return None
+
     def split_time_bucket(self, context, starting_time: int, end_time: int):
         buckets = []
         time_diff = end_time - starting_time
