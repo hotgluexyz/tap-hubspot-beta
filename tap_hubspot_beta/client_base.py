@@ -15,7 +15,10 @@ from hotglue_etl_exceptions import InvalidCredentialsError
 from hotglue_singer_sdk.streams import RESTStream
 from hotglue_singer_sdk.mapper import  SameRecordTransform, StreamMap
 from hotglue_singer_sdk.helpers._flattening import get_flattening_options
-from tap_hubspot_beta.utils import deep_merge_dicts
+from tap_hubspot_beta.utils import (
+    HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS,
+    deep_merge_dicts,
+)
 import time
 
 from pendulum import parse
@@ -745,18 +748,7 @@ class hubspotStream(RESTStream):
         row = self.process_row_types(row)
         return row
     
-    _list_id_config_mapping = {
-        "contacts": "contacts_list_ids",
-        "contacts_v3": "contacts_list_ids",
-        "contacts_v3_archived": "contacts_list_ids",
-        "contact_events": "contacts_list_ids",
-        "companies": "companies_list_ids",
-        "companies_archived": "companies_list_ids",
-        "deals": "deals_list_ids",
-        "deals_archived": "deals_list_ids",
-        "tickets": "tickets_list_ids",
-        "orders": "orders_list_ids",
-    }
+    _list_id_config_mapping = HUBSPOT_OBJECT_STREAM_LIST_ID_CONFIG_KEYS
     
     def fetch_list_memberships(self, list_ids) -> Iterable[dict]:
         # reset the list record ids for each stream
