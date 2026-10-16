@@ -140,7 +140,10 @@ def add_streams(stream_classes):
     stream_types = []
     for stream_class in stream_classes:
         if include_streams:
-            if stream_class.__name__ not in include_streams:
+            if stream_class.__name__ not in include_streams and not (
+                stream_class is ThreadsStream
+                and MessagesStream.__name__ in include_streams
+            ):
                 logging.info(f"Ignored stream {stream_class.__name__} as it's not in INCLUDE_STREAMS.")
                 continue
             stream_types.append(stream_class)
