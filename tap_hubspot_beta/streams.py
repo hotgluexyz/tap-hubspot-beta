@@ -821,11 +821,11 @@ class ListsStream(hubspotV1Stream):
         return row
 
 
-class DealsPipelinesStream(hubspotV1Stream):
+class DealsPipelinesStream(hubspotV3Stream):
     """Deal Pipelines Stream"""
 
     name = "deals_pipelines"
-    path = "crm-pipelines/v1/pipelines/deals"
+    path = "crm/pipelines/2026-09/deals"
     records_jsonpath = "$.results[*]"
     primary_keys = ["pipelineId"]
     replication_key = None
@@ -833,19 +833,52 @@ class DealsPipelinesStream(hubspotV1Stream):
 
     schema = th.PropertiesList(
         th.Property("pipelineId", th.StringType),
+        th.Property("id", th.StringType),
         th.Property("objectType", th.StringType),
         th.Property("label", th.StringType),
         th.Property("displayOrder", th.IntegerType),
         th.Property("createdAt", th.DateTimeType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("active", th.BooleanType),
+        th.Property("archived", th.BooleanType),
+        th.Property("archivedAt", th.DateTimeType),
         th.Property("stages", th.ArrayType(th.ObjectType(
             th.Property("stageId", th.StringType),
+            th.Property("id", th.StringType),
             th.Property("label", th.StringType),
             th.Property("displayOrder", th.IntegerType),
+            th.Property("metadata", th.CustomType({"type": "object"})),
+            th.Property("createdAt", th.IntegerType),
+            th.Property("updatedAt", th.IntegerType),
             th.Property("active", th.BooleanType),
+            th.Property("archived", th.BooleanType),
+            th.Property("archivedAt", th.DateTimeType),
+            th.Property("writePermissions", th.StringType),
         ))),
     ).to_dict()
+
+    @staticmethod
+    def _to_epoch_ms(value):
+        """Convert an ISO timestamp to epoch ms, the format the retired V1 API returned."""
+        if not value:
+            return None
+        return round(parse(value).timestamp() * 1000)
+
+    def add_v1_fields(self, row):
+        """Fill in the V1 field names next to the new ones so existing syncs keep working."""
+        row["pipelineId"] = row["id"]
+        row["objectType"] = "DEAL"
+        row["active"] = not row.get("archived", False)
+        # V1 sent epoch ms; 0 (never set) becomes null in post_process like before
+        row["createdAt"] = self._to_epoch_ms(row.get("createdAt"))
+        row["updatedAt"] = self._to_epoch_ms(row.get("updatedAt"))
+        for stage in row.get("stages") or []:
+            stage["stageId"] = stage["id"]
+            stage["active"] = not stage.get("archived", False)
+            # customers already store stage dates as epoch ms
+            stage["createdAt"] = self._to_epoch_ms(stage.get("createdAt"))
+            stage["updatedAt"] = self._to_epoch_ms(stage.get("updatedAt"))
+        return row
 
     def _fetch_pipeline_audit(self, url, headers):
         """Fetch pipeline audit history with centralized retry logic."""
@@ -861,7 +894,7 @@ class DealsPipelinesStream(hubspotV1Stream):
         # get stages ids to not send dups
         row_stages = [stage["stageId"] for stage in row.get("stages")]
         # get audit history of each pipeline
-        url = f"{self.url_base}crm/v3/pipelines/deals/{row['pipelineId']}/audit"
+        url = f"{self.url_base}crm/pipelines/2026-09/deals/{row['pipelineId']}/audit"
         headers = self.authenticator.auth_headers or {}
         stages_history = self.request_decorator(self._fetch_pipeline_audit)(url, headers)
         # join all stages from history
@@ -901,15 +934,18 @@ class DealsPipelinesStream(hubspotV1Stream):
                     "displayOrder": best.get("displayOrder"),
                     "metadata": best.get("metadata"),
                     "stageId": best.get("stageId"),
+                    "id": best.get("stageId"),
                     "createdAt": created_at,
                     "updatedAt": best.get("updatedAt"),
                     "active": False,
+                    "archived": True,
                 }
             )
 
         return row
 
     def post_process(self, row, context) -> dict:
+        row = self.add_v1_fields(row)
         row = super().post_process(row, context)
         row = self.get_deleted_stages(row)
         return row
