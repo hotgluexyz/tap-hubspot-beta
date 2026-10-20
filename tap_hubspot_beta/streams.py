@@ -860,7 +860,7 @@ class DealsPipelinesStream(hubspotV3Stream):
     @staticmethod
     def _to_epoch_ms(value):
         """Convert an ISO timestamp to epoch ms, the format the retired V1 API returned."""
-        if value is None:
+        if not value:
             return None
         return round(parse(value).timestamp() * 1000)
 
