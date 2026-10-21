@@ -3574,6 +3574,107 @@ class ThreadsStream(hubspotV3Stream):
             return None
         return super().get_next_page_token(response, previous_token)
 
+    def get_child_context(self, record: dict, context) -> dict:
+        return {"thread_id": record["id"]}
+
+
+class MessagesStream(hubspotV3Stream):
+    """Conversations Messages Stream.
+
+    Retrieves every message for each thread synced by the parent threads
+    stream. See:
+    https://developers.hubspot.com/docs/api/conversations/conversations
+    """
+
+    name = "messages"
+    path = "conversations/v3/conversations/threads/{thread_id}/messages"
+    parent_stream_type = ThreadsStream
+    primary_keys = ["id"]
+    # The endpoint has no time filter; the parent threads stream is
+    # incremental, so all messages of each updated thread are re-synced.
+    replication_key = None
+    # Keep a single state partition instead of one entry per thread.
+    state_partitioning_keys = []
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("conversationsThreadId", th.StringType),
+        th.Property("type", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("createdBy", th.StringType),
+        th.Property(
+            "client",
+            th.ObjectType(
+                th.Property("clientType", th.StringType),
+                th.Property("integrationAppId", th.IntegerType),
+            ),
+        ),
+        th.Property(
+            "senders",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("actorId", th.StringType),
+                    th.Property("name", th.StringType),
+                    th.Property("senderField", th.StringType),
+                    th.Property(
+                        "deliveryIdentifier",
+                        th.ObjectType(
+                            th.Property("type", th.StringType),
+                            th.Property("value", th.StringType),
+                        ),
+                    ),
+                )
+            ),
+        ),
+        th.Property(
+            "recipients",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("actorId", th.StringType),
+                    th.Property("name", th.StringType),
+                    th.Property("recipientField", th.StringType),
+                    th.Property(
+                        "deliveryIdentifier",
+                        th.ObjectType(
+                            th.Property("type", th.StringType),
+                            th.Property("value", th.StringType),
+                        ),
+                    ),
+                )
+            ),
+        ),
+        th.Property("archived", th.BooleanType),
+        th.Property("text", th.StringType),
+        th.Property("richText", th.StringType),
+        th.Property("subject", th.StringType),
+        th.Property("inReplyToId", th.StringType),
+        th.Property("attachments", th.ArrayType(th.CustomType({"type": "object"}))),
+        th.Property("truncationStatus", th.StringType),
+        th.Property("status", th.CustomType({"type": "object"})),
+        th.Property("direction", th.StringType),
+        th.Property("channelId", th.StringType),
+        th.Property("channelAccountId", th.StringType),
+        # THREAD_STATUS_CHANGE messages
+        th.Property("newStatus", th.StringType),
+        # ASSIGNMENT messages
+        th.Property("assignedTo", th.StringType),
+    ).to_dict()
+
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return a token for identifying next page or None if no more pages."""
+        if not response.json().get("results"):
+            return None
+        return super().get_next_page_token(response, previous_token)
+
+    def post_process(self, row: dict, context: Optional[dict] = None) -> dict:
+        row = super().post_process(row, context)
+        if row is not None and not row.get("conversationsThreadId") and context:
+            row["conversationsThreadId"] = context.get("thread_id")
+        return row
+
 
 class ChannelsStream(hubspotV3Stream):
     """Channels Stream"""

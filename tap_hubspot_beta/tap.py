@@ -120,6 +120,7 @@ from tap_hubspot_beta.streams import (
     InboxesStream,
     ChannelsStream,
     TranscriptsStream,
+    MessagesStream,
 )
 
  #When a new stream is added to the tap, it would break existing test suites.
@@ -133,19 +134,43 @@ include_streams = os.environ.get('INCLUDE_STREAMS', "").split(',') if os.environ
 logging.info("INCLUDE_STREAMS: "+ os.environ.get('INCLUDE_STREAMS', ''))
 
 # Function to add streams to STREAM_TYPES if INCLUDE_STREAMS is set, otherwise add streams to STREAM_TYPES if not in IGNORE_STREAMS
+def _stream_lineage(stream_class):
+    """Yield the stream class followed by its parent, grandparent, ..."""
+    while stream_class:
+        yield stream_class
+        stream_class = stream_class.parent_stream_type
+
+
+# Child streams can only be loaded when their parent stream is registered, so
+# included streams keep their parents and ignored parents drop their children.
 def add_streams(stream_classes):
+    if include_streams:
+        required_streams = {
+            ancestor
+            for stream_class in stream_classes
+            if stream_class.__name__ in include_streams
+            for ancestor in _stream_lineage(stream_class)
+        }
     stream_types = []
     for stream_class in stream_classes:
         if include_streams:
-            if stream_class.__name__ not in include_streams:
+            if stream_class not in required_streams:
                 logging.info(f"Ignored stream {stream_class.__name__} as it's not in INCLUDE_STREAMS.")
                 continue
             stream_types.append(stream_class)
         else:
-            if stream_class.__name__ not in ignore_streams:
+            ignored = next(
+                (s for s in _stream_lineage(stream_class) if s.__name__ in ignore_streams),
+                None,
+            )
+            if ignored is None:
                 stream_types.append(stream_class)
-            else:
+            elif ignored is stream_class:
                 logging.info(f"Ignored stream {stream_class.__name__} as it's in IGNORE_STREAMS.")
+            else:
+                logging.info(
+                    f"Ignored stream {stream_class.__name__} as its parent {ignored.__name__} is in IGNORE_STREAMS."
+                )
     return stream_types
 
 DISPLAY_ONLY_STREAM_NAMES = [
@@ -273,6 +298,7 @@ STREAM_TYPES = add_streams([
     InboxesStream,
     ChannelsStream,
     TranscriptsStream,
+    MessagesStream,
 ])
 
 
