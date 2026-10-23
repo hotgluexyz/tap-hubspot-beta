@@ -81,7 +81,6 @@ class hubspotStream(RESTStream):
             return
 
         meta_res = req.json()
-        # v3 properties APIs wrap the list in "results"; v1 returns a bare array.
         fields = meta_res["results"] if isinstance(meta_res, dict) and "results" in meta_res else meta_res
         self.fields_metadata = {v["name"]: v for v in fields}
 
