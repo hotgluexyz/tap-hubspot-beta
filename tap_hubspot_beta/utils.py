@@ -84,11 +84,11 @@ def resolve_oauth_scopes(
         )
         response.raise_for_status()
         return frozenset(response.json().get("scopes") or [])
-    except Exception as exc:
+    except Exception:
         # Empty scopes => can_read_property_values treats sensitive fields as unreadable.
         logger.warning(
             "Could not resolve HubSpot OAuth scopes; sensitive properties will be "
-            "excluded from sync: %s",
+            "excluded from sync.",
 
         )
         return frozenset()
