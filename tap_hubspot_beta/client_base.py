@@ -44,6 +44,7 @@ class hubspotStream(RESTStream):
     bulk_child_size = 1000
 
     def sensitive_scope_object_type(self) -> str:
+        """Map tap stream name to the object type segment used in sensitive-data OAuth scopes."""
         if getattr(self, "is_custom_stream", False):
             return "custom"
         object_type = self.name
@@ -80,6 +81,7 @@ class hubspotStream(RESTStream):
             return
 
         meta_res = req.json()
+        # v3 properties APIs wrap the list in "results"; v1 returns a bare array.
         fields = meta_res["results"] if isinstance(meta_res, dict) and "results" in meta_res else meta_res
         self.fields_metadata = {v["name"]: v for v in fields}
 
@@ -177,6 +179,7 @@ class hubspotStream(RESTStream):
         return selected_properties
 
     def _excluded_sensitive_property_names(self) -> set:
+        # If catalog is not up to date,omit sensitive fields from property requests too.
         if not self.properties_url:
             return set()
         field_meta = getattr(self, "fields_metadata", None) or {}
@@ -303,6 +306,7 @@ class hubspotStream(RESTStream):
                     self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
                     continue
 
+            # Omit from catalog when the connection lacks crm.objects.<type>.<level>.read scopes.
             if not can_read_property_values(field, scopes, object_type):
                 self.logger.info(
                     "Not including field %s in catalog for stream %s; sensitive "
