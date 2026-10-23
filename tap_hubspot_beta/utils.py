@@ -22,7 +22,7 @@ SCOPE_OBJECT_TYPE_ALIASES = {
 def get_property_data_sensitivity(field: dict) -> Optional[str]:
     """Return sensitivity level for a HubSpot property definition, if any."""
     sensitivity = field.get("dataSensitivity")
-    if sensitivity in ("sensitive", "highly_sensitive"):
+    if sensitivity in ("sensitive", "highly_sensitive", "standard", "high"):
         return sensitivity
     categories = field.get("sensitiveDataCategories") or []
     if categories:
