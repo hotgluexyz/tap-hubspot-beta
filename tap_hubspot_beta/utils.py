@@ -1,7 +1,99 @@
 import json
+import logging
 import requests
 from singer_sdk.helpers.jsonpath import extract_jsonpath
 import re
+from typing import Any, Optional
+
+HUBSPOT_ACCESS_TOKEN_METADATA_URL = (
+    "https://api.hubapi.com/oauth/v1/access-tokens/{token}"
+)
+
+SCOPE_OBJECT_TYPE_ALIASES = {
+    "lineitems": "line_items",
+    "contacts_v3": "contacts",
+    "archived_contacts": "contacts",
+    "archived_contacts_v3": "contacts",
+    "archived_deals": "deals",
+    "archived_companies": "companies",
+}
+
+
+def get_property_data_sensitivity(field: dict) -> Optional[str]:
+    """Return sensitivity level for a HubSpot property definition, if any."""
+    sensitivity = field.get("dataSensitivity")
+    if sensitivity in ("sensitive", "highly_sensitive"):
+        return sensitivity
+    categories = field.get("sensitiveDataCategories") or []
+    if categories:
+        return "sensitive"
+    return None
+
+
+def sensitive_read_scope_name(object_type: str, level: str) -> str:
+    """OAuth scope required to read property values at the given sensitivity level."""
+    normalized = SCOPE_OBJECT_TYPE_ALIASES.get(object_type, object_type)
+    if normalized == "custom":
+        return f"crm.objects.custom.{level}.read"
+    if normalized == "tickets":
+        if level == "highly_sensitive":
+            return "tickets.highly_sensitive"
+        return "tickets.sensitive"
+    return f"crm.objects.{normalized}.{level}.read"
+
+
+def has_sensitive_read_scope(
+    scopes: frozenset,
+    object_type: str,
+    level: str,
+) -> bool:
+    return sensitive_read_scope_name(object_type, level) in scopes
+
+
+def can_read_property_values(
+    field: dict,
+    scopes: frozenset,
+    object_type: str,
+) -> bool:
+    """Whether the current token may read values for this property."""
+    level = get_property_data_sensitivity(field)
+    if not level:
+        return True
+    return has_sensitive_read_scope(scopes, object_type, level)
+
+
+def resolve_oauth_scopes(
+    config: dict,
+    logger: logging.Logger,
+    auth_headers: Optional[dict] = None,
+) -> frozenset:
+    """Resolve granted OAuth scopes from config or HubSpot token metadata."""
+    scope = config.get("scope")
+    if scope:
+        if isinstance(scope, str):
+            return frozenset(scope.split())
+        return frozenset(str(item) for item in scope)
+
+    access_token = config.get("access_token")
+    if not access_token:
+        return frozenset()
+
+    headers = dict(auth_headers or {})
+    try:
+        response = requests.get(
+            HUBSPOT_ACCESS_TOKEN_METADATA_URL.format(token=access_token),
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return frozenset(response.json().get("scopes") or [])
+    except Exception as exc:
+        logger.warning(
+            "Could not resolve HubSpot OAuth scopes; sensitive properties will be "
+            "excluded from sync: %s",
+            exc,
+        )
+        return frozenset()
 
 
 def deep_merge(dict1, dict2):
