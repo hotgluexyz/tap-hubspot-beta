@@ -13,6 +13,7 @@ from hotglue_etl_exceptions import InvalidCredentialsError
 from tap_hubspot_beta.client_base import TapHubspotDailyAPIQuotaExceededException
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+from tap_hubspot_beta.utils import can_read_property_values, resolve_oauth_scopes
 from tap_hubspot_beta.client_v3 import hubspotV3Stream, DynamicDiscoveredHubspotV3Stream
 from tap_hubspot_beta.streams import (
     AccountStream,
@@ -347,6 +348,11 @@ class Taphubspot(Tap):
         th.Property("use_legacy_streams", th.BooleanType, default=True),
         th.Property("use_incremental_contact_subscriptions", th.BooleanType, default=False),
         th.Property("daily_quota_percent_cap", th.IntegerType, default=80),
+        th.Property(
+            "exclude_unauthorized_sensitive_properties",
+            th.BooleanType,
+            default=True,
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
@@ -511,6 +517,20 @@ class Taphubspot(Tap):
         ]
         main_properties = [p.name for p in properties_list]
 
+        filter_sensitive = self.config.get(
+            "exclude_unauthorized_sensitive_properties", True
+        )
+        oauth_scopes = frozenset()
+        if filter_sensitive:
+            if getattr(self, "_oauth_scopes_cache", None) is None:
+                # Custom-object schema runs right after DiscoverCustomObjectsStream
+                # fetches schemas; that request refreshes config access_token when needed.
+                self._oauth_scopes_cache = resolve_oauth_scopes(
+                    self.config,
+                    self.logger,
+                )
+            oauth_scopes = self._oauth_scopes_cache
+        # Same scope rules as standard objects; custom fields use crm.objects.custom.<level>.read.
         for property in properties:
             field_name = property.get("name")
             if field_name in main_properties:
@@ -518,6 +538,15 @@ class Taphubspot(Tap):
                 continue
             if not field_name:
                 self.logger.info("Skipping field without name.")
+                continue
+            if filter_sensitive and not can_read_property_values(
+                property, oauth_scopes, "custom"
+            ):
+                self.logger.info(
+                    "Skipping sensitive custom object field %s; required scopes are "
+                    "not granted to this connection",
+                    field_name,
+                )
                 continue
             th_type = hubspotV3Stream.extract_type(property)
             properties_list.append(th.Property(field_name, th_type))
