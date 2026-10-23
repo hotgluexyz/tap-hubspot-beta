@@ -520,6 +520,7 @@ class Taphubspot(Tap):
                 self.logger,
             )
         oauth_scopes = self._oauth_scopes_cache
+        # Same scope rules as standard objects; custom fields use crm.objects.custom.<level>.read.
         for property in properties:
             field_name = property.get("name")
             if field_name in main_properties:

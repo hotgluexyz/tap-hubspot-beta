@@ -114,6 +114,7 @@ class hubspotStream(RESTStream):
         return associations_metadata
 
     def sensitive_scope_object_type(self) -> str:
+        """Object type segment used in crm.objects.<type>.<level>.read scope names."""
         if getattr(self, "is_custom_stream", False):
             return "custom"
         return self.stream_object_type
@@ -143,6 +144,7 @@ class hubspotStream(RESTStream):
             decorated_request = self.request_decorator(self._request)
             resp = decorated_request(prepared_request, None)
             payload = resp.json()
+            # Property metadata shape varies by API version; needed for dataSensitivity checks.
             if isinstance(payload, dict) and payload.get("results"):
                 property_rows = payload["results"]
             elif isinstance(payload, list):
@@ -398,6 +400,7 @@ class hubspotStream(RESTStream):
         return selected_properties
 
     def _excluded_sensitive_property_names(self) -> set:
+        # If catalog is not up to date, omit sensitive fields from property requests too.
         if not self.properties_url:
             return set()
         field_meta = getattr(self, "fields_metadata", None) or {}
@@ -567,6 +570,7 @@ class hubspotStream(RESTStream):
                         self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
                         continue
 
+                # Omit when the connection lacks crm.objects.<type>.<level>.read scopes.
                 if not can_read_property_values(field, scopes, object_type):
                     self.logger.info(
                         "Not including field %s in catalog for stream %s; sensitive "

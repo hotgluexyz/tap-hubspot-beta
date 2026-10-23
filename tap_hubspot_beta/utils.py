@@ -9,6 +9,7 @@ HUBSPOT_ACCESS_TOKEN_METADATA_URL = (
     "https://api.hubapi.com/oauth/v1/access-tokens/{token}"
 )
 
+# Match tap stream name with hubspot object name.
 SCOPE_OBJECT_TYPE_ALIASES = {
     "lineitems": "line_items",
     "contacts_v3": "contacts",
@@ -22,7 +23,8 @@ SCOPE_OBJECT_TYPE_ALIASES = {
 def get_property_data_sensitivity(field: dict) -> Optional[str]:
     """Return sensitivity level for a HubSpot property definition, if any."""
     sensitivity = field.get("dataSensitivity")
-    if sensitivity in ("sensitive", "highly_sensitive"):
+    # standard and high are for v1 properties, sensitive and highly_sensitive are for the other properties endpoints.
+    if sensitivity in ("sensitive", "highly_sensitive", "standard", "high"):
         return sensitivity
     categories = field.get("sensitiveDataCategories") or []
     if categories:
@@ -88,6 +90,7 @@ def resolve_oauth_scopes(
         response.raise_for_status()
         return frozenset(response.json().get("scopes") or [])
     except Exception as exc:
+        # Empty scopes => can_read_property_values treats sensitive fields as unreadable.
         logger.warning(
             "Could not resolve HubSpot OAuth scopes; sensitive properties will be "
             "excluded from sync: %s",
