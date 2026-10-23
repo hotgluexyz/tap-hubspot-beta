@@ -2,7 +2,14 @@
 
 import pytest
 
-from tap_hubspot_beta.utils import deep_merge_dicts, merge_association_values
+from tap_hubspot_beta.utils import (
+    can_read_property_values,
+    deep_merge_dicts,
+    get_property_data_sensitivity,
+    has_sensitive_read_scope,
+    merge_association_values,
+    sensitive_read_scope_name,
+)
 
 
 @pytest.mark.parametrize(
@@ -25,6 +32,37 @@ def test_deep_merge_dicts_joins_duplicate_association_fields():
     merged = deep_merge_dicts(left, right)
 
     assert merged["record-1"]["Accounts"] == "1001;1002"
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ({"dataSensitivity": "sensitive"}, "sensitive"),
+        ({"dataSensitivity": "highly_sensitive"}, "highly_sensitive"),
+        ({"sensitiveDataCategories": ["HIPAA"]}, "sensitive"),
+        ({"dataSensitivity": "non_sensitive"}, None),
+        ({}, None),
+    ],
+)
+def test_get_property_data_sensitivity(field, expected):
+    assert get_property_data_sensitivity(field) == expected
+
+
+def test_sensitive_read_scope_name_for_deals_and_tickets():
+    assert sensitive_read_scope_name("deals", "sensitive") == (
+        "crm.objects.deals.sensitive.read"
+    )
+    assert sensitive_read_scope_name("tickets", "highly_sensitive") == (
+        "tickets.highly_sensitive"
+    )
+
+
+def test_can_read_property_values_respects_granted_scopes():
+    field = {"dataSensitivity": "sensitive"}
+    scopes = frozenset({"crm.objects.deals.sensitive.read"})
+    assert can_read_property_values(field, scopes, "deals")
+    assert not can_read_property_values(field, frozenset(), "deals")
+    assert has_sensitive_read_scope(scopes, "deals", "sensitive")
 
 
 def test_deep_merge_dicts_merges_string_with_list():
