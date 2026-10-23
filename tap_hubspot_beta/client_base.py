@@ -119,6 +119,9 @@ class hubspotStream(RESTStream):
             return "custom"
         return self.stream_object_type
 
+    def exclude_unauthorized_sensitive_properties(self) -> bool:
+        return self.config.get("exclude_unauthorized_sensitive_properties", True)
+
     @cached_property
     def oauth_scopes(self) -> frozenset:
         cache = getattr(self._tap, "_oauth_scopes_cache", None)
@@ -400,6 +403,8 @@ class hubspotStream(RESTStream):
         return selected_properties
 
     def _excluded_sensitive_property_names(self) -> set:
+        if not self.exclude_unauthorized_sensitive_properties():
+            return set()
         # If catalog is not up to date, omit sensitive fields from property requests too.
         if not self.properties_url:
             return set()
@@ -560,8 +565,9 @@ class hubspotStream(RESTStream):
         if response:
             schema_res = response.json()
             fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
+            filter_sensitive = self.exclude_unauthorized_sensitive_properties()
             object_type = self.sensitive_scope_object_type()
-            scopes = self.oauth_scopes
+            scopes = self.oauth_scopes if filter_sensitive else frozenset()
             for field in fields:
                 field_name = field.get("name")
                 # filter duplicated columns (case insensitive)
@@ -571,7 +577,9 @@ class hubspotStream(RESTStream):
                         continue
 
                 # Omit when the connection lacks crm.objects.<type>.<level>.read scopes.
-                if not can_read_property_values(field, scopes, object_type):
+                if filter_sensitive and not can_read_property_values(
+                    field, scopes, object_type
+                ):
                     self.logger.info(
                         "Not including field %s in catalog for stream %s; sensitive "
                         "property requires scopes not granted to this connection",

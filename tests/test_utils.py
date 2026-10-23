@@ -65,6 +65,24 @@ def test_can_read_property_values_respects_granted_scopes():
     assert has_sensitive_read_scope(scopes, "deals", "sensitive")
 
 
+def test_has_sensitive_read_scope_accepts_v2_scope_names():
+    assert has_sensitive_read_scope(
+        frozenset({"crm.objects.deals.sensitive.read.v2"}),
+        "deals",
+        "sensitive",
+    )
+    assert has_sensitive_read_scope(
+        frozenset({"crm.objects.custom.highly_sensitive.read.v2"}),
+        "custom",
+        "highly_sensitive",
+    )
+    assert has_sensitive_read_scope(
+        frozenset({"tickets.sensitive.v2"}),
+        "tickets",
+        "sensitive",
+    )
+
+
 def test_deep_merge_dicts_merges_string_with_list():
     left = {"record-1": {"companies_to_companies": "1001"}}
     right = {"record-1": {"companies_to_companies": ["1002"]}}

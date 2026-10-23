@@ -348,6 +348,11 @@ class Taphubspot(Tap):
         th.Property("use_legacy_streams", th.BooleanType, default=True),
         th.Property("use_incremental_contact_subscriptions", th.BooleanType, default=False),
         th.Property("daily_quota_percent_cap", th.IntegerType, default=80),
+        th.Property(
+            "exclude_unauthorized_sensitive_properties",
+            th.BooleanType,
+            default=True,
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
@@ -512,14 +517,19 @@ class Taphubspot(Tap):
         ]
         main_properties = [p.name for p in properties_list]
 
-        if getattr(self, "_oauth_scopes_cache", None) is None:
-            # Custom-object schema runs right after DiscoverCustomObjectsStream
-            # fetches schemas; that request refreshes config access_token when needed.
-            self._oauth_scopes_cache = resolve_oauth_scopes(
-                self.config,
-                self.logger,
-            )
-        oauth_scopes = self._oauth_scopes_cache
+        filter_sensitive = self.config.get(
+            "exclude_unauthorized_sensitive_properties", True
+        )
+        oauth_scopes = frozenset()
+        if filter_sensitive:
+            if getattr(self, "_oauth_scopes_cache", None) is None:
+                # Custom-object schema runs right after DiscoverCustomObjectsStream
+                # fetches schemas; that request refreshes config access_token when needed.
+                self._oauth_scopes_cache = resolve_oauth_scopes(
+                    self.config,
+                    self.logger,
+                )
+            oauth_scopes = self._oauth_scopes_cache
         # Same scope rules as standard objects; custom fields use crm.objects.custom.<level>.read.
         for property in properties:
             field_name = property.get("name")
@@ -529,7 +539,9 @@ class Taphubspot(Tap):
             if not field_name:
                 self.logger.info("Skipping field without name.")
                 continue
-            if not can_read_property_values(property, oauth_scopes, "custom"):
+            if filter_sensitive and not can_read_property_values(
+                property, oauth_scopes, "custom"
+            ):
                 self.logger.info(
                     "Skipping sensitive custom object field %s; required scopes are "
                     "not granted to this connection",

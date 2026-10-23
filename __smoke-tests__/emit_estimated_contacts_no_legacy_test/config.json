@@ -2,10 +2,14 @@
     "client_id": "test_client_id",
     "client_secret": "test_client_secret",
     "refresh_token": "test_refresh_token",
-    "access_token": "test_access_token",
-    "expires_in": 0,
+    "access_token": "CKz***",
+    "expires_in": 1792793674,
     "redirect_uri": "https://example.com/callback",
     "_refresh_token_via_hg_api": false,
     "start_date": "2026-05-01T00:00:00Z",
-    "use_legacy_streams": false
+    "use_legacy_streams": false,
+    "enable_list_selection": false,
+    "use_incremental_contact_subscriptions": false,
+    "daily_quota_percent_cap": 80,
+    "exclude_unauthorized_sensitive_properties": false
 }

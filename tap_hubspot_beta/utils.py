@@ -49,7 +49,8 @@ def has_sensitive_read_scope(
     object_type: str,
     level: str,
 ) -> bool:
-    return sensitive_read_scope_name(object_type, level) in scopes
+    scope = sensitive_read_scope_name(object_type, level)
+    return scope in scopes or f"{scope}.v2" in scopes
 
 
 def can_read_property_values(
@@ -70,12 +71,6 @@ def resolve_oauth_scopes(
     auth_headers: Optional[dict] = None,
 ) -> frozenset:
     """Resolve granted OAuth scopes from config or HubSpot token metadata."""
-    scope = config.get("scope")
-    if scope:
-        if isinstance(scope, str):
-            return frozenset(scope.split())
-        return frozenset(str(item) for item in scope)
-
     access_token = config.get("access_token")
     if not access_token:
         return frozenset()
@@ -94,7 +89,7 @@ def resolve_oauth_scopes(
         logger.warning(
             "Could not resolve HubSpot OAuth scopes; sensitive properties will be "
             "excluded from sync: %s",
-            exc,
+
         )
         return frozenset()
 
