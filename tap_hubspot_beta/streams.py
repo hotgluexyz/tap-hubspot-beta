@@ -1269,6 +1269,10 @@ class ArchivedContactsStream(ArchivedStream):
         Returns:
             True if the stream is selected.
         """
+        # Archived contacts can't be fetched incrementally, so allow skipping the full fetch
+        if self.config.get("ignore_archived_contacts"):
+            return False
+
         # It has to be in the catalog or it will cause issues
         if not self._tap.catalog.get("contacts_v3_archived"):
             return False
