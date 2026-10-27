@@ -346,6 +346,7 @@ class Taphubspot(Tap):
         th.Property("enable_list_selection", th.BooleanType, default=False),
         th.Property("use_legacy_streams", th.BooleanType, default=True),
         th.Property("use_incremental_contact_subscriptions", th.BooleanType, default=False),
+        th.Property("ignore_archived_contacts", th.BooleanType, default=False),
         th.Property("daily_quota_percent_cap", th.IntegerType, default=80),
     ).to_dict()
 
