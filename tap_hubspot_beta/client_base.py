@@ -57,11 +57,7 @@ class hubspotStream(RESTStream):
         cache = getattr(self._tap, "_oauth_scopes_cache", None)
         if cache is not None:
             return cache
-        scopes = resolve_oauth_scopes(
-            self._tap.config,
-            self.logger,
-            auth_headers=self.authenticator.auth_headers or {},
-        )
+        scopes = resolve_oauth_scopes(self._tap.config, self.logger)
         self._tap._oauth_scopes_cache = scopes
         return scopes
 
