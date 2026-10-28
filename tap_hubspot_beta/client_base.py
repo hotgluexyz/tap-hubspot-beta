@@ -14,6 +14,10 @@ from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
+from tap_hubspot_beta.utils import (
+    can_read_property_values,
+    resolve_oauth_scopes,
+)
 
 from pendulum import parse
 
@@ -38,6 +42,24 @@ class hubspotStream(RESTStream):
     object_type = None
     fields_metadata = {}
     bulk_child_size = 1000
+
+    def sensitive_scope_object_type(self) -> str:
+        """Map tap stream name to the object type segment used in sensitive-data OAuth scopes."""
+        if getattr(self, "is_custom_stream", False):
+            return "custom"
+        object_type = self.name
+        if "_v3" in object_type:
+            object_type = object_type.replace("_v3", "")
+        return object_type.lower()
+
+    @cached_property
+    def oauth_scopes(self) -> frozenset:
+        cache = getattr(self._tap, "_oauth_scopes_cache", None)
+        if cache is not None:
+            return cache
+        scopes = resolve_oauth_scopes(self._tap.config, self.logger)
+        self._tap._oauth_scopes_cache = scopes
+        return scopes
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -142,10 +164,33 @@ class hubspotStream(RESTStream):
     @cached_property
     def selected_properties(self):
         selected_properties = []
+        excluded_sensitive = set(self._excluded_sensitive_property_names())
         for key, value in self.metadata.items():
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
-                selected_properties.append(key[-1])
+                property_name = key[-1]
+                if property_name in excluded_sensitive:
+                    continue
+                selected_properties.append(property_name)
         return selected_properties
+
+    def _excluded_sensitive_property_names(self) -> set:
+        # If catalog is not up to date,omit sensitive fields from property requests too.
+        if not self.properties_url:
+            return set()
+        field_meta = getattr(self, "fields_metadata", None) or {}
+        if not field_meta:
+            self.load_fields_metadata()
+            field_meta = self.fields_metadata or {}
+        if not field_meta:
+            return set()
+
+        object_type = self.sensitive_scope_object_type()
+        scopes = self.oauth_scopes
+        excluded = set()
+        for field_name, field in field_meta.items():
+            if not can_read_property_values(field, scopes, object_type):
+                excluded.add(field_name)
+        return excluded
     
     def curlify_request(self, request):
         command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
@@ -240,6 +285,8 @@ class hubspotStream(RESTStream):
             return th.PropertiesList(*properties).to_dict()
         schema_res = response.json()
         fields = schema_res["results"] if isinstance(schema_res, dict) and "results" in schema_res else schema_res
+        object_type = self.sensitive_scope_object_type()
+        scopes = self.oauth_scopes
 
         deduplicate_columns = self.config.get("deduplicate_columns", True)
         base_properties = []
@@ -253,6 +300,16 @@ class hubspotStream(RESTStream):
                 if field_name.lower() in base_properties:
                     self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
                     continue
+
+            # Omit from catalog when the connection lacks crm.objects.<type>.<level>.read scopes.
+            if not can_read_property_values(field, scopes, object_type):
+                self.logger.info(
+                    "Not including field %s in catalog for stream %s; sensitive "
+                    "property requires scopes not granted to this connection",
+                    field_name,
+                    self.name,
+                )
+                continue
 
             if not field.get("deleted"):
                 property = th.Property(field_name, self.extract_type(field))
