@@ -728,7 +728,7 @@ class hubspotStream(RESTStream):
     def parse_datetimes(self, row):
         for field in self.datetime_fields:
             if row.get(field) is not None:
-                if row.get(field) in [0, ""]:
+                if row.get(field) in [0, "", "false"]:
                     row[field] = None
                 else:
                     try:
