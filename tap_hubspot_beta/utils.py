@@ -6,7 +6,7 @@ import re
 from typing import Any, Optional
 
 HUBSPOT_ACCESS_TOKEN_METADATA_URL = (
-    "https://api.hubapi.com/oauth/v1/access-tokens/{token}"
+    "https://api.hubapi.com/oauth/2026-03/token/introspect"
 )
 
 # Match tap stream name with hubspot object name.
@@ -68,18 +68,23 @@ def can_read_property_values(
 def resolve_oauth_scopes(
     config: dict,
     logger: logging.Logger,
-    auth_headers: Optional[dict] = None,
 ) -> frozenset:
-    """Resolve granted OAuth scopes from config or HubSpot token metadata."""
+    """Resolve granted OAuth scopes from config or HubSpot token introspection."""
     access_token = config.get("access_token")
-    if not access_token:
+    client_id = config.get("client_id")
+    client_secret = config.get("client_secret")
+    if not access_token or not client_id or not client_secret:
         return frozenset()
 
-    headers = dict(auth_headers or {})
     try:
-        response = requests.get(
-            HUBSPOT_ACCESS_TOKEN_METADATA_URL.format(token=access_token),
-            headers=headers,
+        response = requests.post(
+            HUBSPOT_ACCESS_TOKEN_METADATA_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "token": access_token,
+                "token_type_hint": "access_token",
+            },
             timeout=30,
         )
         response.raise_for_status()
