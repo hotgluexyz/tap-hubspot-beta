@@ -15,7 +15,11 @@ from hotglue_etl_exceptions import InvalidCredentialsError
 from hotglue_singer_sdk.streams import RESTStream
 from hotglue_singer_sdk.mapper import  SameRecordTransform, StreamMap
 from hotglue_singer_sdk.helpers._flattening import get_flattening_options
-from tap_hubspot_beta.utils import deep_merge_dicts
+from tap_hubspot_beta.utils import (
+    can_read_property_values,
+    deep_merge_dicts,
+    resolve_oauth_scopes,
+)
 import time
 
 from pendulum import parse
@@ -109,6 +113,24 @@ class hubspotStream(RESTStream):
         self._tap.associations_metadata[self.name] = associations_metadata
         return associations_metadata
 
+    def sensitive_scope_object_type(self) -> str:
+        """Object type segment used in crm.objects.<type>.<level>.read scope names."""
+        if getattr(self, "is_custom_stream", False):
+            return "custom"
+        return self.stream_object_type
+
+    def exclude_unauthorized_sensitive_properties(self) -> bool:
+        return self.config.get("exclude_unauthorized_sensitive_properties", True)
+
+    @cached_property
+    def oauth_scopes(self) -> frozenset:
+        cache = getattr(self._tap, "_oauth_scopes_cache", None)
+        if cache is not None:
+            return cache
+        scopes = resolve_oauth_scopes(self._tap.config, self.logger)
+        self._tap._oauth_scopes_cache = scopes
+        return scopes
+
     def load_fields_metadata(self):
         if not self.properties_url:
             self.logger.info(f"Skipping fields_meta for {self.name} stream, because there is no properties_url set")
@@ -120,7 +142,17 @@ class hubspotStream(RESTStream):
             )
             decorated_request = self.request_decorator(self._request)
             resp = decorated_request(prepared_request, None)
-            self.fields_metadata = {v["name"]: v for v in resp.json()}
+            payload = resp.json()
+            # Property metadata shape varies by API version; needed for dataSensitivity checks.
+            if isinstance(payload, dict) and payload.get("results"):
+                property_rows = payload["results"]
+            elif isinstance(payload, list):
+                property_rows = payload
+            else:
+                property_rows = []
+            self.fields_metadata = {
+                row["name"]: row for row in property_rows if row.get("name")
+            }
         except (FatalAPIError, RetriableAPIError, InvalidCredentialsError):
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
@@ -357,10 +389,35 @@ class hubspotStream(RESTStream):
     @cached_property
     def selected_properties(self):
         selected_properties = []
+        excluded_sensitive = set(self._excluded_sensitive_property_names())
         for key, value in self.metadata.items():
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
-                selected_properties.append(key[-1])
+                property_name = key[-1]
+                if property_name in excluded_sensitive:
+                    continue
+                selected_properties.append(property_name)
         return selected_properties
+
+    def _excluded_sensitive_property_names(self) -> set:
+        if not self.exclude_unauthorized_sensitive_properties():
+            return set()
+        # If catalog is not up to date, omit sensitive fields from property requests too.
+        if not self.properties_url:
+            return set()
+        field_meta = getattr(self, "fields_metadata", None) or {}
+        if not field_meta:
+            self.load_fields_metadata()
+            field_meta = self.fields_metadata or {}
+        if not field_meta:
+            return set()
+
+        object_type = self.sensitive_scope_object_type()
+        scopes = self.oauth_scopes
+        excluded = set()
+        for field_name, field in field_meta.items():
+            if not can_read_property_values(field, scopes, object_type):
+                excluded.add(field_name)
+        return excluded
     
     def curlify_request(self, request):
         command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
@@ -504,6 +561,9 @@ class hubspotStream(RESTStream):
         if response:
             schema_res = response.json()
             fields = schema_res.get("results",[]) if isinstance(schema_res, dict) and schema_res.get("results") else schema_res
+            filter_sensitive = self.exclude_unauthorized_sensitive_properties()
+            object_type = self.sensitive_scope_object_type()
+            scopes = self.oauth_scopes if filter_sensitive else frozenset()
             for field in fields:
                 field_name = field.get("name")
                 # filter duplicated columns (case insensitive)
@@ -511,6 +571,18 @@ class hubspotStream(RESTStream):
                     if field_name.lower() in base_properties:
                         self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
                         continue
+
+                # Omit when the connection lacks crm.objects.<type>.<level>.read scopes.
+                if filter_sensitive and not can_read_property_values(
+                    field, scopes, object_type
+                ):
+                    self.logger.info(
+                        "Not including field %s in catalog for stream %s; sensitive "
+                        "property requires scopes not granted to this connection",
+                        field_name,
+                        self.name,
+                    )
+                    continue
 
                 if not field.get("deleted"):
                     property = th.Property(field_name, self.extract_type(field))
