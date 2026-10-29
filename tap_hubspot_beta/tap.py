@@ -322,7 +322,7 @@ class Taphubspot(Tap):
     def access_token_support(cls, connector=None):
         """Return authenticator class and auth endpoint for token refresh."""
         authenticator = OAuth2Authenticator
-        auth_endpoint = "https://api.hubapi.com/oauth/v1/token"
+        auth_endpoint = "https://api.hubapi.com/oauth/2026-03/token"
         return authenticator, auth_endpoint
 
     def __init__(
