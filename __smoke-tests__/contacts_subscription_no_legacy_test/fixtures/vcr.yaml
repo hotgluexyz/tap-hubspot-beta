@@ -1,6 +1,6 @@
 interactions:
 - request:
-    body: redirect_uri=&grant_type=refresh_token
+    body: grant_type=refresh_token
     headers:
       Accept:
       - '*/*'
@@ -9,13 +9,13 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '187'
+      - '173'
       Content-Type:
       - application/x-www-form-urlencoded
       User-Agent:
       - python-requests/2.34.2
     method: POST
-    uri: https://api.hubapi.com/oauth/v1/token
+    uri: https://api.hubapi.com/oauth/2026-03/token
   response:
     body:
       string: '{"token_type": "-Fallback-scrubbed-seIarv", "refresh_token": "7f0***",
