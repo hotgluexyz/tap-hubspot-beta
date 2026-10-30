@@ -19,6 +19,7 @@ class hubspotV4Stream(hubspotStream):
 
     rest_method = "POST"
     records_jsonpath = "$.results[*]"
+    bulk_child = True
 
     def get_url(self, context: Optional[dict]) -> str:
         """Get stream entity URL. """

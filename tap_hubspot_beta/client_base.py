@@ -1,23 +1,29 @@
 """REST client handling, including hubspotStream base class."""
 import copy
 import logging
+import urllib3
 
 import requests
 import backoff
 from copy import deepcopy
-from typing import Any, Dict, Optional, cast, List
+from typing import Any, Dict, Optional, cast, List, Callable, Generator
+
 from backports.cached_property import cached_property
 from singer_sdk import typing as th
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.streams import RESTStream
-from urllib3.exceptions import ProtocolError
 from singer_sdk.mapper import  SameRecordTransform, StreamMap
 from singer_sdk.helpers._flattening import get_flattening_options
-import curlify
+from tap_hubspot_beta.utils import (
+    can_read_property_values,
+    resolve_oauth_scopes,
+)
 
 from pendulum import parse
 
 from tap_hubspot_beta.auth import OAuth2Authenticator
+import singer
+from singer import StateMessage
 
 logging.getLogger("backoff").setLevel(logging.CRITICAL)
 
@@ -35,6 +41,25 @@ class hubspotStream(RESTStream):
     fields_metadata = {}
     object_type = None
     fields_metadata = {}
+    bulk_child_size = 1000
+
+    def sensitive_scope_object_type(self) -> str:
+        """Map tap stream name to the object type segment used in sensitive-data OAuth scopes."""
+        if getattr(self, "is_custom_stream", False):
+            return "custom"
+        object_type = self.name
+        if "_v3" in object_type:
+            object_type = object_type.replace("_v3", "")
+        return object_type.lower()
+
+    @cached_property
+    def oauth_scopes(self) -> frozenset:
+        cache = getattr(self._tap, "_oauth_scopes_cache", None)
+        if cache is not None:
+            return cache
+        scopes = resolve_oauth_scopes(self._tap.config, self.logger)
+        self._tap._oauth_scopes_cache = scopes
+        return scopes
 
     def load_fields_metadata(self):
         if not self.properties_url:
@@ -44,13 +69,16 @@ class hubspotStream(RESTStream):
         req = requests.get(
             f"{self.url_base}{self.properties_url}",
             headers = self.authenticator.auth_headers or {},
+            timeout=self.timeout,
         )
 
         if req.status_code != 200:
             self.logger.info(f"Skipping fields_meta for {self.name} stream")
             return
 
-        self.fields_metadata = {v["name"]: v for v in req.json()}
+        meta_res = req.json()
+        fields = meta_res["results"] if isinstance(meta_res, dict) and "results" in meta_res else meta_res
+        self.fields_metadata = {v["name"]: v for v in fields}
 
     def _request(
         self, prepared_request: requests.PreparedRequest, context: Optional[dict]
@@ -91,6 +119,7 @@ class hubspotStream(RESTStream):
 
         while not finished:
             logging.getLogger("backoff").setLevel(logging.CRITICAL)
+
             prepared_request = self.prepare_request(
                 context, next_page_token=next_page_token
             )
@@ -112,7 +141,7 @@ class hubspotStream(RESTStream):
     def authenticator(self) -> OAuth2Authenticator:
         """Return a new authenticator object."""
         return OAuth2Authenticator(
-            self, self._tap.config_file, "https://api.hubapi.com/oauth/v1/token"
+            self, self._tap.config_file, "https://api.hubapi.com/oauth/2026-03/token"
         )
 
     @property
@@ -135,32 +164,85 @@ class hubspotStream(RESTStream):
     @cached_property
     def selected_properties(self):
         selected_properties = []
+        excluded_sensitive = set(self._excluded_sensitive_property_names())
         for key, value in self.metadata.items():
             if isinstance(key, tuple) and len(key) == 2 and value.selected:
-                selected_properties.append(key[-1])
+                property_name = key[-1]
+                if property_name in excluded_sensitive:
+                    continue
+                selected_properties.append(property_name)
         return selected_properties
+
+    def _excluded_sensitive_property_names(self) -> set:
+        # If catalog is not up to date,omit sensitive fields from property requests too.
+        if not self.properties_url:
+            return set()
+        field_meta = getattr(self, "fields_metadata", None) or {}
+        if not field_meta:
+            self.load_fields_metadata()
+            field_meta = self.fields_metadata or {}
+        if not field_meta:
+            return set()
+
+        object_type = self.sensitive_scope_object_type()
+        scopes = self.oauth_scopes
+        excluded = set()
+        for field_name, field in field_meta.items():
+            if not can_read_property_values(field, scopes, object_type):
+                excluded.add(field_name)
+        return excluded
+    
+    def curlify_request(self, request):
+        command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
+        method = request.method
+        uri = request.url
+        data = request.body
+
+        headers = []
+        for k, v in request.headers.items():
+            # Mask the Authorization header
+            if k.lower() == "authorization":
+                v = "__MASKED__"
+            headers.append('"{0}: {1}"'.format(k, v))
+
+        headers = " -H ".join(headers)
+        return command.format(method=method, headers=headers, data=data, uri=uri)
+
+    def _log_and_raise(self, exception_class, response, message):
+        """Log and raise an exception with the response information."""
+        curl_command = self.curlify_request(response.request)
+        logging.info(f"Response code: {response.status_code}, info: {response.text}")
+        logging.info(f"CURL command for failed request: {curl_command}")
+
+        try:
+            error_message = response.json().get("message")
+        except:
+            error_message = response.text
+        raise exception_class(f'Msg {message}, response "{error_message}"')
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
-        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
-            msg = (
-                f"{response.status_code} Server Error: "
-                f"{response.reason} for path: {self.path}"
-            )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise RetriableAPIError(f"Msg {msg}, response {response.text}")
+        try:
+            json_response = response.json()
+        except ValueError:
+            json_response = {}
 
-        elif 400 <= response.status_code < 500:
-            msg = (
-                f"{response.status_code} Client Error: "
-                f"{response.reason} for path: {self.path}"
-            )
-            curl_command = curlify.to_curl(response.request)
-            logging.error(f"Response code: {response.status_code}, info: {response.text}")
-            logging.error(f"CURL command for failed request: {curl_command}")
-            raise FatalAPIError(f"Msg {msg}, response {response.text}")
+        if 500 <= response.status_code < 600 or response.status_code in [429, 401, 104]:
+            msg = f"{response.status_code} Server Error: {response.reason} for path: {self.path}"
+            self._log_and_raise(RetriableAPIError, response, msg)
+        
+        RETRIABLE_ERROR_MESSAGES = [
+            "Invalid JSON input", 
+            "There was a problem with the request."
+        ]
+        for msg_pattern in RETRIABLE_ERROR_MESSAGES:
+            if response.status_code == 400 and msg_pattern in json_response.get('message', ''):
+                msg = f"{response.status_code} Client Error:  {response.reason} for path: {self.path}"
+                self._log_and_raise(RetriableAPIError, response, msg)
+
+        if 400 <= response.status_code < 500:
+            msg = f"{response.status_code} Client Error: {response.reason} for path: {self.path}"
+            self._log_and_raise(FatalAPIError, response, msg)
 
     @staticmethod
     def extract_type(field):
@@ -178,7 +260,7 @@ class hubspotStream(RESTStream):
         return th.StringType
 
     def request_schema(self, url, headers):
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=self.timeout)
         self.validate_response(response)
         return response
 
@@ -188,12 +270,49 @@ class hubspotStream(RESTStream):
         headers = self.http_headers
         headers.update(self.authenticator.auth_headers or {})
         url = self.url_base + self.properties_url
-        response = self.request_decorator(self.request_schema)(url, headers=headers)
+        try:
+            response = self.request_decorator(self.request_schema)(url, headers=headers)
+        except (
+            FatalAPIError,
+            RetriableAPIError,
+            requests.exceptions.RequestException,
+            urllib3.exceptions.HTTPError,
+        ) as e:
+            self.logger.warning(
+                f"Could not fetch dynamic properties for stream '{self.name}' "
+                f"from {self.properties_url}: {e}. Falling back to base properties only."
+            )
+            return th.PropertiesList(*properties).to_dict()
+        schema_res = response.json()
+        fields = schema_res["results"] if isinstance(schema_res, dict) and "results" in schema_res else schema_res
+        object_type = self.sensitive_scope_object_type()
+        scopes = self.oauth_scopes
 
-        fields = response.json()
+        deduplicate_columns = self.config.get("deduplicate_columns", True)
+        base_properties = []
+        if isinstance(self.base_properties, list):
+            base_properties = [property.name.lower() for property in self.base_properties]
+
         for field in fields:
+            field_name = field.get("name")
+            # filter duplicated columns (case insensitive)
+            if deduplicate_columns:
+                if field_name.lower() in base_properties:
+                    self.logger.info(f"Not including field {field_name} in catalog as it's a duplicate(case insensitive) of a base property for stream {self.name}")
+                    continue
+
+            # Omit from catalog when the connection lacks crm.objects.<type>.<level>.read scopes.
+            if not can_read_property_values(field, scopes, object_type):
+                self.logger.info(
+                    "Not including field %s in catalog for stream %s; sensitive "
+                    "property requires scopes not granted to this connection",
+                    field_name,
+                    self.name,
+                )
+                continue
+
             if not field.get("deleted"):
-                property = th.Property(field.get("name"), self.extract_type(field))
+                property = th.Property(field_name, self.extract_type(field))
                 properties.append(property)
         return th.PropertiesList(*properties).to_dict()
 
@@ -263,15 +382,26 @@ class hubspotStream(RESTStream):
             self.backoff_wait_generator,
             (
                 RetriableAPIError,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError,
-                ProtocolError
+                requests.exceptions.RequestException,
+                urllib3.exceptions.HTTPError
             ),
-            max_tries=self.backoff_max_tries,
+            max_tries=7,
             on_backoff=self.backoff_handler,
         )(func)
         return decorator
-    
+
+    def backoff_wait_generator(self) -> Callable[..., Generator[int, Any, None]]:
+        """
+        Example:
+            - 1st retry: 10 seconds
+            - 2nd retry: 20 seconds
+            - 3rd retry: 40 seconds
+            - 4th retry: 80 seconds
+            - 5th retry: 160 seconds
+            - 6th retry: 320 seconds (capped at 5 minutes)
+        """
+        return backoff.expo(base=2, factor=10, max_value=320)
+
     @property
     def stream_maps(self) -> List[StreamMap]:
         """Get stream transformation maps.
@@ -308,6 +438,48 @@ class hubspotStream(RESTStream):
             ]
         return self._stream_maps
 
+    def process_row_types(self,row) -> Dict[str, Any]:
+        schema = self.schema['properties']
+        # If the row is null we ignore
+        if row is None:
+            return row
+
+        for field, value in row.items():
+            if field not in schema:
+                # Skip fields not found in the schema
+                continue
+
+            field_info = schema[field]
+            field_type = field_info.get("type", ["null"])[0]
+
+            if field_type == "boolean":
+                if value is None:
+                    row[field] = False
+                elif isinstance(value, str):
+                    # Attempt to cast to boolean
+                    if value.lower() == "true":
+                        row[field] = True
+                    elif value == "" or value.lower() == "false":
+                        row[field] = False
+
+        return row
+
+    def is_first_sync(self):
+        if self.stream_state.get("replication_key"):
+            return False
+        return True
+    
+    def _write_state_message(self) -> None:
+        """Write out a STATE message with the latest state."""
+        tap_state = self.tap_state
+
+        if tap_state and tap_state.get("bookmarks"):
+            for stream_name in tap_state.get("bookmarks").keys():
+                if tap_state["bookmarks"][stream_name].get("partitions"):
+                    tap_state["bookmarks"][stream_name]["partitions"] = []
+
+        singer.write_message(StateMessage(value=tap_state))
+
 
 class hubspotStreamSchema(hubspotStream):
 
@@ -334,11 +506,3 @@ class hubspotStreamSchema(hubspotStream):
         if next_page_token:
             params.update(next_page_token)
         return params
-
-    def backoff_wait_generator(self):
-        """The wait generator used by the backoff decorator on request failure. """
-        return backoff.expo(factor=3)
-
-    def backoff_max_tries(self) -> int:
-        """The number of attempts before giving up when retrying requests."""
-        return 8

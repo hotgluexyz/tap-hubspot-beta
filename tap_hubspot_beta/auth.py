@@ -60,7 +60,6 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         return {
             "client_id": self._tap._config["client_id"],
             "client_secret": self._tap._config["client_secret"],
-            "redirect_uri": self._tap._config["redirect_uri"],
             "refresh_token": self._tap._config["refresh_token"],
             "grant_type": "refresh_token",
         }
@@ -85,7 +84,7 @@ class OAuth2Authenticator(APIAuthenticatorBase):
 
     @backoff.on_exception(backoff.expo, RetriableAPIError, max_tries=5)
     def request_token(self, endpoint, data):
-        token_response = requests.post(endpoint, data)
+        token_response = requests.post(endpoint, data, timeout=300)
         if 500 <= token_response.status_code <= 600:
             raise RetriableAPIError(f"Auth error: {token_response.text}")
         elif 400 <= token_response.status_code < 500:
