@@ -60,7 +60,6 @@ class OAuth2Authenticator(APIAuthenticatorBase):
         return {
             "client_id": self._tap._config["client_id"],
             "client_secret": self._tap._config["client_secret"],
-            "redirect_uri": self._tap._config["redirect_uri"],
             "refresh_token": self._tap._config["refresh_token"],
             "grant_type": "refresh_token",
         }
