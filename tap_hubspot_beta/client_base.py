@@ -141,7 +141,7 @@ class hubspotStream(RESTStream):
     def authenticator(self) -> OAuth2Authenticator:
         """Return a new authenticator object."""
         return OAuth2Authenticator(
-            self, self._tap.config_file, "https://api.hubapi.com/oauth/v1/token"
+            self, self._tap.config_file, "https://api.hubapi.com/oauth/2026-03/token"
         )
 
     @property
