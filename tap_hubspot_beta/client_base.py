@@ -800,7 +800,7 @@ class hubspotStream(RESTStream):
     def parse_datetimes(self, row):
         for field in self.datetime_fields:
             if row.get(field) is not None:
-                if row.get(field) in [0, "", "false"]:
+                if row.get(field) in [0, ""]:
                     row[field] = None
                 else:
                     try:
@@ -809,11 +809,16 @@ class hubspotStream(RESTStream):
                         try:
                             dt_field = datetime.fromtimestamp(int(row[field]) / 1000, tz=pytz.UTC)
                             row[field] = dt_field.replace(tzinfo=None)
-                        except Exception as e:
-                            raise ValueError(
+                        except Exception:
+                            self.logger.warning(
                                 f"Failed parsing datetime field={field} value={row.get(field)!r} "
-                                f"record_id={row.get('id') or row.get('vid')} stream={self.name}"
-                            ) from e
+                                f"record_id={row.get('id') or row.get('vid')} stream={self.name}; "
+                                f"setting to null; To avoid this issue consider updating the HubSpot property. "
+                                f"This property metadata marks this field as date/datetime but the stored "
+                                f"value is not a valid date. Update the property type in HubSpot to "
+                                f"match the data, or clear/fix the value on this record."
+                            )
+                            row[field] = None
         return row
 
     def post_process(self, row: dict, context: Optional[dict], skip_id=None) -> dict:
