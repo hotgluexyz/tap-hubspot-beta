@@ -28,6 +28,7 @@ class Runner(VCRTapTestRunner):
     }
 
     def scrub_response_body(self, body, faker, cache):
+        """Scrub JSON values while retaining property-definition schema metadata."""
         data = json.loads(body)
         scrubbed = json.loads(super().scrub_response_body(body, faker, cache))
         if isinstance(data, list):
