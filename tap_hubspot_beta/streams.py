@@ -1112,12 +1112,10 @@ class ContactListsStream(ListSearchV3Stream):
     def _request_records(self, params: dict) -> Iterable[dict]:
         """Request and return a page of records from the API."""
         try:
-            records = list(super().request_records(params))
+            return list(super().request_records(params))
         except FatalAPIError:
             logging.info("Couldn't get schema for path: crm/v3/lists/search")
-            return []
-
-        return records
+            raise
 
     @property
     def legacy_list_id_map(self) -> dict:
@@ -1131,11 +1129,13 @@ class ContactListsStream(ListSearchV3Stream):
         mapped modern list still exists as a contact list in HubSpot.
         """
         self._requests_session = requests.Session()
+        list_search_succeeded = True
         try:
             records = self._request_records(dict())
         except FatalAPIError:
             self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
             records = []
+            list_search_succeeded = False
 
         legacy_list_id_map = self.legacy_list_id_map or {}
         mapped_list_ids = {str(value) for value in legacy_list_id_map.values()}
@@ -1153,7 +1153,7 @@ class ContactListsStream(ListSearchV3Stream):
                 continue
             modern_id = str(legacy_list_id_map[legacy_Id])
             # Deleted or non-contact lists: don't add the legacy alias to the catalog because it would fail sync.
-            if modern_id not in present_modern_contact_list_ids:
+            if list_search_succeeded and modern_id not in present_modern_contact_list_ids:
                 omitted_legacy_catalog_fields.append(f"{legacy_Id}->{modern_id}")
                 continue
             property_names.add(legacy_Id)
