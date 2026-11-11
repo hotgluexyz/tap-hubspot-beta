@@ -1112,12 +1112,10 @@ class ContactListsStream(ListSearchV3Stream):
     def _request_records(self, params: dict) -> Iterable[dict]:
         """Request and return a page of records from the API."""
         try:
-            records = list(super().request_records(params))
+            return list(super().request_records(params))
         except FatalAPIError:
             logging.info("Couldn't get schema for path: crm/v3/lists/search")
-            return []
-
-        return records
+            raise
 
     @property
     def legacy_list_id_map(self) -> dict:
@@ -1125,26 +1123,49 @@ class ContactListsStream(ListSearchV3Stream):
 
     @cached_property
     def schema(self) -> dict:
-        """Dynamically detect the json schema for the stream.
-        This is evaluated prior to any records being retrieved.
+        """Build contact_list catalog fields from HubSpot list search.
+
+        Legacy keys from ``legacy_list_id_map`` are included only when the
+        mapped modern list still exists as a contact list in HubSpot.
         """
         self._requests_session = requests.Session()
+        list_search_succeeded = True
         try:
             records = self._request_records(dict())
         except FatalAPIError:
             self.logger.warning("Failed to run discover on dynamic stream ContactListsStream properties.")
             records = []
+            list_search_succeeded = False
 
         legacy_list_id_map = self.legacy_list_id_map or {}
         mapped_list_ids = {str(value) for value in legacy_list_id_map.values()}
+        present_modern_contact_list_ids = {
+            str(record["listId"])
+            for record in records
+            if record.get("objectTypeId") == "0-1"
+        }
         property_names = {"id", "name"}
         properties = [th.Property("id", th.StringType), th.Property("name", th.StringType)]
 
+        omitted_legacy_catalog_fields = []
         for legacy_Id in self.legacy_list_id_map:
             if legacy_Id in property_names:
                 continue
+            modern_id = str(legacy_list_id_map[legacy_Id])
+            # Deleted or non-contact lists: don't add the legacy alias to the catalog because it would fail sync.
+            if list_search_succeeded and modern_id not in present_modern_contact_list_ids:
+                omitted_legacy_catalog_fields.append(f"{legacy_Id}->{modern_id}")
+                continue
             property_names.add(legacy_Id)
             properties.append(th.Property(legacy_Id, th.StringType))
+
+        if omitted_legacy_catalog_fields:
+            self.logger.info(
+                "Omitted %s legacy contact_list catalog field(s) "
+                "(mapped modern list missing or not a contact list): %s",
+                len(omitted_legacy_catalog_fields),
+                ", ".join(omitted_legacy_catalog_fields),
+            )
 
         for record in records:
             if record.get("objectTypeId") != '0-1': # 0-1 is the object type id for contacts
