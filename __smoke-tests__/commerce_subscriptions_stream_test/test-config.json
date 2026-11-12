@@ -1,0 +1,10 @@
+{
+  "ignore_streams": [
+    "LeadsStream",
+    "LeadPipelinesStream",
+    "LeadHistoryPropertiesStream",
+    "AssociationLeadsContactsStream",
+    "AssociationLeadsCompaniesStream",
+    "AssociationLeadsDealsStream"
+  ]
+}

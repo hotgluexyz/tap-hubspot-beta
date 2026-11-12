@@ -1,0 +1,11 @@
+{
+    "client_id": "CLI***",
+    "client_secret": "CLI***",
+    "refresh_token": "REF***",
+    "access_token": "CIG***",
+    "expires_in": 0,
+    "start_date": "2005-01-01T00:00:00Z",
+    "end_date": null,
+    "redirect_uri": "htt***",
+    "enable_list_selection": true
+}

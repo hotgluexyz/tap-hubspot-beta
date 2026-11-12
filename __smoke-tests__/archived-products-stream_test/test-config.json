@@ -1,0 +1,16 @@
+{
+  "ignore_streams": [
+    "UsersStream",
+    "InvoicesStream",
+    "CommerceSubscriptionsStream",
+    "AssociationInvoicesLineItemsStream",
+    "AssociationSubscriptionsLineItemsStream",
+    "AssociationSubscriptionsDealsStream",
+    "LeadsStream",
+    "LeadPipelinesStream",
+    "LeadHistoryPropertiesStream",
+    "AssociationLeadsContactsStream",
+    "AssociationLeadsCompaniesStream",
+    "AssociationLeadsDealsStream"
+  ]
+}
