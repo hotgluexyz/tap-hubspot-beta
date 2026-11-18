@@ -1,5 +1,3 @@
-import json
-
 from hotglue_smoke_test.vcr.tap import VCRTapTestRunner
 
 
@@ -25,27 +23,12 @@ class Runner(VCRTapTestRunner):
         "updatedAt",  # Subscription replication key.
         "hs_lastmodifieddate",  # Search filter boundary.
         "hs_object_id",  # Search ID-based pagination.
+        "name",  # Property-definition schema metadata.
+        "type",
+        "fieldType",
+        "deleted",
+        "dataSensitivity",
     }
-
-    def scrub_response_body(self, body, faker, cache):
-        """Scrub JSON values while retaining property-definition schema metadata."""
-        data = json.loads(body)
-        scrubbed = json.loads(super().scrub_response_body(body, faker, cache))
-        if isinstance(data, list):
-            for original, fake in zip(data, scrubbed):
-                if "name" in original and "fieldType" in original:
-                    # Property definitions build schemas; record names remain scrubbed.
-                    for key in (
-                        "name",
-                        "type",
-                        "fieldType",
-                        "deleted",
-                        "dataSensitivity",
-                        "sensitiveDataCategories",
-                    ):
-                        if key in original:
-                            fake[key] = original[key]
-        return json.dumps(scrubbed)
 
     def module(self):
         return "tap_hubspot_beta.tap"
