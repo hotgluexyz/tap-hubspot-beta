@@ -350,6 +350,7 @@ class hubspotStream(RESTStream):
             parsed_response = self.get_associations_data(parsed_response)
             for row in parsed_response:
                 yield row
+            del parsed_response
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
                 response=resp, previous_token=previous_token
