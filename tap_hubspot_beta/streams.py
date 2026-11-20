@@ -1109,7 +1109,7 @@ class ContactsV3Stream(ObjectSearchV3):
     def get_child_context(self, record: dict, context) -> dict:
         return {
             "id": record["id"],
-            "subscriber_email": record["email"]
+            "subscriber_email": record.get("email"),
         }
 
 
